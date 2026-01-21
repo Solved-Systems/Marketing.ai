@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator'
 import { Play, Github, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
-export default function SignupPage() {
+function SignupForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
@@ -194,5 +194,17 @@ export default function SignupPage() {
         </CardFooter>
       </Card>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    }>
+      <SignupForm />
+    </Suspense>
   )
 }
