@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { MoreVertical, Trash2, Download, Image as ImageIcon, Video, Music, Type } from 'lucide-react'
-import { formatBytes, formatDistanceToNow } from 'date-fns'
+import { formatBytes } from '@/lib/utils'
 import type { Tables } from '@/lib/database.types'
 
 interface AssetGridProps {
