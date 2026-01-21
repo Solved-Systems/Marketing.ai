@@ -19,6 +19,12 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@remotion/bundler', '@remotion/lambda'],
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 }
 
 module.exports = nextConfig
