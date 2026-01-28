@@ -1,0 +1,17 @@
+# Render.com Blueprint
+services:
+  - type: web
+    name: videoforge-render
+    runtime: node
+    region: oregon
+    plan: starter # $7/mo - 512MB RAM, 0.5 CPU
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

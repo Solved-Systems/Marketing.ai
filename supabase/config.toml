@@ -1,4 +1,5 @@
 # Supabase configuration for VideoForge
+project_id = "bwgiyuegjntapgsirduj"
 
 [api]
 enabled = true
@@ -34,16 +35,16 @@ jwt_expiry = 3600
 enable_signup = true
 
 [auth.external.github]
-enabled = true
-client_id = "env(GITHUB_CLIENT_ID)"
-secret = "env(GITHUB_CLIENT_SECRET)"
-redirect_uri = "http://localhost:54321/auth/v1/callback"
+enabled = false
+# client_id = "env(GITHUB_CLIENT_ID)"
+# secret = "env(GITHUB_CLIENT_SECRET)"
+# redirect_uri = "http://localhost:54321/auth/v1/callback"
 
 [auth.external.google]
-enabled = true
-client_id = "env(GOOGLE_CLIENT_ID)"
-secret = "env(GOOGLE_CLIENT_SECRET)"
-redirect_uri = "http://localhost:54321/auth/v1/callback"
+enabled = false
+# client_id = "env(GOOGLE_CLIENT_ID)"
+# secret = "env(GOOGLE_CLIENT_SECRET)"
+# redirect_uri = "http://localhost:54321/auth/v1/callback"
 
 [analytics]
 enabled = false
