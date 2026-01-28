@@ -8,12 +8,12 @@ import { Video, Play, Download, ExternalLink, Clock, CheckCircle, XCircle, Loade
 import { formatDistanceToNow } from 'date-fns'
 
 const statusConfig = {
-  pending: { icon: Clock, color: 'bg-yellow-500', label: 'Pending' },
-  queued: { icon: Clock, color: 'bg-blue-500', label: 'Queued' },
-  rendering: { icon: Loader2, color: 'bg-purple-500', label: 'Rendering' },
-  completed: { icon: CheckCircle, color: 'bg-green-500', label: 'Completed' },
-  failed: { icon: XCircle, color: 'bg-red-500', label: 'Failed' },
-  cancelled: { icon: XCircle, color: 'bg-gray-500', label: 'Cancelled' },
+  pending: { icon: Clock, color: 'bg-yellow-600', label: 'PENDING' },
+  queued: { icon: Clock, color: 'bg-blue-600', label: 'QUEUED' },
+  rendering: { icon: Loader2, color: 'bg-primary', label: 'RENDERING' },
+  completed: { icon: CheckCircle, color: 'bg-green-600', label: 'COMPLETE' },
+  failed: { icon: XCircle, color: 'bg-red-600', label: 'FAILED' },
+  cancelled: { icon: XCircle, color: 'bg-gray-600', label: 'CANCELLED' },
 }
 
 export default async function VideosPage() {
@@ -28,9 +28,14 @@ export default async function VideosPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Videos</h2>
-          <p className="text-muted-foreground">
-            All your generated videos across projects
+          <div className="text-sm text-muted-foreground font-mono mb-2">
+            <span className="text-primary">$</span> ls -la ./videos --all
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight">
+            <span className="text-primary">{'//'}</span> VIDEOS
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            All generated videos across projects
           </p>
         </div>
       </div>
@@ -135,13 +140,15 @@ export default async function VideosPage() {
       ) : (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <Video className="h-16 w-16 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No videos yet</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              Create your first video from a project
+            <Video className="h-16 w-16 text-primary/30 mb-4" />
+            <h3 className="text-lg font-mono mb-2">
+              <span className="text-primary">$</span> videos: <span className="text-muted-foreground">empty</span>
+            </h3>
+            <p className="text-muted-foreground text-center mb-4 font-mono text-sm">
+              <span className="text-primary">{'//'}</span> Create your first video from a project
             </p>
-            <Button asChild>
-              <Link href="/projects">Go to Projects</Link>
+            <Button variant="terminal" asChild>
+              <Link href="/projects">./projects</Link>
             </Button>
           </CardContent>
         </Card>

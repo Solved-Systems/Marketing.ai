@@ -1,7 +1,7 @@
 # Render.com Blueprint
 services:
   - type: web
-    name: videoforge-render
+    name: mrktcmd-render
     runtime: node
     region: oregon
     plan: starter # $7/mo - 512MB RAM, 0.5 CPU

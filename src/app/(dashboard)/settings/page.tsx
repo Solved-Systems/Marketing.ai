@@ -111,25 +111,30 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">
-          Manage your account and organization settings
+        <div className="text-sm text-muted-foreground font-mono mb-2">
+          <span className="text-primary">$</span> nano /etc/config
+        </div>
+        <h2 className="text-2xl font-bold tracking-tight">
+          <span className="text-primary">{'//'}</span> SETTINGS
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          Configure account and organization settings
         </p>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="organization">Organization</TabsTrigger>
-          <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="profile" className="font-mono text-xs">./profile</TabsTrigger>
+          <TabsTrigger value="organization" className="font-mono text-xs">./organization</TabsTrigger>
+          <TabsTrigger value="integrations" className="font-mono text-xs">./integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Profile</CardTitle>
+              <CardTitle className="font-mono text-sm">USER_PROFILE</CardTitle>
               <CardDescription>
-                Update your personal information
+                <span className="text-primary">{'//'}</span> Update your personal information
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -186,9 +191,9 @@ export default function SettingsPage() {
         <TabsContent value="organization" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Organization</CardTitle>
+              <CardTitle className="font-mono text-sm">ORG_CONFIG</CardTitle>
               <CardDescription>
-                Manage your organization settings
+                <span className="text-primary">{'//'}</span> Manage your organization settings
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -227,9 +232,9 @@ export default function SettingsPage() {
         <TabsContent value="integrations" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>GitHub Integration</CardTitle>
+              <CardTitle className="font-mono text-sm">GITHUB_CONNECT</CardTitle>
               <CardDescription>
-                Connect your GitHub account for automatic feature videos
+                <span className="text-primary">{'//'}</span> Link GitHub for automatic feature videos
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -242,9 +247,9 @@ export default function SettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Social Media Accounts</CardTitle>
+              <CardTitle className="font-mono text-sm">SOCIAL_ACCOUNTS</CardTitle>
               <CardDescription>
-                Connect social media accounts for direct publishing
+                <span className="text-primary">{'//'}</span> Connect social media for direct publishing
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

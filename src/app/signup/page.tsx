@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { Play, Github, Loader2 } from 'lucide-react'
+import { Terminal, Github, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 function SignupForm() {
@@ -95,13 +95,16 @@ function SignupForm() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
-          <Link href="/" className="flex items-center justify-center space-x-2 mb-4">
-            <Play className="h-8 w-8 fill-primary text-primary" />
-            <span className="font-bold text-2xl">VideoForge</span>
+          <Link href="/" className="flex items-center justify-center space-x-2 mb-4 group">
+            <Terminal className="h-6 w-6 text-primary" />
+            <span className="font-bold text-xl tracking-tight group-hover:text-primary transition-colors">MRKTCMD</span>
           </Link>
-          <CardTitle className="text-2xl">Create an account</CardTitle>
+          <div className="text-xs text-muted-foreground font-mono mb-2">
+            <span className="text-primary">$</span> ./auth --mode=register
+          </div>
+          <CardTitle className="text-xl">INITIALIZE_ACCOUNT</CardTitle>
           <CardDescription>
-            Start creating stunning videos with AI
+            <span className="text-primary">{'//'}</span> Command your marketing with AI
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -174,20 +177,20 @@ function SignupForm() {
           </form>
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
-          <div className="text-sm text-muted-foreground text-center">
-            Already have an account?{' '}
+          <div className="text-sm text-muted-foreground text-center font-mono">
+            <span className="text-primary">{'//'}</span> Already registered?{' '}
             <Link href="/login" className="text-primary hover:underline">
-              Sign in
+              ./login
             </Link>
           </div>
           <p className="px-8 text-center text-xs text-muted-foreground">
             By signing up, you agree to our{' '}
             <Link href="/terms" className="underline hover:text-primary">
-              Terms of Service
+              Terms
             </Link>{' '}
             and{' '}
             <Link href="/privacy" className="underline hover:text-primary">
-              Privacy Policy
+              Privacy
             </Link>
             .
           </p>

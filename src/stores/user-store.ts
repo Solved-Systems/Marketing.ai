@@ -25,7 +25,7 @@ export const useUserStore = create<UserState>()(
       clear: () => set({ user: null, profile: null, organization: null }),
     }),
     {
-      name: 'videoforge-user',
+      name: 'mrktcmd-user',
       partialize: (state) => ({
         // Only persist non-sensitive data
         profile: state.profile ? { id: state.profile.id, full_name: state.profile.full_name } : null,

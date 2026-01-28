@@ -1,5 +1,5 @@
 {
-  "name": "videoforge",
+  "name": "mrktcmd",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,9 +10,10 @@
     "db:generate-types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/lib/database.types.ts",
     "remotion:studio": "remotion studio",
     "remotion:build": "remotion bundle src/remotion/index.ts --out-dir remotion-build",
-    "remotion:lambda:deploy": "remotion lambda sites create src/remotion/index.ts --site-name=videoforge"
+    "remotion:lambda:deploy": "remotion lambda sites create src/remotion/index.ts --site-name=mrktcmd"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.28",
     "@anthropic-ai/sdk": "^0.27.0",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
@@ -40,6 +41,7 @@
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tanstack/react-query": "^5.51.0",
+    "ai": "^6.0.58",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",

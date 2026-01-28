@@ -11,7 +11,7 @@ interface ProcessRequest {
   eventId: string
 }
 
-const ANALYSIS_SYSTEM_PROMPT = `You are a code analyst and marketing specialist for VideoForge.
+const ANALYSIS_SYSTEM_PROMPT = `You are a code analyst and marketing specialist for MRKTCMD.
 
 Your task is to analyze GitHub release or commit information and extract user-facing features that would be interesting to announce in a video.
 

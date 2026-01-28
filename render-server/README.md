@@ -1,4 +1,4 @@
-# VideoForge Render Server
+# MRKTCMD Render Server
 
 Self-hosted video rendering server using Remotion, designed for deployment on Render.com.
 
@@ -11,7 +11,7 @@ Go to [render.com](https://render.com) and sign up with GitHub.
 1. Click **New** → **Web Service**
 2. Connect your GitHub repo
 3. Configure:
-   - **Name**: `videoforge-render`
+   - **Name**: `mrktcmd-render`
    - **Root Directory**: `render-server`
    - **Runtime**: Docker
    - **Instance Type**: Starter ($7/mo) or Standard ($25/mo) for faster renders
@@ -27,7 +27,7 @@ Render will automatically build and deploy from your repo.
 ### 5. Update Supabase
 Add the Render server URL to your Supabase Edge Function secrets:
 ```bash
-npx supabase secrets set RENDER_SERVER_URL=https://videoforge-render.onrender.com
+npx supabase secrets set RENDER_SERVER_URL=https://mrktcmd-render.onrender.com
 ```
 
 ## Local Development

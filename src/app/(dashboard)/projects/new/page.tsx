@@ -97,18 +97,23 @@ export default function NewProjectPage() {
           </Link>
         </Button>
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">New Project</h2>
-          <p className="text-muted-foreground">
-            Create a new video project
+          <div className="text-sm text-muted-foreground font-mono mb-1">
+            <span className="text-primary">$</span> mkdir ./projects/new
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight">
+            <span className="text-primary">{'//'}</span> NEW_PROJECT
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Initialize a new video project
           </p>
         </div>
       </div>
 
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Project Details</CardTitle>
+          <CardTitle className="font-mono text-sm">PROJECT_CONFIG</CardTitle>
           <CardDescription>
-            Enter the basic information for your new project
+            <span className="text-primary">{'//'}</span> Enter project details
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -136,11 +141,11 @@ export default function NewProjectPage() {
 
             <div className="flex justify-end space-x-4">
               <Button variant="outline" type="button" asChild>
-                <Link href="/projects">Cancel</Link>
+                <Link href="/projects">./cancel</Link>
               </Button>
-              <Button type="submit" disabled={isLoading || !name.trim()}>
+              <Button variant="terminal" type="submit" disabled={isLoading || !name.trim()}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create Project
+                INITIALIZE
               </Button>
             </div>
           </form>

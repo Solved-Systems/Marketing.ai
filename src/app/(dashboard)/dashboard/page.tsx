@@ -32,16 +32,21 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground">
-            Welcome back! Here&apos;s an overview of your video creation.
+          <div className="text-sm text-muted-foreground font-mono mb-2">
+            <span className="text-primary">$</span> cat /sys/status
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight">
+            <span className="text-primary">{'//'}</span> DASHBOARD
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            System overview and recent activity
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button asChild>
+          <Button variant="terminal" asChild>
             <Link href="/projects/new">
               <Plus className="mr-2 h-4 w-4" />
-              New Project
+              NEW_PROJECT
             </Link>
           </Button>
         </div>
@@ -49,54 +54,54 @@ export default async function DashboardPage() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="hover:border-primary/50 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Projects</CardTitle>
-            <FolderOpen className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-mono">PROJECTS</CardTitle>
+            <FolderOpen className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{projectCount || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Active video projects
+            <div className="text-2xl font-bold text-primary">{projectCount || 0}</div>
+            <p className="text-xs text-muted-foreground font-mono">
+              <span className="text-primary">{'>'}</span> active
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:border-primary/50 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Videos Created</CardTitle>
-            <Video className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-mono">VIDEOS</CardTitle>
+            <Video className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{videoCount || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Total videos generated
+            <div className="text-2xl font-bold text-primary">{videoCount || 0}</div>
+            <p className="text-xs text-muted-foreground font-mono">
+              <span className="text-primary">{'>'}</span> generated
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:border-primary/50 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rendering</CardTitle>
-            <Play className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-mono">RENDERING</CardTitle>
+            <Play className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-xs text-muted-foreground">
-              Videos in progress
+            <div className="text-2xl font-bold text-primary">0</div>
+            <p className="text-xs text-muted-foreground font-mono">
+              <span className="text-primary">{'>'}</span> in_progress
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:border-primary/50 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
-            <Upload className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-mono">STORAGE</CardTitle>
+            <Upload className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0 MB</div>
-            <p className="text-xs text-muted-foreground">
-              Of 5 GB free tier
+            <div className="text-2xl font-bold text-primary">0 MB</div>
+            <p className="text-xs text-muted-foreground font-mono">
+              <span className="text-primary">{'>'}</span> 5 GB limit
             </p>
           </CardContent>
         </Card>
@@ -106,8 +111,8 @@ export default async function DashboardPage() {
         {/* Recent Projects */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Projects</CardTitle>
-            <CardDescription>Your latest video projects</CardDescription>
+            <CardTitle className="text-sm font-mono"><span className="text-primary">$</span> ls ./projects --recent</CardTitle>
+            <CardDescription>Latest video projects</CardDescription>
           </CardHeader>
           <CardContent>
             {recentProjects && recentProjects.length > 0 ? (
@@ -145,8 +150,8 @@ export default async function DashboardPage() {
         {/* Recent Videos */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Videos</CardTitle>
-            <CardDescription>Your latest video renders</CardDescription>
+            <CardTitle className="text-sm font-mono"><span className="text-primary">$</span> ls ./videos --recent</CardTitle>
+            <CardDescription>Latest video renders</CardDescription>
           </CardHeader>
           <CardContent>
             {recentVideos && recentVideos.length > 0 ? (

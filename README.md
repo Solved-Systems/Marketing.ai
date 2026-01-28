@@ -1,20 +1,21 @@
-# VideoForge
+# MRKTCMD
 
-AI-Powered Video Creation Platform for automated video creation from product assets, with GitHub integration for feature announcement videos and multi-platform social media publishing.
+AI-powered marketing automation platform for small businesses. Command your marketing with AI-generated content, automated video creation, and multi-platform social media publishing.
 
 ## Features
 
-- **AI Video Generation**: Describe your video and let AI generate scripts, scenes, and animations
-- **GitHub Integration**: Automatically create feature announcement videos from releases and commits
-- **Social Publishing**: Publish to LinkedIn, Twitter, TikTok, and Instagram
-- **Remotion Rendering**: Professional video rendering with Remotion Lambda
+- **AI Content Generation** - Generate marketing copy, blog posts, and social captions
+- **Video Automation** - Auto-generate promo videos, product demos, and feature announcements
+- **GitHub Integration** - Automatically create feature announcement videos from releases
+- **Social Publishing** - Publish to LinkedIn, Twitter, TikTok, and Instagram
+- **Multi-tenant** - Full organization support with role-based access
 
 ## Tech Stack
 
 - **Frontend**: Next.js 14 (App Router), React, TailwindCSS, shadcn/ui
 - **Backend**: Supabase (PostgreSQL, Auth, Storage, Edge Functions)
-- **Video Rendering**: Remotion Lambda (AWS)
-- **AI**: Anthropic Claude API
+- **Video Rendering**: Remotion (self-hosted on Render.com)
+- **AI**: Vercel AI Gateway
 - **State Management**: Zustand + TanStack Query
 
 ## Getting Started
@@ -22,22 +23,21 @@ AI-Powered Video Creation Platform for automated video creation from product ass
 ### Prerequisites
 
 - Node.js 18+
-- pnpm (recommended) or npm
+- npm or pnpm
 - Supabase account
-- AWS account (for Remotion Lambda)
-- Anthropic API key
+- Vercel AI Gateway API key
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/videoforge.git
-cd videoforge
+git clone https://github.com/yourusername/mrktcmd.git
+cd mrktcmd
 ```
 
 2. Install dependencies:
 ```bash
-pnpm install
+npm install
 ```
 
 3. Copy the environment template:
@@ -56,18 +56,9 @@ npx supabase link --project-ref your-project-ref
 npx supabase db push
 ```
 
-6. Deploy Remotion Lambda (optional, for video rendering):
+6. Start the development server:
 ```bash
-# Deploy Lambda function
-npx remotion lambda functions deploy
-
-# Create site
-pnpm run remotion:lambda:deploy
-```
-
-7. Start the development server:
-```bash
-pnpm dev
+npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to see the app.
@@ -75,7 +66,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 ## Project Structure
 
 ```
-videoforge/
+mrktcmd/
 ├── src/
 │   ├── app/                    # Next.js App Router pages
 │   │   ├── (dashboard)/        # Protected dashboard routes
@@ -88,7 +79,8 @@ videoforge/
 │   │   └── video/              # Video-related components
 │   ├── hooks/                  # Custom React hooks
 │   ├── lib/                    # Utility functions and configs
-│   │   └── supabase/           # Supabase client configuration
+│   │   ├── supabase/           # Supabase client configuration
+│   │   └── ai/                 # AI Gateway utilities
 │   ├── remotion/               # Remotion video templates
 │   │   └── templates/          # Video template components
 │   ├── stores/                 # Zustand stores
@@ -96,46 +88,17 @@ videoforge/
 ├── supabase/
 │   ├── functions/              # Edge Functions
 │   └── migrations/             # Database migrations
+├── render-server/              # Self-hosted render server
 └── public/                     # Static assets
 ```
 
 ## Video Templates
 
-VideoForge includes several pre-built video templates:
+MRKTCMD includes several pre-built video templates:
 
 1. **Feature Announcement** - Announce new features with animated text and icons
 2. **Product Showcase** - Showcase your product with dynamic visuals
 3. **Social Promo** - Short promotional video for social media (1:1 aspect ratio)
-
-### Creating Custom Templates
-
-Templates are Remotion compositions. Create a new template in `src/remotion/templates/`:
-
-```tsx
-import { z } from 'zod'
-import { AbsoluteFill, useCurrentFrame } from 'remotion'
-
-export const myTemplateSchema = z.object({
-  title: z.string(),
-  // ... your props
-})
-
-export const MyTemplate: React.FC<z.infer<typeof myTemplateSchema>> = (props) => {
-  const frame = useCurrentFrame()
-  // ... your template
-}
-```
-
-Register it in `src/remotion/Root.tsx` and add it to the database.
-
-## API Reference
-
-### Edge Functions
-
-- `POST /functions/v1/render-video` - Start video rendering
-- `POST /functions/v1/ai-generate` - Generate video content with AI
-- `POST /functions/v1/github-webhook` - GitHub webhook handler
-- `POST /functions/v1/social-publish` - Publish video to social media
 
 ## Environment Variables
 
@@ -144,24 +107,24 @@ Register it in `src/remotion/Root.tsx` and add it to the database.
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server only) |
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway API key |
 | `GITHUB_APP_ID` | GitHub App ID |
 | `GITHUB_CLIENT_ID` | GitHub OAuth Client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth Client Secret |
 | `GITHUB_WEBHOOK_SECRET` | GitHub webhook secret |
-| `AWS_ACCESS_KEY_ID` | AWS access key for Remotion Lambda |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
-| `REMOTION_FUNCTION_NAME` | Remotion Lambda function name |
-| `REMOTION_SITE_URL` | Remotion site URL on S3 |
 
 ## Deployment
 
-### Vercel
+### Vercel (Frontend)
 
 1. Push your code to GitHub
 2. Import the project in Vercel
 3. Add environment variables
 4. Deploy
+
+### Render.com (Video Rendering)
+
+See `render-server/README.md` for deployment instructions.
 
 ### Supabase Edge Functions
 

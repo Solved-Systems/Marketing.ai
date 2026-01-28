@@ -1,4 +1,4 @@
--- VideoForge Database Schema
+-- MRKTCMD Database Schema
 -- Initial migration
 
 -- Enable necessary extensions

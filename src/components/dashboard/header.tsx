@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Play, Settings, LogOut, User as UserIcon } from 'lucide-react'
+import { Terminal, Settings, LogOut, User as UserIcon } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import type { Tables } from '@/lib/database.types'
 
@@ -39,12 +39,13 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
     .toUpperCase() || user.email?.[0].toUpperCase() || 'U'
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-sm">
       <div className="container flex h-14 items-center">
         <div className="mr-4 flex">
-          <Link href="/dashboard" className="mr-6 flex items-center space-x-2">
-            <Play className="h-6 w-6 fill-primary text-primary" />
-            <span className="hidden font-bold sm:inline-block">VideoForge</span>
+          <Link href="/dashboard" className="mr-6 flex items-center gap-2 group">
+            <Terminal className="h-5 w-5 text-primary glow-text" />
+            <span className="hidden font-bold tracking-tight sm:inline-block group-hover:text-primary transition-colors">MRKTCMD</span>
+            <span className="text-xs text-muted-foreground hidden md:inline">v1.0.0</span>
           </Link>
         </div>
 

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { Play, Github, Loader2 } from 'lucide-react'
+import { Terminal, Github, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 function LoginForm() {
@@ -88,13 +88,16 @@ function LoginForm() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
-          <Link href="/" className="flex items-center justify-center space-x-2 mb-4">
-            <Play className="h-8 w-8 fill-primary text-primary" />
-            <span className="font-bold text-2xl">VideoForge</span>
+          <Link href="/" className="flex items-center justify-center space-x-2 mb-4 group">
+            <Terminal className="h-6 w-6 text-primary" />
+            <span className="font-bold text-xl tracking-tight group-hover:text-primary transition-colors">MRKTCMD</span>
           </Link>
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
+          <div className="text-xs text-muted-foreground font-mono mb-2">
+            <span className="text-primary">$</span> ./auth --mode=login
+          </div>
+          <CardTitle className="text-xl">AUTHENTICATE</CardTitle>
           <CardDescription>
-            Sign in to your account to continue
+            <span className="text-primary">{'//'}</span> Sign in to access your dashboard
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -152,10 +155,10 @@ function LoginForm() {
           </form>
         </CardContent>
         <CardFooter className="flex flex-col space-y-2">
-          <div className="text-sm text-muted-foreground text-center">
-            Don&apos;t have an account?{' '}
+          <div className="text-sm text-muted-foreground text-center font-mono">
+            <span className="text-primary">{'//'}</span> No account?{' '}
             <Link href="/signup" className="text-primary hover:underline">
-              Sign up
+              ./register
             </Link>
           </div>
         </CardFooter>
