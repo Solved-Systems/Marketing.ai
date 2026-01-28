@@ -23,7 +23,7 @@ serve(async (req) => {
   }
 
   try {
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!
+    const aiGatewayKey = Deno.env.get('AI_GATEWAY_API_KEY')!
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
@@ -97,19 +97,19 @@ serve(async (req) => {
     // Add quality and format instructions
     enhancedPrompt = `${enhancedPrompt}. High quality, professional marketing image, no text or watermarks.`
 
-    // Generate images using DALL-E 3
+    // Generate images using Vercel AI Gateway
     const images: string[] = []
     const numImages = Math.min(count, 4) // Max 4 images
 
     for (let i = 0; i < numImages; i++) {
-      const response = await fetch('https://api.openai.com/v1/images/generations', {
+      const response = await fetch('https://gateway.ai.vercel.app/v1/images/generations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiApiKey}`,
+          'Authorization': `Bearer ${aiGatewayKey}`,
         },
         body: JSON.stringify({
-          model: 'dall-e-3',
+          model: 'openai/gpt-5',
           prompt: enhancedPrompt,
           n: 1,
           size,
