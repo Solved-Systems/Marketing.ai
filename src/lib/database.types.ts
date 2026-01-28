@@ -289,6 +289,8 @@ export type Database = {
           watch_config: Json
           is_active: boolean
           created_at: string
+          brand_id: string | null
+          product_id: string | null
         }
         Insert: {
           id?: string
@@ -300,6 +302,8 @@ export type Database = {
           watch_config?: Json
           is_active?: boolean
           created_at?: string
+          brand_id?: string | null
+          product_id?: string | null
         }
         Update: {
           id?: string
@@ -311,6 +315,8 @@ export type Database = {
           watch_config?: Json
           is_active?: boolean
           created_at?: string
+          brand_id?: string | null
+          product_id?: string | null
         }
       }
       github_events: {
@@ -395,7 +401,8 @@ export type Database = {
       publish_queue: {
         Row: {
           id: string
-          video_job_id: string
+          video_job_id: string | null
+          content_draft_id: string | null
           social_account_id: string
           status: 'pending' | 'scheduled' | 'uploading' | 'published' | 'failed'
           caption: string | null
@@ -410,7 +417,8 @@ export type Database = {
         }
         Insert: {
           id?: string
-          video_job_id: string
+          video_job_id?: string | null
+          content_draft_id?: string | null
           social_account_id: string
           status?: 'pending' | 'scheduled' | 'uploading' | 'published' | 'failed'
           caption?: string | null
@@ -425,7 +433,8 @@ export type Database = {
         }
         Update: {
           id?: string
-          video_job_id?: string
+          video_job_id?: string | null
+          content_draft_id?: string | null
           social_account_id?: string
           status?: 'pending' | 'scheduled' | 'uploading' | 'published' | 'failed'
           caption?: string | null
@@ -469,6 +478,141 @@ export type Database = {
           resource_id?: string | null
           metadata?: Json
           created_at?: string
+        }
+      }
+      brands: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          description: string | null
+          logo_url: string | null
+          brand_colors: Json
+          tagline: string | null
+          website_url: string | null
+          social_handles: Json
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          description?: string | null
+          logo_url?: string | null
+          brand_colors?: Json
+          tagline?: string | null
+          website_url?: string | null
+          social_handles?: Json
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          description?: string | null
+          logo_url?: string | null
+          brand_colors?: Json
+          tagline?: string | null
+          website_url?: string | null
+          social_handles?: Json
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      products: {
+        Row: {
+          id: string
+          brand_id: string
+          name: string
+          description: string | null
+          tagline: string | null
+          product_images: Json
+          features: Json
+          pricing: string | null
+          category: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          brand_id: string
+          name: string
+          description?: string | null
+          tagline?: string | null
+          product_images?: Json
+          features?: Json
+          pricing?: string | null
+          category?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          brand_id?: string
+          name?: string
+          description?: string | null
+          tagline?: string | null
+          product_images?: Json
+          features?: Json
+          pricing?: string | null
+          category?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      content_drafts: {
+        Row: {
+          id: string
+          organization_id: string
+          brand_id: string | null
+          product_id: string | null
+          content_type: 'video' | 'image' | 'post'
+          title: string | null
+          content: Json
+          ai_prompt: string | null
+          status: 'draft' | 'approved' | 'scheduled' | 'published'
+          scheduled_for: string | null
+          platforms: Json
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          brand_id?: string | null
+          product_id?: string | null
+          content_type: 'video' | 'image' | 'post'
+          title?: string | null
+          content: Json
+          ai_prompt?: string | null
+          status?: 'draft' | 'approved' | 'scheduled' | 'published'
+          scheduled_for?: string | null
+          platforms?: Json
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          brand_id?: string | null
+          product_id?: string | null
+          content_type?: 'video' | 'image' | 'post'
+          title?: string | null
+          content?: Json
+          ai_prompt?: string | null
+          status?: 'draft' | 'approved' | 'scheduled' | 'published'
+          scheduled_for?: string | null
+          platforms?: Json
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
         }
       }
     }

@@ -9,12 +9,15 @@ const corsHeaders = {
 
 interface GenerateRequest {
   prompt: string
-  projectId: string
+  projectId?: string
+  brandId?: string
+  productId?: string
   templateId?: string
   assetIds?: string[]
+  contentType?: 'video' | 'image' | 'post'
 }
 
-const SYSTEM_PROMPT = `You are a video script generator for VideoForge, an AI-powered video creation platform.
+const SYSTEM_PROMPT = `You are a video script generator for MRKTCMD, an AI-powered marketing automation platform.
 
 Given a user's prompt and available assets, generate inputProps for a Remotion video template.
 
@@ -70,10 +73,57 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const anthropic = new Anthropic({ apiKey: anthropicApiKey })
 
-    const { prompt, projectId, templateId, assetIds }: GenerateRequest = await req.json()
+    const { prompt, projectId, brandId, productId, templateId, assetIds, contentType = 'video' }: GenerateRequest = await req.json()
 
-    if (!prompt || !projectId) {
-      throw new Error('Prompt and project ID are required')
+    if (!prompt) {
+      throw new Error('Prompt is required')
+    }
+
+    // Fetch brand context if provided
+    let brandContext = ''
+    if (brandId) {
+      const { data: brand } = await supabase
+        .from('brands')
+        .select('*')
+        .eq('id', brandId)
+        .single()
+
+      if (brand) {
+        const colors = brand.brand_colors as { primary?: string; secondary?: string; accent?: string; background?: string } | null
+        brandContext = `\n\nBrand Context:
+- Brand Name: ${brand.name}
+- Tagline: ${brand.tagline || 'N/A'}
+- Description: ${brand.description || 'N/A'}
+- Primary Color: ${colors?.primary || '#ff6b00'}
+- Secondary Color: ${colors?.secondary || '#ffffff'}
+- Logo URL: ${brand.logo_url || 'N/A'}
+- Website: ${brand.website_url || 'N/A'}
+
+IMPORTANT: Use the brand colors and information in the generated content.`
+      }
+    }
+
+    // Fetch product context if provided
+    let productContext = ''
+    if (productId) {
+      const { data: product } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', productId)
+        .single()
+
+      if (product) {
+        const features = product.features as Array<{ icon?: string; title?: string; description?: string }> | null
+        productContext = `\n\nProduct Context:
+- Product Name: ${product.name}
+- Tagline: ${product.tagline || 'N/A'}
+- Description: ${product.description || 'N/A'}
+- Category: ${product.category || 'N/A'}
+- Pricing: ${product.pricing || 'N/A'}
+- Features: ${features?.map(f => `${f.title}: ${f.description}`).join(', ') || 'N/A'}
+
+IMPORTANT: Incorporate the product information and features into the generated content.`
+      }
     }
 
     // Fetch available assets if provided
@@ -111,7 +161,7 @@ serve(async (req) => {
       messages: [
         {
           role: 'user',
-          content: `${prompt}${assetsContext}${templateContext}`,
+          content: `${prompt}${brandContext}${productContext}${assetsContext}${templateContext}`,
         },
       ],
     })
