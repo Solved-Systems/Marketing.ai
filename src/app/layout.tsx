@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { JetBrains_Mono, IBM_Plex_Mono } from "next/font/google"
 import { cn } from "@/lib/utils"
+import { SessionProvider } from "@/components/providers/session-provider"
 import "./globals.css"
 
 const jetbrainsMono = JetBrains_Mono({
@@ -36,7 +37,7 @@ export default function RootLayout({
         )}
         suppressHydrationWarning
       >
-        {children}
+        <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
   )
