@@ -1,23 +1,58 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, ArrowLeft } from 'lucide-react'
+import { Loader2, ArrowLeft, BookOpen, Building2, Package } from 'lucide-react'
 import Link from 'next/link'
+import type { Tables } from '@/lib/database.types'
+
+type StyleGuide = Tables<'style_guides'> & {
+  products?: { name: string } | null
+}
 
 export default function NewProjectPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [styleGuideId, setStyleGuideId] = useState<string>('')
+  const [styleGuides, setStyleGuides] = useState<StyleGuide[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingGuides, setIsLoadingGuides] = useState(true)
   const router = useRouter()
   const { toast } = useToast()
   const supabase = createClient()
+
+  // Fetch style guides on mount
+  useEffect(() => {
+    async function fetchStyleGuides() {
+      const { data } = await supabase
+        .from('style_guides')
+        .select(`
+          *,
+          products(name)
+        `)
+        .order('product_id', { ascending: true, nullsFirst: true })
+        .order('is_default', { ascending: false })
+        .order('name')
+
+      if (data) {
+        setStyleGuides(data)
+        // Auto-select the default company guide
+        const defaultGuide = data.find(g => !g.product_id && g.is_default)
+        if (defaultGuide) {
+          setStyleGuideId(defaultGuide.id)
+        }
+      }
+      setIsLoadingGuides(false)
+    }
+    fetchStyleGuides()
+  }, [supabase])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,6 +93,7 @@ export default function NewProjectPage() {
           organization_id: profile.organization_id,
           created_by: user.id,
           brand_config: {},
+          style_guide_id: styleGuideId || null,
         })
         .select()
         .single()
@@ -137,6 +173,73 @@ export default function NewProjectPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="styleGuide">
+                <span className="flex items-center space-x-2">
+                  <BookOpen className="h-4 w-4" />
+                  <span>Style Guide (optional)</span>
+                </span>
+              </Label>
+              <Select
+                value={styleGuideId}
+                onValueChange={setStyleGuideId}
+                disabled={isLoadingGuides}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={isLoadingGuides ? "Loading..." : "Select a style guide"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">
+                    <span className="text-muted-foreground">No style guide</span>
+                  </SelectItem>
+                  {styleGuides.filter(g => !g.product_id).length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                        Company Guides
+                      </div>
+                      {styleGuides.filter(g => !g.product_id).map(guide => (
+                        <SelectItem key={guide.id} value={guide.id}>
+                          <span className="flex items-center space-x-2">
+                            <Building2 className="h-4 w-4 text-primary" />
+                            <span>{guide.name}</span>
+                            {guide.is_default && (
+                              <span className="text-xs text-primary">(default)</span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {styleGuides.filter(g => g.product_id).length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                        Product Guides
+                      </div>
+                      {styleGuides.filter(g => g.product_id).map(guide => (
+                        <SelectItem key={guide.id} value={guide.id}>
+                          <span className="flex items-center space-x-2">
+                            <Package className="h-4 w-4 text-primary" />
+                            <span>{guide.name}</span>
+                            {guide.products && (
+                              <span className="text-xs text-muted-foreground">
+                                ({guide.products.name})
+                              </span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Style guides provide brand context for AI-generated content.{' '}
+                <Link href="/style-guides/new" className="text-primary hover:underline">
+                  Create one
+                </Link>
+              </p>
             </div>
 
             <div className="flex justify-end space-x-4">

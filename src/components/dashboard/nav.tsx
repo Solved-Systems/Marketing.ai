@@ -12,6 +12,7 @@ import {
   Palette,
   Calendar,
   Plug,
+  BookOpen,
 } from 'lucide-react'
 
 const navItems = [
@@ -24,6 +25,11 @@ const navItems = [
     title: './brands',
     href: '/brands',
     icon: Palette,
+  },
+  {
+    title: './style-guides',
+    href: '/style-guides',
+    icon: BookOpen,
   },
   {
     title: './calendar',

@@ -77,6 +77,7 @@ export type Database = {
           name: string
           description: string | null
           brand_config: Json
+          style_guide_id: string | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -87,6 +88,7 @@ export type Database = {
           name: string
           description?: string | null
           brand_config?: Json
+          style_guide_id?: string | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -97,6 +99,7 @@ export type Database = {
           name?: string
           description?: string | null
           brand_config?: Json
+          style_guide_id?: string | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -615,6 +618,62 @@ export type Database = {
           updated_at?: string
         }
       }
+      style_guides: {
+        Row: {
+          id: string
+          organization_id: string
+          product_id: string | null
+          name: string
+          description: string | null
+          brand_identity: Json
+          target_audience: Json
+          voice_and_tone: Json
+          visual_style: Json
+          content_guidelines: Json
+          competitive_context: Json
+          inherit_from_company: boolean
+          is_default: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          product_id?: string | null
+          name: string
+          description?: string | null
+          brand_identity?: Json
+          target_audience?: Json
+          voice_and_tone?: Json
+          visual_style?: Json
+          content_guidelines?: Json
+          competitive_context?: Json
+          inherit_from_company?: boolean
+          is_default?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          product_id?: string | null
+          name?: string
+          description?: string | null
+          brand_identity?: Json
+          target_audience?: Json
+          voice_and_tone?: Json
+          visual_style?: Json
+          content_guidelines?: Json
+          competitive_context?: Json
+          inherit_from_company?: boolean
+          is_default?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -623,6 +682,10 @@ export type Database = {
       user_organization_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_merged_style_guide: {
+        Args: { guide_id: string }
+        Returns: Json
       }
     }
     Enums: {
