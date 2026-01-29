@@ -127,7 +127,7 @@ export async function GET(request: Request) {
             if (nameLower.includes('screenshot')) score -= 100
             if (nameLower.includes('coding')) score -= 50
             // Include repo name matches
-            const repoName = repo.split('/')[1]?.toLowerCase() || ''
+            const repoName = repo?.split('/')[1]?.toLowerCase() || ''
             if (repoName && nameLower.includes(repoName)) score += 60
 
             return {
