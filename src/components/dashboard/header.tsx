@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -12,10 +14,41 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Terminal, Settings, LogOut, User as UserIcon } from 'lucide-react'
+import {
+  Terminal,
+  Settings,
+  LogOut,
+  User as UserIcon,
+  Menu,
+  LayoutDashboard,
+  FolderOpen,
+  Video,
+  Palette,
+  Calendar,
+  Plug,
+  BookOpen,
+} from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import type { Tables } from '@/lib/database.types'
+
+const navItems = [
+  { title: './dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: './brands', href: '/brands', icon: Palette },
+  { title: './style-guides', href: '/style-guides', icon: BookOpen },
+  { title: './calendar', href: '/calendar', icon: Calendar },
+  { title: './projects', href: '/projects', icon: FolderOpen },
+  { title: './videos', href: '/videos', icon: Video },
+  { title: './integrations', href: '/integrations', icon: Plug },
+  { title: './config', href: '/settings', icon: Settings },
+]
 
 interface DashboardHeaderProps {
   user: User
@@ -24,7 +57,9 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -41,6 +76,53 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-sm">
       <div className="container flex h-14 items-center">
+        {/* Mobile Menu */}
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="md:hidden mr-2">
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Toggle menu</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-[280px] sm:w-[320px]">
+            <SheetHeader>
+              <SheetTitle className="flex items-center gap-2 font-mono">
+                <Terminal className="h-5 w-5 text-primary" />
+                MRKTCMD
+              </SheetTitle>
+            </SheetHeader>
+            <div className="mt-6">
+              <div className="text-xs text-muted-foreground mb-4 font-mono">
+                <span className="text-primary">$</span> ls -la /modules
+              </div>
+              <nav className="grid gap-1">
+                {navItems.map((item) => {
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(
+                        'flex items-center rounded-sm px-3 py-2 text-sm font-mono transition-all',
+                        isActive
+                          ? 'bg-primary/10 text-primary border-l-2 border-primary'
+                          : 'text-muted-foreground hover:text-primary hover:bg-primary/5'
+                      )}
+                    >
+                      <item.icon className={cn(
+                        'mr-2 h-4 w-4',
+                        isActive ? 'text-primary' : 'text-muted-foreground'
+                      )} />
+                      <span>{item.title}</span>
+                    </Link>
+                  )
+                })}
+              </nav>
+            </div>
+          </SheetContent>
+        </Sheet>
+
         <div className="mr-4 flex">
           <Link href="/dashboard" className="mr-6 flex items-center gap-2 group">
             <Terminal className="h-5 w-5 text-primary glow-text" />
