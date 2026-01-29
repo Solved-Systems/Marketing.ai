@@ -79,8 +79,9 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
         {/* Mobile Menu */}
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="md:hidden mr-2">
-              <Menu className="h-5 w-5" />
+            <Button variant="ghost" className="md:hidden mr-2 px-2 font-mono text-primary hover:text-primary">
+              <span className="text-lg">&gt;</span>
+              <Menu className="h-4 w-4 ml-1" />
               <span className="sr-only">Toggle menu</span>
             </Button>
           </SheetTrigger>
