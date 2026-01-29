@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
         role: m.role as 'user' | 'assistant',
         content: m.content,
       })),
-      maxTokens: 1024,
+      maxOutputTokens: 1024,
     })
 
     return NextResponse.json({ content: text })
