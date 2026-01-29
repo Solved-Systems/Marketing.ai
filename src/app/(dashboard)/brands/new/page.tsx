@@ -9,7 +9,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AIChatAssistant } from '@/components/ui/ai-chat-assistant'
-import { ArrowLeft, Palette, Loader2, Save } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { ArrowLeft, Palette, Loader2, Save, Github, Check, Link as LinkIcon } from 'lucide-react'
 
 interface BrandFormData {
   name: string
@@ -19,6 +26,7 @@ interface BrandFormData {
   primaryColor: string
   secondaryColor: string
   accentColor: string
+  githubRepo: string | null
 }
 
 const formFields = [
@@ -42,13 +50,45 @@ export default function NewBrandPage() {
     primaryColor: '#ff8c00',
     secondaryColor: '#1a1a1a',
     accentColor: '#ffa500',
+    githubRepo: null,
   })
+  const [repoDialogOpen, setRepoDialogOpen] = useState(false)
+  const [repoUrl, setRepoUrl] = useState('')
+  const [isConnectingRepo, setIsConnectingRepo] = useState(false)
 
   const handleFieldUpdate = (fieldName: string, value: unknown) => {
     setFormData(prev => ({
       ...prev,
       [fieldName]: value,
     }))
+  }
+
+  const handleConnectRepo = async () => {
+    if (!repoUrl.trim()) return
+    setIsConnectingRepo(true)
+
+    // Parse GitHub URL to get owner/repo
+    const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/)
+    if (!match) {
+      alert('Invalid GitHub URL')
+      setIsConnectingRepo(false)
+      return
+    }
+
+    const [, owner, repo] = match
+    const fullName = `${owner}/${repo.replace('.git', '')}`
+
+    // Simulate API validation
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    setFormData(prev => ({ ...prev, githubRepo: fullName }))
+    setRepoUrl('')
+    setRepoDialogOpen(false)
+    setIsConnectingRepo(false)
+  }
+
+  const handleDisconnectRepo = () => {
+    setFormData(prev => ({ ...prev, githubRepo: null }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,6 +140,90 @@ export default function NewBrandPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* GitHub Repository Connection */}
+            <div className="space-y-2">
+              <Label className="font-mono text-sm flex items-center gap-2">
+                <Github className="h-4 w-4" />
+                github_repo
+                <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              {formData.githubRepo ? (
+                <div className="flex items-center gap-3 p-3 rounded-md bg-primary/10 border border-primary/20">
+                  <Check className="h-4 w-4 text-primary" />
+                  <a
+                    href={`https://github.com/${formData.githubRepo}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-sm text-primary hover:underline flex items-center gap-1"
+                  >
+                    {formData.githubRepo}
+                    <LinkIcon className="h-3 w-3" />
+                  </a>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDisconnectRepo}
+                    className="ml-auto text-muted-foreground hover:text-destructive"
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              ) : (
+                <Dialog open={repoDialogOpen} onOpenChange={setRepoDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-start gap-2 font-mono">
+                      <Github className="h-4 w-4" />
+                      Connect GitHub Repository
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="terminal-border">
+                    <DialogHeader>
+                      <DialogTitle className="font-mono flex items-center gap-2">
+                        <Github className="h-5 w-5" />
+                        Connect Repository
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="repo-url" className="font-mono text-sm">
+                          Repository URL
+                        </Label>
+                        <Input
+                          id="repo-url"
+                          value={repoUrl}
+                          onChange={(e) => setRepoUrl(e.target.value)}
+                          placeholder="https://github.com/owner/repo"
+                          className="font-mono"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Connect a GitHub repo to auto-generate content from releases and updates.
+                        </p>
+                      </div>
+                      <Button
+                        onClick={handleConnectRepo}
+                        disabled={!repoUrl.trim() || isConnectingRepo}
+                        className="w-full"
+                        variant="terminal"
+                      >
+                        {isConnectingRepo ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          <>
+                            <Github className="h-4 w-4" />
+                            Connect
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+
             {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="name" className="font-mono text-sm">
