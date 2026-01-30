@@ -1,10 +1,18 @@
+import { redirect } from 'next/navigation'
+import { auth } from '@/auth'
 import { DashboardNav } from '@/components/dashboard/nav'
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const session = await auth()
+
+  if (!session?.user) {
+    redirect('/login')
+  }
+
   return (
     <div className="flex min-h-screen">
       <DashboardNav />
