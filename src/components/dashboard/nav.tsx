@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { useCredits } from '@/hooks/use-credits'
 import {
   Terminal,
   LayoutDashboard,
@@ -12,6 +13,8 @@ import {
   Plug,
   Settings,
   ChevronRight,
+  CreditCard,
+  Zap,
 } from 'lucide-react'
 
 const navItems = [
@@ -21,10 +24,12 @@ const navItems = [
   { title: './videos', href: '/videos', icon: Video },
   { title: './integrations', href: '/integrations', icon: Plug },
   { title: './config', href: '/settings', icon: Settings },
+  { title: './billing', href: '/settings/billing', icon: CreditCard },
 ]
 
 export function DashboardNav() {
   const pathname = usePathname()
+  const { remaining, total, isLoading } = useCredits()
 
   return (
     <aside className="w-64 border-r border-border/50 bg-sidebar min-h-screen flex flex-col">
@@ -61,6 +66,34 @@ export function DashboardNav() {
           })}
         </ul>
       </nav>
+
+      {/* Credits Display */}
+      <div className="p-4 border-t border-border/50">
+        <Link href="/settings/billing" className="block">
+          <div className="terminal-border rounded p-3 text-xs font-mono hover:bg-muted/50 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-muted-foreground">credits</span>
+              <Zap className="h-3 w-3 text-primary" />
+            </div>
+            {isLoading ? (
+              <p className="text-muted-foreground">Loading...</p>
+            ) : total > 0 ? (
+              <>
+                <p className="text-lg font-bold text-primary">{remaining}</p>
+                <div className="mt-1 h-1 bg-muted rounded overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${(remaining / total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-muted-foreground mt-1">{remaining}/{total}</p>
+              </>
+            ) : (
+              <p className="text-yellow-500">No subscription</p>
+            )}
+          </div>
+        </Link>
+      </div>
 
       {/* Footer */}
       <div className="p-4 border-t border-border/50">
