@@ -112,6 +112,10 @@ export default function BrandDetailPage({
   const [isLoadingRepos, setIsLoadingRepos] = useState(false)
   const [repoSearch, setRepoSearch] = useState('')
 
+  // Logo state
+  const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
+  const [isLoadingLogos, setIsLoadingLogos] = useState(false)
+
   // Fetch brand data
   useEffect(() => {
     async function fetchBrand() {
@@ -171,6 +175,24 @@ export default function BrandDetailPage({
       console.error('Error fetching repos:', err)
     } finally {
       setIsLoadingRepos(false)
+    }
+  }
+
+  const fetchLogosFromRepo = async () => {
+    if (!brand?.github_repo) return
+    setIsLoadingLogos(true)
+    try {
+      const response = await fetch(`/api/github/repo-info?repo=${encodeURIComponent(brand.github_repo)}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.logos && data.logos.length > 0) {
+          setAvailableLogos(data.logos)
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching logos:', err)
+    } finally {
+      setIsLoadingLogos(false)
     }
   }
 
@@ -820,14 +842,105 @@ export default function BrandDetailPage({
                       type="url"
                     />
                   </div>
+                  {/* Logo Section */}
                   <div>
-                    <label className="text-sm font-medium">Logo URL</label>
-                    <Input
-                      value={editForm.logo_url || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, logo_url: e.target.value }))}
-                      disabled={!isEditing}
-                      className="mt-1"
-                    />
+                    <label className="text-sm font-medium">Logo</label>
+                    <div className="mt-2 flex items-start gap-4">
+                      {/* Current Logo Preview */}
+                      <div
+                        className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center overflow-hidden flex-shrink-0"
+                        style={{ backgroundColor: editForm.secondary_color || '#1a1a1a' }}
+                      >
+                        {editForm.logo_url ? (
+                          <img
+                            src={editForm.logo_url}
+                            alt="Logo"
+                            className="w-full h-full object-contain p-1"
+                          />
+                        ) : (
+                          <div
+                            className="w-full h-full flex items-center justify-center text-white font-bold text-2xl"
+                            style={{ backgroundColor: editForm.primary_color || '#ff8c00' }}
+                          >
+                            {editForm.name?.[0]?.toUpperCase() || '?'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Logo Options */}
+                      <div className="flex-1 space-y-3">
+                        {/* Fetch from GitHub */}
+                        {brand?.github_repo && isEditing && (
+                          <div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={fetchLogosFromRepo}
+                              disabled={isLoadingLogos}
+                            >
+                              {isLoadingLogos ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Github className="h-4 w-4" />
+                              )}
+                              Fetch from GitHub
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Available logos from repo */}
+                        {availableLogos.length > 0 && isEditing && (
+                          <div className="flex flex-wrap gap-2">
+                            {availableLogos.map((logo) => (
+                              <button
+                                key={logo.path}
+                                type="button"
+                                onClick={() => setEditForm(prev => ({ ...prev, logo_url: logo.downloadUrl }))}
+                                className={`p-1 rounded border-2 transition-colors ${
+                                  editForm.logo_url === logo.downloadUrl
+                                    ? 'border-primary'
+                                    : 'border-border hover:border-primary/50'
+                                }`}
+                                title={logo.path}
+                              >
+                                <img
+                                  src={logo.downloadUrl}
+                                  alt={logo.path}
+                                  className="w-10 h-10 object-contain bg-white/10 rounded"
+                                />
+                              </button>
+                            ))}
+                            {/* Use letter fallback */}
+                            <button
+                              type="button"
+                              onClick={() => setEditForm(prev => ({ ...prev, logo_url: null }))}
+                              className={`w-12 h-12 rounded border-2 flex items-center justify-center text-xs font-mono transition-colors ${
+                                !editForm.logo_url
+                                  ? 'border-primary text-primary'
+                                  : 'border-border text-muted-foreground hover:border-primary/50'
+                              }`}
+                              title="Use letter"
+                            >
+                              Aa
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Manual URL input */}
+                        {isEditing && (
+                          <Input
+                            value={editForm.logo_url || ''}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, logo_url: e.target.value }))}
+                            placeholder="Or paste a logo URL..."
+                            className="text-xs"
+                          />
+                        )}
+
+                        {!isEditing && editForm.logo_url && (
+                          <p className="text-xs text-muted-foreground truncate">{editForm.logo_url}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
