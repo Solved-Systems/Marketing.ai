@@ -62,12 +62,19 @@ export async function POST(request: NextRequest) {
       primary_color,
       secondary_color,
       accent_color,
+      heading_font,
+      body_font,
       github_repo,
     } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
+
+    // Build metadata object for fonts
+    const metadata: Record<string, unknown> = {}
+    if (heading_font) metadata.headingFont = heading_font
+    if (body_font) metadata.bodyFont = body_font
 
     const supabase = createAdminClient()
 
@@ -96,6 +103,7 @@ export async function POST(request: NextRequest) {
         secondary_color: secondary_color || '#1a1a1a',
         accent_color: accent_color || '#ffa500',
         github_repo: github_repo || null,
+        metadata: Object.keys(metadata).length > 0 ? metadata : null,
       })
       .select()
       .single()

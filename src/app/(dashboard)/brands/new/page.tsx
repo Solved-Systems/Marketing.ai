@@ -54,6 +54,18 @@ interface RepoInfo {
     extracted: string[]
     sources: { path: string; colors: string[] }[]
   } | null
+  fonts: {
+    extracted: string[]
+    sources: string[]
+  } | null
+  tailwindConfig: {
+    path: string
+    content: string
+  } | null
+  stylesheets: {
+    path: string
+    content: string
+  }[] | null
   logos: { path: string; downloadUrl: string; size: number }[] | null
 }
 
@@ -65,6 +77,8 @@ interface BrandFormData {
   primaryColor: string
   secondaryColor: string
   accentColor: string
+  headingFont: string
+  bodyFont: string
   githubRepo: string | null
   logoUrl: string | null
 }
@@ -107,6 +121,8 @@ export default function NewBrandPage() {
     primaryColor: '#ff8c00',
     secondaryColor: '#1a1a1a',
     accentColor: '#ffa500',
+    headingFont: '',
+    bodyFont: '',
     githubRepo: null,
     logoUrl: null,
   })
@@ -195,6 +211,14 @@ export default function NewBrandPage() {
       const colorSources = repoInfo.colors?.sources?.map(s => s.path) || []
       const colorsFound = repoInfo.colors?.extracted?.length || 0
 
+      // Show fonts found
+      const fontsFound = repoInfo.fonts?.extracted || []
+      const fontSources = repoInfo.fonts?.sources || []
+
+      // Show Tailwind config and stylesheets found
+      const hasTailwindConfig = !!repoInfo.tailwindConfig
+      const stylesheetsFound = repoInfo.stylesheets || []
+
       // Show logos found
       const logosFound = repoInfo.logos || []
       if (logosFound.length > 0) {
@@ -206,8 +230,17 @@ export default function NewBrandPage() {
       if (logosFound.length > 0) {
         statusMsg += `\n\`found ${logosFound.length} logo(s): ${logosFound.map(l => l.path).join(', ')}\``
       }
+      if (hasTailwindConfig) {
+        statusMsg += `\n\`found tailwind config: ${repoInfo.tailwindConfig?.path}\``
+      }
+      if (stylesheetsFound.length > 0) {
+        statusMsg += `\n\`found ${stylesheetsFound.length} stylesheet(s): ${stylesheetsFound.map(s => s.path).join(', ')}\``
+      }
       if (colorsFound > 0) {
         statusMsg += `\n\`extracted ${colorsFound} colors from: ${colorSources.join(', ')}\``
+      }
+      if (fontsFound.length > 0) {
+        statusMsg += `\n\`extracted fonts: ${fontsFound.join(', ')}\``
       }
       statusMsg += `\n\`analyzing content with AI...\``
 
@@ -228,11 +261,36 @@ Topics: ${repoInfo.topics.join(', ') || 'None'}
 Language: ${repoInfo.language || 'Unknown'}
 ${repoInfo.packageJson ? `Package name: ${repoInfo.packageJson.name}\nPackage description: ${repoInfo.packageJson.description}` : ''}
 
+${repoInfo.tailwindConfig ? `
+TAILWIND CONFIG (${repoInfo.tailwindConfig.path}):
+\`\`\`
+${repoInfo.tailwindConfig.content.substring(0, 3000)}
+\`\`\`
+` : ''}
+
+${repoInfo.stylesheets && repoInfo.stylesheets.length > 0 ? `
+STYLESHEETS FOUND:
+${repoInfo.stylesheets.map(s => `
+--- ${s.path} ---
+\`\`\`css
+${s.content.substring(0, 2000)}
+\`\`\`
+`).join('\n')}
+` : ''}
+
 ${repoInfo.colors?.extracted?.length ? `
 COLORS EXTRACTED FROM CODEBASE:
 ${repoInfo.colors.sources.map(s => `- ${s.path}: ${s.colors.join(', ')}`).join('\n')}
 
 IMPORTANT: Use these actual colors from the codebase! Pick the most prominent/brand-relevant ones for primary, secondary, and accent.
+` : ''}
+
+${repoInfo.fonts?.extracted?.length ? `
+FONTS EXTRACTED FROM CODEBASE:
+${repoInfo.fonts.extracted.join(', ')}
+Sources: ${repoInfo.fonts.sources.join(', ')}
+
+IMPORTANT: Use these actual fonts from the codebase for headingFont and bodyFont!
 ` : ''}
 
 README (excerpt):
@@ -248,14 +306,17 @@ Based on this, generate a brand profile. Respond with ONLY a JSON block:
     "website_url": "homepage URL or empty string",
     "primaryColor": "#hexcode",
     "secondaryColor": "#hexcode (dark)",
-    "accentColor": "#hexcode"
+    "accentColor": "#hexcode",
+    "headingFont": "Font name for headings (e.g., 'Inter', 'Roboto')",
+    "bodyFont": "Font name for body text (e.g., 'Inter', 'Open Sans')"
   },
   "sources": {
     "name": "source (e.g., 'repo name', 'package.json name field')",
     "description": "source (e.g., 'README.md intro', 'repo description')",
     "tagline": "source (e.g., 'derived from README tagline', 'created from topics')",
     "website_url": "source (e.g., 'repo homepage field', 'none')",
-    "colors": "source file and reasoning (e.g., 'primary #3B82F6 from tailwind.config.ts, accent #10B981 from globals.css')"
+    "colors": "source file and reasoning (e.g., 'primary #3B82F6 from tailwind.config.ts, accent #10B981 from globals.css')",
+    "fonts": "source file (e.g., 'Inter and Roboto from layout.tsx')"
   },
   "summary": "Brief explanation with specific references to where you found information"
 }
@@ -263,13 +324,15 @@ Based on this, generate a brand profile. Respond with ONLY a JSON block:
 
 IMPORTANT:
 1. If colors were extracted from the codebase, USE THOSE ACTUAL COLORS - don't make up new ones!
-2. In the summary, cite specific sources like:
+2. If fonts were extracted from the codebase, USE THOSE ACTUAL FONTS - don't make up new ones!
+3. In the summary, cite specific sources like:
    - "Name from repo name 'Vizual'"
    - "Description derived from README.md first paragraph"
    - "Primary color #ff8c00 from globals.css"
    - "Accent color #3B82F6 from tailwind.config.ts"
+   - "Fonts Inter and Roboto from layout.tsx"
 
-Only suggest new colors if none were found in the codebase.`,
+Only suggest new colors/fonts if none were found in the codebase.`,
         }),
       })
 
@@ -353,7 +416,7 @@ When the user wants to update something, respond conversationally AND include a 
 {"fieldUpdates": {"fieldName": "value"}}
 \`\`\`
 
-Available fields: name, description, tagline, website_url, primaryColor, secondaryColor, accentColor (use hex codes for colors).
+Available fields: name, description, tagline, website_url, primaryColor, secondaryColor, accentColor (use hex codes for colors), headingFont, bodyFont (use font names like "Inter", "Roboto", "Open Sans").
 
 If they ask questions or want suggestions, help them. Be friendly and creative.
 If the brand looks complete and they seem satisfied, let them know they can save it.`,
@@ -406,6 +469,8 @@ If the brand looks complete and they seem satisfied, let them know they can save
           primary_color: formData.primaryColor,
           secondary_color: formData.secondaryColor,
           accent_color: formData.accentColor,
+          heading_font: formData.headingFont,
+          body_font: formData.bodyFont,
           github_repo: formData.githubRepo,
         }),
       })
@@ -811,6 +876,47 @@ If the brand looks complete and they seem satisfied, let them know they can save
                         placeholder="#000000"
                       />
                       <span className="text-xs font-mono text-muted-foreground">accent</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fonts - Editable */}
+                <div>
+                  <p className="font-mono text-xs text-muted-foreground mb-2">fonts</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Heading Font</label>
+                      <Input
+                        value={formData.headingFont}
+                        onChange={(e) => setFormData(prev => ({ ...prev, headingFont: e.target.value }))}
+                        className="font-mono text-sm"
+                        placeholder="e.g., Inter"
+                      />
+                      {formData.headingFont && (
+                        <p
+                          className="mt-2 text-lg font-bold"
+                          style={{ fontFamily: formData.headingFont }}
+                        >
+                          Sample Heading
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Body Font</label>
+                      <Input
+                        value={formData.bodyFont}
+                        onChange={(e) => setFormData(prev => ({ ...prev, bodyFont: e.target.value }))}
+                        className="font-mono text-sm"
+                        placeholder="e.g., Open Sans"
+                      />
+                      {formData.bodyFont && (
+                        <p
+                          className="mt-2 text-sm"
+                          style={{ fontFamily: formData.bodyFont }}
+                        >
+                          Sample body text
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
