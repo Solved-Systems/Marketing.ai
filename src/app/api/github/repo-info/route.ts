@@ -115,6 +115,7 @@ export async function GET(request: Request) {
           })
           .map((item: { name: string; download_url: string | null; size: number; path: string }) => {
             const nameLower = item.name.toLowerCase()
+            const nameWithoutExt = nameLower.replace(/\.[^.]+$/, '')
             // Score based on keywords in filename
             let score = 0
             if (nameLower.includes('logo')) score += 100
@@ -122,13 +123,22 @@ export async function GET(request: Request) {
             if (nameLower.includes('favicon')) score += 50
             if (nameLower.includes('brand')) score += 80
             if (nameLower.includes('mark')) score += 40
+            if (nameLower.includes('symbol')) score += 40
+            if (nameLower.includes('emblem')) score += 40
+            // Boost if it's in a likely logo directory
+            if (dirPath === '' || dirPath === 'public' || dirPath === '.github') score += 10
             // Exclude tutorial/screenshot images
             if (nameLower.includes('tutorial')) score -= 100
             if (nameLower.includes('screenshot')) score -= 100
             if (nameLower.includes('coding')) score -= 50
-            // Include repo name matches
+            if (nameLower.includes('example')) score -= 30
+            if (nameLower.includes('demo')) score -= 30
+            // Include repo name matches (exact match gets higher score)
             const repoName = repo?.split('/')[1]?.toLowerCase() || ''
-            if (repoName && nameLower.includes(repoName)) score += 60
+            if (repoName) {
+              if (nameWithoutExt === repoName) score += 120 // Exact match like "vizual.png"
+              else if (nameLower.includes(repoName)) score += 60
+            }
 
             const filePath = dirPath ? `${dirPath}/${item.name}` : item.name
             // For private repos, download_url is null - use our proxy endpoint
@@ -147,10 +157,41 @@ export async function GET(request: Request) {
       }
     }
 
-    // Search multiple directories for logos
-    const logoDirectories = ['public', 'public/images', 'public/img', 'src/assets', 'assets']
+    // Search multiple directories for logos (including root and common locations)
+    const logoDirectories = [
+      '',  // root directory
+      'public',
+      'public/images',
+      'public/img',
+      'public/assets',
+      'src/assets',
+      'src/assets/images',
+      'src/images',
+      'assets',
+      'assets/images',
+      'images',
+      'img',
+      'static',
+      'static/images',
+      'app',
+      '.github',
+    ]
     const logoResults = await Promise.all(logoDirectories.map(dir => findLogosInDirectory(dir)))
     let logosFound = logoResults.flat()
+
+    // If no images with logo keywords found, include all images with score >= 0
+    const keywordMatches = logosFound.filter(l => l.score > 0)
+    if (keywordMatches.length === 0) {
+      // No keyword matches - keep all images but boost common logo names
+      logosFound = logosFound.map(logo => {
+        const nameLower = logo.path.toLowerCase()
+        // Boost common logo filenames even without keywords
+        if (nameLower.match(/\/(logo|icon|brand|mark|favicon|symbol)\./)) {
+          return { ...logo, score: logo.score + 50 }
+        }
+        return logo
+      })
+    }
 
     // Sort by score (highest first), then by size
     logosFound.sort((a, b) => {
