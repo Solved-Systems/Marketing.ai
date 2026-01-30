@@ -113,7 +113,7 @@ export async function GET(request: Request) {
             const name = item.name.toLowerCase()
             return imageExtensions.some(ext => name.endsWith(ext))
           })
-          .map((item: { name: string; download_url: string; size: number }) => {
+          .map((item: { name: string; download_url: string | null; size: number; path: string }) => {
             const nameLower = item.name.toLowerCase()
             // Score based on keywords in filename
             let score = 0
@@ -130,9 +130,13 @@ export async function GET(request: Request) {
             const repoName = repo?.split('/')[1]?.toLowerCase() || ''
             if (repoName && nameLower.includes(repoName)) score += 60
 
+            const filePath = dirPath ? `${dirPath}/${item.name}` : item.name
+            // For private repos, download_url is null - use our proxy endpoint
+            const downloadUrl = item.download_url || `/api/github/file?repo=${encodeURIComponent(repo!)}&path=${encodeURIComponent(filePath)}`
+
             return {
-              path: dirPath ? `${dirPath}/${item.name}` : item.name,
-              downloadUrl: item.download_url,
+              path: filePath,
+              downloadUrl,
               size: item.size,
               score,
             }
