@@ -1,7 +1,8 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,20 +27,65 @@ import {
   ExternalLink,
   Github,
   GitBranch,
+  GitMerge,
+  GitCommit,
   Tag,
   Trash2,
   Check,
   Loader2,
+  Save,
+  X,
 } from 'lucide-react'
 
-interface ConnectedRepo {
+interface Brand {
   id: string
+  name: string
+  description: string | null
+  tagline: string | null
+  website_url: string | null
+  logo_url: string | null
+  primary_color: string
+  secondary_color: string
+  accent_color: string
+  github_repo: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+}
+
+interface MergedPR {
+  id: number
+  number: number
+  title: string
+  mergedAt: string
+  url: string
+  author: string
+  authorAvatar: string
+  sourceBranch: string
+  targetBranch: string
+}
+
+interface RecentCommit {
+  sha: string
+  message: string
+  date: string
+  url: string
+  author: string
+  authorAvatar?: string
+}
+
+interface GitHubActivity {
+  mergedPRs: MergedPR[]
+  recentCommits: RecentCommit[]
+}
+
+interface GitHubRepo {
+  id: number
   name: string
   fullName: string
   url: string
-  events: string[]
-  autoGenerate: string[]
-  autoPublish: boolean
+  description: string | null
+  private: boolean
 }
 
 export default function BrandDetailPage({
@@ -47,85 +93,206 @@ export default function BrandDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const router = useRouter()
   const { id } = use(params)
-  const [connectedRepos, setConnectedRepos] = useState<ConnectedRepo[]>([])
-  const [isConnecting, setIsConnecting] = useState(false)
-  const [repoUrl, setRepoUrl] = useState('')
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [brand, setBrand] = useState<Brand | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // TODO: Fetch brand from database
-  const brand = {
-    id,
-    name: 'Sample Brand',
-    description: 'A sample brand for demonstration',
-    tagline: 'Innovation at your fingertips',
-    website_url: 'https://example.com',
-    primaryColor: '#ff8c00',
-    secondaryColor: '#1a1a1a',
-    accentColor: '#ffa500',
-    products: [],
-    content: [],
-  }
+  // Editing state
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState<Partial<Brand>>({})
 
-  const handleConnectRepo = async () => {
-    if (!repoUrl.trim()) return
-    setIsConnecting(true)
+  // GitHub state
+  const [githubActivity, setGithubActivity] = useState<GitHubActivity | null>(null)
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false)
+  const [repoDialogOpen, setRepoDialogOpen] = useState(false)
+  const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [isLoadingRepos, setIsLoadingRepos] = useState(false)
+  const [repoSearch, setRepoSearch] = useState('')
 
-    // Parse GitHub URL to get owner/repo
-    const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/)
-    if (!match) {
-      alert('Invalid GitHub URL')
-      setIsConnecting(false)
-      return
+  // Fetch brand data
+  useEffect(() => {
+    async function fetchBrand() {
+      try {
+        const response = await fetch(`/api/brands/${id}`)
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError('Brand not found')
+          } else {
+            throw new Error('Failed to fetch brand')
+          }
+          return
+        }
+        const data = await response.json()
+        setBrand(data)
+        setEditForm(data)
+      } catch (err) {
+        console.error('Error fetching brand:', err)
+        setError('Failed to load brand')
+      } finally {
+        setIsLoading(false)
+      }
     }
+    fetchBrand()
+  }, [id])
 
-    const [, owner, repo] = match
-    const fullName = `${owner}/${repo.replace('.git', '')}`
+  // Fetch GitHub activity when brand has a connected repo
+  useEffect(() => {
+    if (!brand?.github_repo) return
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    const newRepo: ConnectedRepo = {
-      id: Date.now().toString(),
-      name: repo.replace('.git', ''),
-      fullName,
-      url: `https://github.com/${fullName}`,
-      events: ['releases'],
-      autoGenerate: ['video', 'post'],
-      autoPublish: false,
+    async function fetchActivity() {
+      setIsLoadingActivity(true)
+      try {
+        const response = await fetch(`/api/github/activity?repo=${encodeURIComponent(brand!.github_repo!)}`)
+        if (response.ok) {
+          const data = await response.json()
+          setGithubActivity(data)
+        }
+      } catch (err) {
+        console.error('Error fetching GitHub activity:', err)
+      } finally {
+        setIsLoadingActivity(false)
+      }
     }
+    fetchActivity()
+  }, [brand?.github_repo])
 
-    setConnectedRepos(prev => [...prev, newRepo])
-    setRepoUrl('')
-    setDialogOpen(false)
-    setIsConnecting(false)
+  const fetchRepos = async () => {
+    setIsLoadingRepos(true)
+    try {
+      const response = await fetch('/api/github/repos')
+      if (response.ok) {
+        const data = await response.json()
+        setRepos(data)
+      }
+    } catch (err) {
+      console.error('Error fetching repos:', err)
+    } finally {
+      setIsLoadingRepos(false)
+    }
   }
 
-  const handleRemoveRepo = (repoId: string) => {
-    setConnectedRepos(prev => prev.filter(r => r.id !== repoId))
-  }
-
-  const toggleEvent = (repoId: string, event: string) => {
-    setConnectedRepos(prev =>
-      prev.map(r => {
-        if (r.id !== repoId) return r
-        const events = r.events.includes(event)
-          ? r.events.filter(e => e !== event)
-          : [...r.events, event]
-        return { ...r, events }
+  const handleConnectRepo = async (repo: GitHubRepo) => {
+    setRepoDialogOpen(false)
+    setIsSaving(true)
+    try {
+      const response = await fetch(`/api/brands/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_repo: repo.fullName }),
       })
+      if (response.ok) {
+        const updated = await response.json()
+        setBrand(updated)
+        setEditForm(updated)
+      }
+    } catch (err) {
+      console.error('Error connecting repo:', err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDisconnectRepo = async () => {
+    setIsSaving(true)
+    try {
+      const response = await fetch(`/api/brands/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ github_repo: null }),
+      })
+      if (response.ok) {
+        const updated = await response.json()
+        setBrand(updated)
+        setEditForm(updated)
+        setGithubActivity(null)
+      }
+    } catch (err) {
+      console.error('Error disconnecting repo:', err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      const response = await fetch(`/api/brands/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      })
+      if (response.ok) {
+        const updated = await response.json()
+        setBrand(updated)
+        setIsEditing(false)
+      }
+    } catch (err) {
+      console.error('Error saving brand:', err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this brand?')) return
+    try {
+      const response = await fetch(`/api/brands/${id}`, { method: 'DELETE' })
+      if (response.ok) {
+        router.push('/brands')
+      }
+    } catch (err) {
+      console.error('Error deleting brand:', err)
+    }
+  }
+
+  const filteredRepos = repos.filter(repo =>
+    repo.fullName.toLowerCase().includes(repoSearch.toLowerCase())
+  )
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  const formatTimeAgo = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    if (diffDays === 0) return 'today'
+    if (diffDays === 1) return 'yesterday'
+    if (diffDays < 7) return `${diffDays} days ago`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+    return formatDate(dateStr)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-8 flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     )
   }
 
-  const toggleAutoGenerate = (repoId: string, type: string) => {
-    setConnectedRepos(prev =>
-      prev.map(r => {
-        if (r.id !== repoId) return r
-        const autoGenerate = r.autoGenerate.includes(type)
-          ? r.autoGenerate.filter(t => t !== type)
-          : [...r.autoGenerate, type]
-        return { ...r, autoGenerate }
-      })
+  if (error || !brand) {
+    return (
+      <div className="p-8">
+        <Link
+          href="/brands"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Brands
+        </Link>
+        <Card className="terminal-border bg-card/50">
+          <CardContent className="py-16 text-center">
+            <p className="text-muted-foreground">{error || 'Brand not found'}</p>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -143,14 +310,22 @@ export default function BrandDetailPage({
 
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <div
-              className="w-16 h-16 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: brand.primaryColor }}
-            >
-              <span className="text-white font-bold text-2xl">
-                {brand.name[0].toUpperCase()}
-              </span>
-            </div>
+            {brand.logo_url ? (
+              <img
+                src={brand.logo_url}
+                alt={brand.name}
+                className="w-16 h-16 rounded-lg object-contain bg-muted"
+              />
+            ) : (
+              <div
+                className="w-16 h-16 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: brand.primary_color }}
+              >
+                <span className="text-white font-bold text-2xl">
+                  {brand.name[0].toUpperCase()}
+                </span>
+              </div>
+            )}
             <div>
               <h1 className="text-3xl font-bold">{brand.name}</h1>
               <p className="text-muted-foreground">{brand.tagline}</p>
@@ -206,7 +381,7 @@ export default function BrandDetailPage({
               <CardContent className="space-y-4">
                 <div>
                   <p className="text-xs text-muted-foreground font-mono">description</p>
-                  <p className="mt-1">{brand.description}</p>
+                  <p className="mt-1">{brand.description || 'No description'}</p>
                 </div>
                 {brand.website_url && (
                   <div>
@@ -222,23 +397,38 @@ export default function BrandDetailPage({
                     </a>
                   </div>
                 )}
+                {brand.github_repo && (
+                  <div>
+                    <p className="text-xs text-muted-foreground font-mono">github</p>
+                    <a
+                      href={`https://github.com/${brand.github_repo}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      <Github className="h-3 w-3" />
+                      {brand.github_repo}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-muted-foreground font-mono mb-2">colors</p>
                   <div className="flex items-center gap-2">
                     <div
                       className="w-8 h-8 rounded"
-                      style={{ backgroundColor: brand.primaryColor }}
-                      title={`Primary: ${brand.primaryColor}`}
+                      style={{ backgroundColor: brand.primary_color }}
+                      title={`Primary: ${brand.primary_color}`}
                     />
                     <div
                       className="w-8 h-8 rounded"
-                      style={{ backgroundColor: brand.secondaryColor }}
-                      title={`Secondary: ${brand.secondaryColor}`}
+                      style={{ backgroundColor: brand.secondary_color }}
+                      title={`Secondary: ${brand.secondary_color}`}
                     />
                     <div
                       className="w-8 h-8 rounded"
-                      style={{ backgroundColor: brand.accentColor }}
-                      title={`Accent: ${brand.accentColor}`}
+                      style={{ backgroundColor: brand.accent_color }}
+                      title={`Accent: ${brand.accent_color}`}
                     />
                   </div>
                 </div>
@@ -293,19 +483,13 @@ export default function BrandDetailPage({
               </Button>
             </CardHeader>
             <CardContent>
-              {brand.products.length === 0 ? (
-                <div className="py-12 text-center">
-                  <Package className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No products yet</p>
-                  <p className="text-sm text-muted-foreground/70">
-                    Add products to generate targeted content
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Product list would go here */}
-                </div>
-              )}
+              <div className="py-12 text-center">
+                <Package className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                <p className="text-muted-foreground">No products yet</p>
+                <p className="text-sm text-muted-foreground/70">
+                  Add products to generate targeted content
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -318,162 +502,177 @@ export default function BrandDetailPage({
                 <Github className="h-4 w-4 text-primary" />
                 github_integration
               </CardTitle>
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="terminal" size="sm">
-                    <Plus className="h-4 w-4" />
-                    Connect Repo
+              {brand.github_repo ? (
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://github.com/${brand.github_repo}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-mono text-primary hover:underline flex items-center gap-1"
+                  >
+                    {brand.github_repo}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDisconnectRepo}
+                    disabled={isSaving}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <X className="h-4 w-4" />
+                    Disconnect
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="terminal-border bg-card">
-                  <DialogHeader>
-                    <DialogTitle className="font-mono flex items-center gap-2">
-                      <Github className="h-5 w-5 text-primary" />
-                      Connect GitHub Repository
-                    </DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 pt-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-mono text-muted-foreground">
-                        repository_url
-                      </label>
-                      <Input
-                        value={repoUrl}
-                        onChange={(e) => setRepoUrl(e.target.value)}
-                        placeholder="https://github.com/owner/repo"
-                        className="font-mono"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Paste the GitHub repository URL
-                      </p>
-                    </div>
-                    <Button
-                      onClick={handleConnectRepo}
-                      variant="terminal"
-                      className="w-full"
-                      disabled={isConnecting || !repoUrl.trim()}
-                    >
-                      {isConnecting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        <>
-                          <Github className="h-4 w-4" />
-                          Connect Repository
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent>
-              {connectedRepos.length === 0 ? (
-                <div className="py-12 text-center">
-                  <Github className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No repositories connected</p>
-                  <p className="text-sm text-muted-foreground/70">
-                    Connect a GitHub repo to auto-generate content on releases
-                  </p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {connectedRepos.map((repo) => (
-                    <div
-                      key={repo.id}
-                      className="terminal-border rounded-lg p-4 bg-card/30"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <Github className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <a
-                              href={repo.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-semibold hover:text-primary flex items-center gap-1"
+                <Dialog open={repoDialogOpen} onOpenChange={(open) => {
+                  setRepoDialogOpen(open)
+                  if (open) fetchRepos()
+                }}>
+                  <DialogTrigger asChild>
+                    <Button variant="terminal" size="sm">
+                      <Plus className="h-4 w-4" />
+                      Connect Repo
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="terminal-border bg-card">
+                    <DialogHeader>
+                      <DialogTitle className="font-mono flex items-center gap-2">
+                        <Github className="h-5 w-5 text-primary" />
+                        Connect GitHub Repository
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <Input
+                        value={repoSearch}
+                        onChange={(e) => setRepoSearch(e.target.value)}
+                        placeholder="Search repositories..."
+                        className="font-mono"
+                      />
+                      <div className="max-h-[300px] overflow-y-auto space-y-2">
+                        {isLoadingRepos ? (
+                          <div className="py-8 text-center">
+                            <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                          </div>
+                        ) : filteredRepos.length === 0 ? (
+                          <p className="py-8 text-center text-muted-foreground text-sm">
+                            No repositories found
+                          </p>
+                        ) : (
+                          filteredRepos.map(repo => (
+                            <button
+                              key={repo.id}
+                              onClick={() => handleConnectRepo(repo)}
+                              className="w-full text-left p-3 rounded-md border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all"
                             >
-                              {repo.fullName}
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                            <p className="text-xs text-muted-foreground">
-                              Connected to {brand.name}
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleRemoveRepo(repo.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      {/* Events */}
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-xs text-muted-foreground font-mono mb-2">
-                            trigger_events
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {['releases', 'push', 'pull_request'].map((event) => (
-                              <button
-                                key={event}
-                                onClick={() => toggleEvent(repo.id, event)}
-                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs terminal-border transition-all ${
-                                  repo.events.includes(event)
-                                    ? 'bg-primary/20 border-primary text-primary'
-                                    : 'bg-card/30'
-                                }`}
-                              >
-                                {event === 'releases' && <Tag className="h-3 w-3" />}
-                                {event === 'push' && <GitBranch className="h-3 w-3" />}
-                                {event === 'pull_request' && <GitBranch className="h-3 w-3" />}
-                                {event}
-                                {repo.events.includes(event) && (
-                                  <Check className="h-3 w-3" />
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Auto-generate */}
-                        <div>
-                          <p className="text-xs text-muted-foreground font-mono mb-2">
-                            auto_generate
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {[
-                              { type: 'video', icon: Video, label: 'Video' },
-                              { type: 'image', icon: Image, label: 'Image' },
-                              { type: 'post', icon: MessageSquare, label: 'Post' },
-                            ].map(({ type, icon: Icon, label }) => (
-                              <button
-                                key={type}
-                                onClick={() => toggleAutoGenerate(repo.id, type)}
-                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs terminal-border transition-all ${
-                                  repo.autoGenerate.includes(type)
-                                    ? 'bg-primary/20 border-primary text-primary'
-                                    : 'bg-card/30'
-                                }`}
-                              >
-                                <Icon className="h-3 w-3" />
-                                {label}
-                                {repo.autoGenerate.includes(type) && (
-                                  <Check className="h-3 w-3" />
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                              <span className="font-mono text-sm font-medium">{repo.fullName}</span>
+                              {repo.description && (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                                  {repo.description}
+                                </p>
+                              )}
+                            </button>
+                          ))
+                        )}
                       </div>
                     </div>
-                  ))}
+                  </DialogContent>
+                </Dialog>
+              )}
+            </CardHeader>
+            <CardContent>
+              {brand.github_repo ? (
+                <div className="space-y-6">
+                  {isLoadingActivity ? (
+                    <div className="py-8 text-center">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+                      <p className="text-sm text-muted-foreground mt-2">Loading activity...</p>
+                    </div>
+                  ) : githubActivity ? (
+                    <>
+                      {/* Merged PRs */}
+                      <div>
+                        <h3 className="font-mono text-xs text-muted-foreground mb-3 flex items-center gap-2">
+                          <GitMerge className="h-4 w-4" />
+                          recent_merges ({githubActivity.mergedPRs.length})
+                        </h3>
+                        {githubActivity.mergedPRs.length > 0 ? (
+                          <div className="space-y-2">
+                            {githubActivity.mergedPRs.map(pr => (
+                              <a
+                                key={pr.id}
+                                href={pr.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block p-3 rounded-md border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">
+                                      {pr.title}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      <span className="text-green-500">#{pr.number}</span>
+                                      {' merged '}
+                                      {formatTimeAgo(pr.mergedAt)}
+                                      {' by '}
+                                      <span className="text-foreground">{pr.author}</span>
+                                    </p>
+                                  </div>
+                                  <Badge variant="outline" className="text-xs shrink-0">
+                                    {pr.sourceBranch} → {pr.targetBranch}
+                                  </Badge>
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No merged PRs found</p>
+                        )}
+                      </div>
+
+                      {/* Recent Commits */}
+                      <div>
+                        <h3 className="font-mono text-xs text-muted-foreground mb-3 flex items-center gap-2">
+                          <GitCommit className="h-4 w-4" />
+                          recent_commits ({githubActivity.recentCommits.length})
+                        </h3>
+                        {githubActivity.recentCommits.length > 0 ? (
+                          <div className="space-y-1">
+                            {githubActivity.recentCommits.slice(0, 10).map(commit => (
+                              <a
+                                key={commit.sha}
+                                href={commit.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 p-2 rounded hover:bg-muted/50 transition-colors text-sm"
+                              >
+                                <code className="text-xs text-primary font-mono">{commit.sha}</code>
+                                <span className="flex-1 truncate text-muted-foreground">
+                                  {commit.message}
+                                </span>
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {formatTimeAgo(commit.date)}
+                                </span>
+                              </a>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No commits found</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Could not load activity</p>
+                  )}
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <Github className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <p className="text-muted-foreground">No repository connected</p>
+                  <p className="text-sm text-muted-foreground/70">
+                    Connect a GitHub repo to see activity and auto-generate content
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -493,7 +692,7 @@ export default function BrandDetailPage({
                   <div>
                     <p className="font-semibold">Connect your repository</p>
                     <p className="text-muted-foreground text-xs">
-                      Paste your GitHub repo URL to link it with this brand
+                      Link your GitHub repo to this brand
                     </p>
                   </div>
                 </div>
@@ -502,9 +701,9 @@ export default function BrandDetailPage({
                     2
                   </div>
                   <div>
-                    <p className="font-semibold">Choose trigger events</p>
+                    <p className="font-semibold">Track activity</p>
                     <p className="text-muted-foreground text-xs">
-                      Select which GitHub events should trigger content generation
+                      See merged PRs and recent commits
                     </p>
                   </div>
                 </div>
@@ -513,9 +712,9 @@ export default function BrandDetailPage({
                     3
                   </div>
                   <div>
-                    <p className="font-semibold">Auto-generate content</p>
+                    <p className="font-semibold">Generate content</p>
                     <p className="text-muted-foreground text-xs">
-                      When events fire, AI creates videos, images, or posts automatically
+                      Create videos, posts, and images about your releases
                     </p>
                   </div>
                 </div>
@@ -536,35 +735,172 @@ export default function BrandDetailPage({
               </div>
             </CardHeader>
             <CardContent>
-              {brand.content.length === 0 ? (
-                <div className="py-12 text-center">
-                  <Video className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No content created yet</p>
-                  <p className="text-sm text-muted-foreground/70">
-                    Use AI to generate videos, images, and posts
-                  </p>
-                </div>
-              ) : (
-                <div className="grid md:grid-cols-3 gap-4">
-                  {/* Content grid would go here */}
-                </div>
-              )}
+              <div className="py-12 text-center">
+                <Video className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                <p className="text-muted-foreground">No content created yet</p>
+                <p className="text-sm text-muted-foreground/70">
+                  Use AI to generate videos, images, and posts
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="settings">
           <Card className="terminal-border bg-card/50">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-mono text-sm flex items-center gap-2">
                 <Settings className="h-4 w-4 text-primary" />
                 brand_settings
               </CardTitle>
+              {!isEditing ? (
+                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                  Edit
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsEditing(false)
+                      setEditForm(brand)
+                    }}
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button variant="terminal" size="sm" onClick={handleSave} disabled={isSaving}>
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save
+                  </Button>
+                </div>
+              )}
             </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                Brand settings coming soon...
-              </p>
+            <CardContent className="space-y-6">
+              {/* Basic Info */}
+              <div className="space-y-4">
+                <h3 className="font-mono text-xs text-muted-foreground">basic_info</h3>
+                <div className="grid gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Name</label>
+                    <Input
+                      value={editForm.name || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                      disabled={!isEditing}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Tagline</label>
+                    <Input
+                      value={editForm.tagline || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, tagline: e.target.value }))}
+                      disabled={!isEditing}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Description</label>
+                    <textarea
+                      value={editForm.description || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                      disabled={!isEditing}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+                      rows={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Website URL</label>
+                    <Input
+                      value={editForm.website_url || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, website_url: e.target.value }))}
+                      disabled={!isEditing}
+                      className="mt-1"
+                      type="url"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Logo URL</label>
+                    <Input
+                      value={editForm.logo_url || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, logo_url: e.target.value }))}
+                      disabled={!isEditing}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Colors */}
+              <div className="space-y-4">
+                <h3 className="font-mono text-xs text-muted-foreground">colors</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Primary</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="color"
+                        value={editForm.primary_color || '#ff8c00'}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, primary_color: e.target.value }))}
+                        disabled={!isEditing}
+                        className="w-10 h-10 rounded cursor-pointer disabled:opacity-50"
+                      />
+                      <Input
+                        value={editForm.primary_color || ''}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, primary_color: e.target.value }))}
+                        disabled={!isEditing}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Secondary</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="color"
+                        value={editForm.secondary_color || '#1a1a1a'}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, secondary_color: e.target.value }))}
+                        disabled={!isEditing}
+                        className="w-10 h-10 rounded cursor-pointer disabled:opacity-50"
+                      />
+                      <Input
+                        value={editForm.secondary_color || ''}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, secondary_color: e.target.value }))}
+                        disabled={!isEditing}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Accent</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="color"
+                        value={editForm.accent_color || '#ffa500'}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, accent_color: e.target.value }))}
+                        disabled={!isEditing}
+                        className="w-10 h-10 rounded cursor-pointer disabled:opacity-50"
+                      />
+                      <Input
+                        value={editForm.accent_color || ''}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, accent_color: e.target.value }))}
+                        disabled={!isEditing}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Danger Zone */}
+              <div className="space-y-4 pt-6 border-t border-border">
+                <h3 className="font-mono text-xs text-destructive">danger_zone</h3>
+                <Button variant="destructive" size="sm" onClick={handleDelete}>
+                  <Trash2 className="h-4 w-4" />
+                  Delete Brand
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
