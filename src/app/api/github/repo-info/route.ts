@@ -1,6 +1,20 @@
 import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 
+// Color context types for semantic mapping
+interface ColorWithContext {
+  color: string
+  context: string // e.g., 'primary', 'background', 'text', 'accent', 'border', 'link'
+  source: string // e.g., '--primary', 'bg-blue-500', '.btn-primary'
+}
+
+// Font context types for semantic mapping
+interface FontWithContext {
+  font: string
+  context: string // e.g., 'heading', 'body', 'code', 'display'
+  source: string // e.g., '--font-heading', 'h1', '.title'
+}
+
 // Extract hex colors from content
 function extractColors(content: string): string[] {
   const hexPattern = /#(?:[0-9a-fA-F]{3}){1,2}\b/g
@@ -12,6 +26,197 @@ function extractColors(content: string): string[] {
     return !['#fff', '#ffffff', '#000', '#000000', '#111', '#222', '#333', '#444', '#555', '#666', '#777', '#888', '#999', '#aaa', '#bbb', '#ccc', '#ddd', '#eee'].includes(lower)
   })
   return filtered.slice(0, 20) // Limit to 20 colors
+}
+
+// Extract colors with their semantic context
+function extractColorsWithContext(content: string): ColorWithContext[] {
+  const colors: ColorWithContext[] = []
+  const seen = new Set<string>()
+
+  // Helper to add color if not seen
+  const addColor = (color: string, context: string, source: string) => {
+    const key = `${color.toLowerCase()}-${context}`
+    if (!seen.has(key) && color.match(/^#[0-9a-fA-F]{3,6}$/i)) {
+      seen.add(key)
+      colors.push({ color: color.toLowerCase(), context, source })
+    }
+  }
+
+  // CSS variable patterns with semantic names
+  const cssVarPatterns = [
+    // Primary/brand colors
+    { pattern: /--(?:primary|brand)(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'primary' },
+    { pattern: /--(?:primary|brand)(?:-color)?[^:]*:\s*oklch\([^)]+\)/gi, context: 'primary', isOklch: true },
+    // Secondary colors
+    { pattern: /--secondary(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'secondary' },
+    // Accent colors
+    { pattern: /--accent(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'accent' },
+    // Background colors
+    { pattern: /--(?:background|bg)(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'background' },
+    { pattern: /--card(?:-background)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'cardBackground' },
+    // Text/foreground colors
+    { pattern: /--(?:foreground|text)(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'text' },
+    { pattern: /--muted(?:-foreground)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'mutedText' },
+    // Border colors
+    { pattern: /--border(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'border' },
+    // Link colors
+    { pattern: /--link(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'link' },
+    // Destructive/error colors
+    { pattern: /--(?:destructive|error|danger)(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'destructive' },
+    // Success colors
+    { pattern: /--(?:success|green)(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'success' },
+    // Warning colors
+    { pattern: /--(?:warning|yellow)(?:-color)?[^:]*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'warning' },
+  ]
+
+  for (const { pattern, context } of cssVarPatterns) {
+    let match
+    while ((match = pattern.exec(content)) !== null) {
+      if (match[1]) {
+        addColor(match[1], context, match[0].split(':')[0].trim())
+      }
+    }
+  }
+
+  // Tailwind config color patterns
+  const tailwindColorPatterns = [
+    { pattern: /primary\s*:\s*['"]?(#[0-9a-fA-F]{3,6})['"]?/gi, context: 'primary' },
+    { pattern: /secondary\s*:\s*['"]?(#[0-9a-fA-F]{3,6})['"]?/gi, context: 'secondary' },
+    { pattern: /accent\s*:\s*['"]?(#[0-9a-fA-F]{3,6})['"]?/gi, context: 'accent' },
+    { pattern: /background\s*:\s*['"]?(#[0-9a-fA-F]{3,6})['"]?/gi, context: 'background' },
+    { pattern: /foreground\s*:\s*['"]?(#[0-9a-fA-F]{3,6})['"]?/gi, context: 'text' },
+  ]
+
+  for (const { pattern, context } of tailwindColorPatterns) {
+    let match
+    while ((match = pattern.exec(content)) !== null) {
+      if (match[1]) {
+        addColor(match[1], context, `tailwind.${context}`)
+      }
+    }
+  }
+
+  // CSS class-based color detection
+  const classPatterns = [
+    // Button colors
+    { pattern: /\.btn-primary[^{]*\{[^}]*(?:background|background-color)\s*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'buttonPrimary' },
+    { pattern: /\.btn-secondary[^{]*\{[^}]*(?:background|background-color)\s*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'buttonSecondary' },
+    // Link colors
+    { pattern: /a\s*\{[^}]*color\s*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'link' },
+    { pattern: /a:hover[^{]*\{[^}]*color\s*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'linkHover' },
+    // Heading colors
+    { pattern: /h[1-6][^{]*\{[^}]*color\s*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'heading' },
+    // Body colors
+    { pattern: /body[^{]*\{[^}]*(?:background|background-color)\s*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'pageBackground' },
+    { pattern: /body[^{]*\{[^}]*color\s*:\s*(#[0-9a-fA-F]{3,6})/gi, context: 'bodyText' },
+  ]
+
+  for (const { pattern, context } of classPatterns) {
+    let match
+    while ((match = pattern.exec(content)) !== null) {
+      if (match[1]) {
+        addColor(match[1], context, `class.${context}`)
+      }
+    }
+  }
+
+  return colors
+}
+
+// Extract fonts with their semantic context
+function extractFontsWithContext(content: string): FontWithContext[] {
+  const fonts: FontWithContext[] = []
+  const seen = new Set<string>()
+
+  const genericFonts = ['inherit', 'initial', 'unset', 'sans-serif', 'serif', 'monospace', 'cursive', 'fantasy', 'system-ui', 'ui-sans-serif', 'ui-serif', 'ui-monospace']
+
+  // Helper to add font if not seen
+  const addFont = (font: string, context: string, source: string) => {
+    const cleanFont = font.trim().replace(/^["']|["']$/g, '').trim()
+    if (!cleanFont || genericFonts.includes(cleanFont.toLowerCase())) return
+    const key = `${cleanFont.toLowerCase()}-${context}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      fonts.push({ font: cleanFont, context, source })
+    }
+  }
+
+  // CSS variable font patterns
+  const fontVarPatterns = [
+    { pattern: /--font-(?:heading|display|title)[^:]*:\s*["']?([^;"'\n}]+)/gi, context: 'heading' },
+    { pattern: /--font-(?:body|text|sans)[^:]*:\s*["']?([^;"'\n}]+)/gi, context: 'body' },
+    { pattern: /--font-(?:mono|code)[^:]*:\s*["']?([^;"'\n}]+)/gi, context: 'code' },
+  ]
+
+  for (const { pattern, context } of fontVarPatterns) {
+    let match
+    while ((match = pattern.exec(content)) !== null) {
+      if (match[1] && !match[1].startsWith('var(')) {
+        const fontValue = match[1].split(',')[0] // Get first font in stack
+        addFont(fontValue, context, match[0].split(':')[0].trim())
+      }
+    }
+  }
+
+  // Tailwind fontFamily config patterns
+  const tailwindFontPatterns = [
+    { pattern: /(?:heading|display|title)\s*:\s*\[\s*["']([^"']+)["']/gi, context: 'heading' },
+    { pattern: /(?:sans|body|text)\s*:\s*\[\s*["']([^"']+)["']/gi, context: 'body' },
+    { pattern: /(?:mono|code)\s*:\s*\[\s*["']([^"']+)["']/gi, context: 'code' },
+  ]
+
+  for (const { pattern, context } of tailwindFontPatterns) {
+    let match
+    while ((match = pattern.exec(content)) !== null) {
+      if (match[1]) {
+        addFont(match[1], context, `tailwind.fontFamily.${context}`)
+      }
+    }
+  }
+
+  // CSS selector-based font detection
+  const selectorPatterns = [
+    // Headings
+    { pattern: /h[1-3][^{]*\{[^}]*font-family\s*:\s*([^;}\n]+)/gi, context: 'heading' },
+    { pattern: /\.(?:heading|title|display)[^{]*\{[^}]*font-family\s*:\s*([^;}\n]+)/gi, context: 'heading' },
+    // Body
+    { pattern: /body[^{]*\{[^}]*font-family\s*:\s*([^;}\n]+)/gi, context: 'body' },
+    { pattern: /p[^{]*\{[^}]*font-family\s*:\s*([^;}\n]+)/gi, context: 'body' },
+    { pattern: /\.(?:body|text|prose)[^{]*\{[^}]*font-family\s*:\s*([^;}\n]+)/gi, context: 'body' },
+    // Code
+    { pattern: /(?:code|pre|\.code)[^{]*\{[^}]*font-family\s*:\s*([^;}\n]+)/gi, context: 'code' },
+  ]
+
+  for (const { pattern, context } of selectorPatterns) {
+    let match
+    while ((match = pattern.exec(content)) !== null) {
+      if (match[1]) {
+        const fontValue = match[1].split(',')[0] // Get first font in stack
+        addFont(fontValue, context, `selector.${context}`)
+      }
+    }
+  }
+
+  // Next.js font imports with variable names
+  const nextFontVarPattern = /const\s+(\w+)\s*=\s*(\w+)\s*\(\s*\{[^}]*variable\s*:\s*["']([^"']+)["']/g
+  let match
+  while ((match = nextFontVarPattern.exec(content)) !== null) {
+    const varName = match[1]
+    const fontName = match[2].replace(/_/g, ' ')
+    const cssVar = match[3]
+
+    // Infer context from variable name or CSS variable
+    let context = 'body'
+    if (cssVar.includes('heading') || cssVar.includes('display') || varName.toLowerCase().includes('heading')) {
+      context = 'heading'
+    } else if (cssVar.includes('mono') || cssVar.includes('code') || varName.toLowerCase().includes('mono')) {
+      context = 'code'
+    }
+
+    addFont(fontName, context, cssVar)
+  }
+
+  return fonts
 }
 
 // Extract font names from content (CSS, Tailwind config, etc.)
@@ -242,6 +447,8 @@ export async function GET(request: Request) {
     // Extract colors and fonts from all style files
     const allColors: string[] = []
     const allFonts: string[] = []
+    const allColorsWithContext: ColorWithContext[] = []
+    const allFontsWithContext: FontWithContext[] = []
     const styleFilesFound: { path: string; colors: string[]; content?: string }[] = []
     let tailwindConfig: { path: string; content: string } | null = null
     const stylesheets: { path: string; content: string }[] = []
@@ -251,6 +458,8 @@ export async function GET(request: Request) {
       if (content) {
         const colors = extractColors(content)
         const fonts = extractFonts(content)
+        const colorsWithContext = extractColorsWithContext(content)
+        const fontsWithContext = extractFontsWithContext(content)
 
         // Store Tailwind config separately (full content)
         if (tailwindConfigFiles.includes(path)) {
@@ -270,6 +479,14 @@ export async function GET(request: Request) {
           allColors.push(...colors)
           allFonts.push(...fonts)
         }
+
+        // Add contextualized colors and fonts
+        colorsWithContext.forEach(c => {
+          allColorsWithContext.push({ ...c, source: `${path}:${c.source}` })
+        })
+        fontsWithContext.forEach(f => {
+          allFontsWithContext.push({ ...f, source: `${path}:${f.source}` })
+        })
 
         // Extract fonts from layout files too
         if (layoutFiles.includes(path)) {
@@ -291,6 +508,22 @@ export async function GET(request: Request) {
     const uniqueColors = [...new Set(allColors)]
     const uniqueFonts = [...new Set(allFonts)]
 
+    // Deduplicate contextualized colors by context (keep first of each context)
+    const seenColorContexts = new Set<string>()
+    const uniqueColorsWithContext = allColorsWithContext.filter(c => {
+      if (seenColorContexts.has(c.context)) return false
+      seenColorContexts.add(c.context)
+      return true
+    })
+
+    // Deduplicate contextualized fonts by context (keep first of each context)
+    const seenFontContexts = new Set<string>()
+    const uniqueFontsWithContext = allFontsWithContext.filter(f => {
+      if (seenFontContexts.has(f.context)) return false
+      seenFontContexts.add(f.context)
+      return true
+    })
+
     return NextResponse.json({
       name: repoData.name,
       fullName: repoData.full_name,
@@ -309,10 +542,12 @@ export async function GET(request: Request) {
       colors: {
         extracted: uniqueColors,
         sources: styleFilesFound,
+        withContext: uniqueColorsWithContext,
       },
       fonts: {
         extracted: uniqueFonts,
         sources: styleFilesFound.filter(s => extractFonts(s.content || '').length > 0).map(s => s.path),
+        withContext: uniqueFontsWithContext,
       },
       tailwindConfig: tailwindConfig,
       stylesheets: stylesheets,

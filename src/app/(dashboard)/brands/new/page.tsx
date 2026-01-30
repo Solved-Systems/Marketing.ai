@@ -37,6 +37,18 @@ interface GitHubRepo {
   private: boolean
 }
 
+interface ColorWithContext {
+  color: string
+  context: string
+  source: string
+}
+
+interface FontWithContext {
+  font: string
+  context: string
+  source: string
+}
+
 interface RepoInfo {
   name: string
   fullName: string
@@ -53,10 +65,12 @@ interface RepoInfo {
   colors: {
     extracted: string[]
     sources: { path: string; colors: string[] }[]
+    withContext: ColorWithContext[]
   } | null
   fonts: {
     extracted: string[]
     sources: string[]
+    withContext: FontWithContext[]
   } | null
   tailwindConfig: {
     path: string
@@ -69,6 +83,17 @@ interface RepoInfo {
   logos: { path: string; downloadUrl: string; size: number }[] | null
 }
 
+interface StyleContext {
+  // Color contexts
+  backgroundColor?: string
+  textColor?: string
+  mutedTextColor?: string
+  borderColor?: string
+  linkColor?: string
+  // Additional font contexts
+  codeFont?: string
+}
+
 interface BrandFormData {
   name: string
   description: string
@@ -79,6 +104,7 @@ interface BrandFormData {
   accentColor: string
   headingFont: string
   bodyFont: string
+  styleContext: StyleContext
   githubRepo: string | null
   logoUrl: string | null
 }
@@ -123,6 +149,7 @@ export default function NewBrandPage() {
     accentColor: '#ffa500',
     headingFont: '',
     bodyFont: '',
+    styleContext: {},
     githubRepo: null,
     logoUrl: null,
   })
@@ -278,14 +305,32 @@ ${s.content.substring(0, 2000)}
 `).join('\n')}
 ` : ''}
 
-${repoInfo.colors?.extracted?.length ? `
+${repoInfo.colors?.withContext?.length ? `
+COLORS WITH CONTEXT (how they're used in the codebase):
+${repoInfo.colors.withContext.map(c => `- ${c.context}: ${c.color} (from ${c.source})`).join('\n')}
+
+USE THESE EXACT COLORS for their corresponding purposes:
+- "primary" context → use for primaryColor
+- "secondary" context → use for secondaryColor
+- "accent" context → use for accentColor
+- "background" context → use for secondaryColor (dark backgrounds)
+- "text" context → provides text color reference
+` : repoInfo.colors?.extracted?.length ? `
 COLORS EXTRACTED FROM CODEBASE:
 ${repoInfo.colors.sources.map(s => `- ${s.path}: ${s.colors.join(', ')}`).join('\n')}
 
 IMPORTANT: Use these actual colors from the codebase! Pick the most prominent/brand-relevant ones for primary, secondary, and accent.
 ` : ''}
 
-${repoInfo.fonts?.extracted?.length ? `
+${repoInfo.fonts?.withContext?.length ? `
+FONTS WITH CONTEXT (how they're used in the codebase):
+${repoInfo.fonts.withContext.map(f => `- ${f.context}: "${f.font}" (from ${f.source})`).join('\n')}
+
+USE THESE EXACT FONTS for their corresponding purposes:
+- "heading" context → use for headingFont
+- "body" context → use for bodyFont
+- "code" context → monospace font for code blocks
+` : repoInfo.fonts?.extracted?.length ? `
 FONTS EXTRACTED FROM CODEBASE:
 ${repoInfo.fonts.extracted.join(', ')}
 Sources: ${repoInfo.fonts.sources.join(', ')}
@@ -304,35 +349,47 @@ Based on this, generate a brand profile. Respond with ONLY a JSON block:
     "description": "2-3 sentence description",
     "tagline": "A catchy tagline (5-10 words)",
     "website_url": "homepage URL or empty string",
-    "primaryColor": "#hexcode",
-    "secondaryColor": "#hexcode (dark)",
-    "accentColor": "#hexcode",
+    "primaryColor": "#hexcode (main brand color)",
+    "secondaryColor": "#hexcode (dark background color)",
+    "accentColor": "#hexcode (highlight/CTA color)",
     "headingFont": "Font name for headings (e.g., 'Inter', 'Roboto')",
-    "bodyFont": "Font name for body text (e.g., 'Inter', 'Open Sans')"
+    "bodyFont": "Font name for body text (e.g., 'Inter', 'Open Sans')",
+    "styleContext": {
+      "backgroundColor": "#hexcode (page background)",
+      "textColor": "#hexcode (main text color)",
+      "mutedTextColor": "#hexcode (secondary/muted text)",
+      "borderColor": "#hexcode (border color)",
+      "linkColor": "#hexcode (link color)",
+      "codeFont": "Font for code (e.g., 'JetBrains Mono')"
+    }
   },
   "sources": {
     "name": "source (e.g., 'repo name', 'package.json name field')",
     "description": "source (e.g., 'README.md intro', 'repo description')",
     "tagline": "source (e.g., 'derived from README tagline', 'created from topics')",
     "website_url": "source (e.g., 'repo homepage field', 'none')",
-    "colors": "source file and reasoning (e.g., 'primary #3B82F6 from tailwind.config.ts, accent #10B981 from globals.css')",
-    "fonts": "source file (e.g., 'Inter and Roboto from layout.tsx')"
+    "colors": "source file and context (e.g., 'primary #3B82F6 from --primary in globals.css')",
+    "fonts": "source file and context (e.g., 'heading: Inter from --font-heading, body: Roboto from body selector')"
   },
   "summary": "Brief explanation with specific references to where you found information"
 }
 \`\`\`
 
 IMPORTANT:
-1. If colors were extracted from the codebase, USE THOSE ACTUAL COLORS - don't make up new ones!
-2. If fonts were extracted from the codebase, USE THOSE ACTUAL FONTS - don't make up new ones!
-3. In the summary, cite specific sources like:
-   - "Name from repo name 'Vizual'"
-   - "Description derived from README.md first paragraph"
-   - "Primary color #ff8c00 from globals.css"
-   - "Accent color #3B82F6 from tailwind.config.ts"
-   - "Fonts Inter and Roboto from layout.tsx"
-
-Only suggest new colors/fonts if none were found in the codebase.`,
+1. If colors WITH CONTEXT were provided, map them directly:
+   - "primary" context → primaryColor
+   - "secondary"/"background" context → secondaryColor
+   - "accent" context → accentColor
+   - "text" context → styleContext.textColor
+   - "mutedText" context → styleContext.mutedTextColor
+   - "border" context → styleContext.borderColor
+   - "link" context → styleContext.linkColor
+2. If fonts WITH CONTEXT were provided, map them directly:
+   - "heading" context → headingFont
+   - "body" context → bodyFont
+   - "code" context → styleContext.codeFont
+3. Only make up values if no context was provided for that field
+4. In the summary, cite the specific source and context for each value`,
         }),
       })
 
@@ -471,6 +528,7 @@ If the brand looks complete and they seem satisfied, let them know they can save
           accent_color: formData.accentColor,
           heading_font: formData.headingFont,
           body_font: formData.bodyFont,
+          style_context: formData.styleContext,
           github_repo: formData.githubRepo,
         }),
       })

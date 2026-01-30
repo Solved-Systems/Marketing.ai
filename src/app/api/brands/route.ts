@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
       accent_color,
       heading_font,
       body_font,
+      style_context,
       github_repo,
     } = body
 
@@ -71,10 +72,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
-    // Build metadata object for fonts
+    // Build metadata object for fonts and style context
     const metadata: Record<string, unknown> = {}
     if (heading_font) metadata.headingFont = heading_font
     if (body_font) metadata.bodyFont = body_font
+    // Store style context for AI-generated content styling
+    if (style_context && typeof style_context === 'object') {
+      metadata.styleContext = style_context
+    }
 
     const supabase = createAdminClient()
 
