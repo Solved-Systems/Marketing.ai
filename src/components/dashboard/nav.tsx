@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useCredits } from '@/hooks/use-credits'
 import { useAdmin } from '@/hooks/use-admin'
+import { signOut } from 'next-auth/react'
 import {
   Terminal,
   LayoutDashboard,
@@ -17,6 +18,7 @@ import {
   CreditCard,
   Zap,
   Shield,
+  LogOut,
 } from 'lucide-react'
 
 const navItems = [
@@ -117,12 +119,19 @@ export function DashboardNav() {
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border/50">
+      <div className="p-4 border-t border-border/50 space-y-3">
         <div className="terminal-border rounded p-3 text-xs font-mono">
           <p className="text-muted-foreground">$ status</p>
           <p className="text-primary">system: online</p>
           <p className="text-green-500/70">ai: ready</p>
         </div>
+        <button
+          onClick={() => signOut({ callbackUrl: '/' })}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded text-sm font-mono text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>./logout</span>
+        </button>
       </div>
     </aside>
   )
