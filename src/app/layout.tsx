@@ -20,6 +20,10 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "MRKTCMD - Marketing Command Center",
   description: "AI-powered marketing content creation platform",
+  icons: {
+    icon: "/mrktcmd_favicon.png",
+    apple: "/mrktcmd_favicon.png",
+  },
 }
 
 export default function RootLayout({
