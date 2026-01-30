@@ -70,7 +70,10 @@ export function PricingCard({
 
         <Button
           variant={plan.popular ? 'terminal' : 'outline'}
-          className="w-full font-mono"
+          className={cn(
+            "w-full font-mono",
+            !plan.popular && "hover:text-primary hover:border-primary/50"
+          )}
           onClick={onSelect}
           disabled={isLoading || isCurrentPlan}
         >
