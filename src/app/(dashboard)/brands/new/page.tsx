@@ -394,12 +394,34 @@ If the brand looks complete and they seem satisfied, let them know they can save
   const handleSaveBrand = async () => {
     setIsSaving(true)
     try {
-      // TODO: Save to database
-      console.log('Creating brand:', formData)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await fetch('/api/brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          tagline: formData.tagline,
+          website_url: formData.website_url,
+          logo_url: formData.logoUrl,
+          primary_color: formData.primaryColor,
+          secondary_color: formData.secondaryColor,
+          accent_color: formData.accentColor,
+          github_repo: formData.githubRepo,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to save brand')
+      }
+
       router.push('/brands')
     } catch (error) {
-      console.error('Error:', error)
+      console.error('Error saving brand:', error)
+      addMessage({
+        role: 'assistant',
+        content: `Failed to save brand: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      })
     } finally {
       setIsSaving(false)
     }

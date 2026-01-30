@@ -1,14 +1,41 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Palette, Video, Image, MessageSquare, ArrowRight } from 'lucide-react'
+import { Plus, Palette, Video, Image, MessageSquare, ArrowRight, Loader2 } from 'lucide-react'
+
+interface Brand {
+  id: string
+  name: string
+  tagline: string | null
+  logo_url: string | null
+  primary_color: string
+  is_default?: boolean
+}
 
 export default function BrandsPage() {
-  // TODO: Fetch brands from API/database
-  const brands: any[] = []
+  const [brands, setBrands] = useState<Brand[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchBrands() {
+      try {
+        const response = await fetch('/api/brands')
+        if (response.ok) {
+          const data = await response.json()
+          setBrands(data)
+        }
+      } catch (error) {
+        console.error('Error fetching brands:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchBrands()
+  }, [])
 
   return (
     <div className="p-8">
@@ -32,7 +59,15 @@ export default function BrandsPage() {
         </Link>
       </div>
 
-      {brands.length === 0 ? (
+      {isLoading ? (
+        /* Loading State */
+        <Card className="terminal-border bg-card/50">
+          <CardContent className="py-16 text-center">
+            <Loader2 className="h-8 w-8 text-primary animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Loading brands...</p>
+          </CardContent>
+        </Card>
+      ) : brands.length === 0 ? (
         /* Empty State */
         <Card className="terminal-border bg-card/50">
           <CardContent className="py-16 text-center">
@@ -61,7 +96,7 @@ export default function BrandsPage() {
   )
 }
 
-function BrandCard({ brand }: { brand: any }) {
+function BrandCard({ brand }: { brand: Brand }) {
   return (
     <Link href={`/brands/${brand.id}`}>
       <Card className="terminal-border bg-card/50 hover:bg-card/70 transition-all cursor-pointer group h-full">
