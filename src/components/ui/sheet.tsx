@@ -6,8 +6,17 @@ import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+const SheetContext = React.createContext<{ onClose?: () => void }>({})
+
+function Sheet({
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Root>) {
+  return (
+    <SheetContext.Provider value={{ onClose: () => onOpenChange?.(false) }}>
+      <SheetPrimitive.Root data-slot="sheet" onOpenChange={onOpenChange} {...props} />
+    </SheetContext.Provider>
+  )
 }
 
 function SheetTrigger({
@@ -49,23 +58,26 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
-  onClose,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
-  onClose?: () => void
 }) {
+  const { onClose } = React.useContext(SheetContext)
+
   return (
     <SheetPortal>
-      {/* Clickable overlay that closes the sheet */}
-      <SheetPrimitive.Close asChild>
-        <div
-          data-slot="sheet-overlay"
-          className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50 cursor-pointer"
-          aria-label="Close menu"
-        />
-      </SheetPrimitive.Close>
+      {/* Clickable overlay - using onClick and onTouchEnd for mobile */}
+      <div
+        data-slot="sheet-overlay"
+        className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50"
+        onClick={onClose}
+        onTouchEnd={(e) => {
+          e.preventDefault()
+          onClose?.()
+        }}
+        aria-label="Close menu"
+      />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
