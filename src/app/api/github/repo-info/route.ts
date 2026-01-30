@@ -264,7 +264,7 @@ function extractFonts(content: string): string[] {
   }
 
   // Match Tailwind fontFamily config
-  const tailwindFontPattern = /fontFamily\s*:\s*\{([^}]+)\}/gs
+  const tailwindFontPattern = /fontFamily\s*:\s*\{([^}]+)\}/g
   while ((match = tailwindFontPattern.exec(content)) !== null) {
     const fontConfig = match[1]
     // Extract font names from arrays like: sans: ['Inter', 'system-ui']
