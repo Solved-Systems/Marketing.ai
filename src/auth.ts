@@ -67,13 +67,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             })
             .eq('id', existingUser.id)
         } else {
-          // Create new user
+          // Check for pending invitation
+          const now = new Date().toISOString()
+          const { data: invitation } = await supabase
+            .from('invitations')
+            .select('id, role')
+            .eq('email', user.email)
+            .is('accepted_at', null)
+            .gte('expires_at', now)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single()
+
+          // Determine role from invitation or default to 'user'
+          const role = invitation?.role || 'user'
+
+          // Create new user with role
           await supabase.from('users').insert({
             email: user.email,
             name: user.name,
             avatar_url: user.image,
             github_id: profile?.id?.toString() || account?.providerAccountId,
+            role,
           })
+
+          // Mark invitation as accepted if found
+          if (invitation) {
+            await supabase
+              .from('invitations')
+              .update({ accepted_at: now })
+              .eq('id', invitation.id)
+          }
         }
       } catch (error) {
         console.error('Error syncing user to Supabase:', error)

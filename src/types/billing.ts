@@ -19,6 +19,9 @@ export type BillingInterval = 'monthly' | 'yearly'
 
 export type PlanSlug = 'starter' | 'pro' | 'business'
 
+// User roles
+export type UserRole = 'user' | 'admin' | 'super_admin'
+
 // Database table types
 export interface User {
   id: string
@@ -27,6 +30,10 @@ export interface User {
   avatar_url: string | null
   github_id: string | null
   stripe_customer_id: string | null
+  role: UserRole
+  is_locked: boolean
+  locked_at: string | null
+  locked_by: string | null
   created_at: string
   updated_at: string
 }

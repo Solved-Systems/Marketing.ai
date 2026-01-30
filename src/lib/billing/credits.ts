@@ -1,6 +1,7 @@
 // Credit management utilities for MRKTCMD
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { isSuperAdmin } from '@/lib/admin/auth'
 import { CREDIT_COSTS } from './models'
 import type { GenerationType, CreditBalance, BillingState, SubscriptionWithPlan } from '@/types/billing'
 
@@ -31,6 +32,11 @@ export async function hasEnoughCredits(
   userId: string,
   generationType: GenerationType
 ): Promise<boolean> {
+  // Super admins have unlimited credits
+  if (await isSuperAdmin(userId)) {
+    return true
+  }
+
   const balance = await getCurrentCredits(userId)
   if (!balance) return false
 
@@ -47,6 +53,22 @@ export async function deductCredits(
   const supabase = createAdminClient()
   const cost = CREDIT_COSTS[generationType].credits
   const modelUsed = CREDIT_COSTS[generationType].model
+
+  // Super admins get unlimited credits - log usage but don't deduct
+  if (await isSuperAdmin(userId)) {
+    await supabase.from('credit_usage').insert({
+      user_id: userId,
+      credits_consumed: 0, // Log as 0 consumed for super_admin
+      action_type: generationType,
+      model_used: modelUsed,
+      metadata: { ...metadata, super_admin_bypass: true },
+    })
+
+    return {
+      success: true,
+      remaining: Infinity,
+    }
+  }
 
   // Get current balance
   const balance = await getCurrentCredits(userId)

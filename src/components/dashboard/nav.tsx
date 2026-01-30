@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useCredits } from '@/hooks/use-credits'
+import { useAdmin } from '@/hooks/use-admin'
 import {
   Terminal,
   LayoutDashboard,
@@ -15,6 +16,7 @@ import {
   ChevronRight,
   CreditCard,
   Zap,
+  Shield,
 } from 'lucide-react'
 
 const navItems = [
@@ -30,6 +32,7 @@ const navItems = [
 export function DashboardNav() {
   const pathname = usePathname()
   const { remaining, total, isLoading } = useCredits()
+  const { isAdmin } = useAdmin()
 
   return (
     <aside className="w-64 border-r border-border/50 bg-sidebar min-h-screen flex flex-col">
@@ -64,6 +67,24 @@ export function DashboardNav() {
               </li>
             )
           })}
+          {/* Admin Link */}
+          {isAdmin && (
+            <li className="mt-4 pt-4 border-t border-border/50">
+              <Link
+                href="/admin"
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded text-sm font-mono transition-all',
+                  pathname.startsWith('/admin')
+                    ? 'bg-red-500/20 text-red-500 border border-red-500/30'
+                    : 'text-red-500/70 hover:text-red-500 hover:bg-red-500/10'
+                )}
+              >
+                <Shield className="h-4 w-4" />
+                <span>./admin</span>
+                {pathname.startsWith('/admin') && <ChevronRight className="h-3 w-3 ml-auto" />}
+              </Link>
+            </li>
+          )}
         </ul>
       </nav>
 
