@@ -19,7 +19,12 @@ import {
   Zap,
   Shield,
   LogOut,
+  Menu,
+  X,
 } from 'lucide-react'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Button } from '@/components/ui/button'
+import { useState } from 'react'
 
 const navItems = [
   { title: './dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -31,23 +36,24 @@ const navItems = [
   { title: './billing', href: '/settings/billing', icon: CreditCard },
 ]
 
-export function DashboardNav() {
+// Shared navigation content for both desktop and mobile
+function NavContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const { remaining, total, isLoading } = useCredits()
   const { isAdmin } = useAdmin()
 
   return (
-    <aside className="w-64 border-r border-border/50 bg-sidebar min-h-screen flex flex-col">
+    <>
       {/* Logo */}
-      <div className="p-6 border-b border-border/50">
-        <Link href="/dashboard" className="flex items-center gap-2">
+      <div className="p-4 md:p-6 border-b border-border/50">
+        <Link href="/dashboard" className="flex items-center gap-2" onClick={onNavigate}>
           <Terminal className="h-5 w-5 text-primary" />
           <span className="font-mono text-primary crt-glow font-semibold">mrktcmd</span>
         </Link>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4">
+      <nav className="flex-1 p-3 md:p-4 overflow-y-auto">
         <ul className="space-y-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -55,11 +61,12 @@ export function DashboardNav() {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={onNavigate}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded text-sm font-mono transition-all',
+                    'flex items-center gap-3 px-3 py-2.5 md:py-2 rounded text-sm font-mono transition-all',
                     isActive
                       ? 'bg-primary/20 text-primary border border-primary/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted'
                   )}
                 >
                   <item.icon className="h-4 w-4" />
@@ -74,11 +81,12 @@ export function DashboardNav() {
             <li className="mt-4 pt-4 border-t border-border/50">
               <Link
                 href="/admin"
+                onClick={onNavigate}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded text-sm font-mono transition-all',
+                  'flex items-center gap-3 px-3 py-2.5 md:py-2 rounded text-sm font-mono transition-all',
                   pathname.startsWith('/admin')
                     ? 'bg-red-500/20 text-red-500 border border-red-500/30'
-                    : 'text-red-500/70 hover:text-red-500 hover:bg-red-500/10'
+                    : 'text-red-500/70 hover:text-red-500 hover:bg-red-500/10 active:bg-red-500/10'
                 )}
               >
                 <Shield className="h-4 w-4" />
@@ -91,9 +99,9 @@ export function DashboardNav() {
       </nav>
 
       {/* Credits Display */}
-      <div className="p-4 border-t border-border/50">
-        <Link href="/settings/billing" className="block">
-          <div className="terminal-border rounded p-3 text-xs font-mono hover:bg-muted/50 transition-colors">
+      <div className="p-3 md:p-4 border-t border-border/50">
+        <Link href="/settings/billing" className="block" onClick={onNavigate}>
+          <div className="terminal-border rounded p-3 text-xs font-mono hover:bg-muted/50 active:bg-muted/50 transition-colors">
             <div className="flex items-center justify-between mb-2">
               <span className="text-muted-foreground">credits</span>
               <Zap className="h-3 w-3 text-primary" />
@@ -119,7 +127,7 @@ export function DashboardNav() {
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border/50 space-y-3">
+      <div className="p-3 md:p-4 border-t border-border/50 space-y-3">
         <div className="terminal-border rounded p-3 text-xs font-mono">
           <p className="text-muted-foreground">$ status</p>
           <p className="text-primary">system: online</p>
@@ -127,12 +135,49 @@ export function DashboardNav() {
         </div>
         <button
           onClick={() => signOut({ callbackUrl: '/' })}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded text-sm font-mono text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+          className="w-full flex items-center gap-2 px-3 py-2.5 md:py-2 rounded text-sm font-mono text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted transition-all"
         >
           <LogOut className="h-4 w-4" />
           <span>./logout</span>
         </button>
       </div>
+    </>
+  )
+}
+
+// Mobile Header with hamburger menu
+export function MobileHeader() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <header className="md:hidden sticky top-0 z-50 flex items-center justify-between p-3 border-b border-border/50 bg-sidebar/95 backdrop-blur supports-[backdrop-filter]:bg-sidebar/80">
+      <Link href="/dashboard" className="flex items-center gap-2">
+        <Terminal className="h-5 w-5 text-primary" />
+        <span className="font-mono text-primary crt-glow font-semibold text-sm">mrktcmd</span>
+      </Link>
+
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-9 w-9">
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">Toggle menu</span>
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-72 p-0 bg-sidebar border-r border-border/50">
+          <div className="flex flex-col h-full">
+            <NavContent onNavigate={() => setOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </header>
+  )
+}
+
+// Desktop Sidebar
+export function DashboardNav() {
+  return (
+    <aside className="hidden md:flex w-64 border-r border-border/50 bg-sidebar min-h-screen flex-col">
+      <NavContent />
     </aside>
   )
 }
