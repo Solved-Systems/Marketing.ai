@@ -138,12 +138,28 @@ export async function GET(request: Request) {
       'app/globals.css',
       'styles/globals.css',
       'src/styles/globals.css',
+      'src/index.css',
+      // SCSS
+      'src/styles/variables.scss',
+      'src/styles/_variables.scss',
+      'styles/variables.scss',
       // Tailwind configs
       'tailwind.config.js',
       'tailwind.config.ts',
+      'tailwind.config.mjs',
+      // Theme files (styled-components, emotion, etc.)
+      'src/theme.ts',
+      'src/theme.js',
+      'src/styles/theme.ts',
+      'theme/index.ts',
+      'theme/index.js',
+      // shadcn/ui
+      'components.json',
       // Layout files (may have font imports)
       'src/app/layout.tsx',
+      'src/app/layout.js',
       'app/layout.tsx',
+      'app/layout.js',
     ]
 
     const styleContents = await Promise.all(
