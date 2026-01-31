@@ -37,6 +37,16 @@ interface GitHubRepo {
   private: boolean
 }
 
+interface ExtractedColor {
+  hex: string
+  name?: string // CSS variable name like "primary", "accent", etc.
+}
+
+interface ExtractedFont {
+  family: string
+  source?: string
+}
+
 interface RepoInfo {
   name: string
   fullName: string
@@ -51,8 +61,12 @@ interface RepoInfo {
     keywords: string[]
   } | null
   colors: {
-    extracted: string[]
-    sources: { path: string; colors: string[] }[]
+    extracted: ExtractedColor[]
+    sources: { path: string; colors: ExtractedColor[] }[]
+  } | null
+  fonts: {
+    extracted: ExtractedFont[]
+    sources: { path: string; fonts: ExtractedFont[] }[]
   } | null
   logos: { path: string; downloadUrl: string; size: number }[] | null
 }
@@ -194,6 +208,7 @@ export default function NewBrandPage() {
       // Show colors found
       const colorSources = repoInfo.colors?.sources?.map(s => s.path) || []
       const colorsFound = repoInfo.colors?.extracted?.length || 0
+      const fontsFound = repoInfo.fonts?.extracted?.length || 0
 
       // Show logos found
       const logosFound = repoInfo.logos || []
@@ -207,7 +222,17 @@ export default function NewBrandPage() {
         statusMsg += `\n\`found ${logosFound.length} logo(s): ${logosFound.map(l => l.path).join(', ')}\``
       }
       if (colorsFound > 0) {
-        statusMsg += `\n\`extracted ${colorsFound} colors from: ${colorSources.join(', ')}\``
+        // Show named colors prominently
+        const namedColors = repoInfo.colors?.extracted?.filter(c => c.name) || []
+        if (namedColors.length > 0) {
+          statusMsg += `\n\`extracted theme colors: ${namedColors.map(c => `${c.name}: ${c.hex}`).slice(0, 6).join(', ')}\``
+        } else {
+          statusMsg += `\n\`extracted ${colorsFound} colors from: ${colorSources.join(', ')}\``
+        }
+      }
+      if (fontsFound > 0) {
+        const fontNames = repoInfo.fonts?.extracted?.map(f => f.family).slice(0, 3).join(', ') || ''
+        statusMsg += `\n\`found fonts: ${fontNames}\``
       }
       statusMsg += `\n\`analyzing content with AI...\``
 
@@ -230,9 +255,29 @@ ${repoInfo.packageJson ? `Package name: ${repoInfo.packageJson.name}\nPackage de
 
 ${repoInfo.colors?.extracted?.length ? `
 COLORS EXTRACTED FROM CODEBASE:
-${repoInfo.colors.sources.map(s => `- ${s.path}: ${s.colors.join(', ')}`).join('\n')}
+${(() => {
+  const namedColors = repoInfo.colors!.extracted.filter(c => c.name)
+  const unnamedColors = repoInfo.colors!.extracted.filter(c => !c.name)
+  let colorInfo = ''
+  if (namedColors.length > 0) {
+    colorInfo += 'Theme Colors (from CSS variables):\n'
+    colorInfo += namedColors.map(c => `  --${c.name}: ${c.hex}`).join('\n')
+  }
+  if (unnamedColors.length > 0 && unnamedColors.length <= 10) {
+    colorInfo += '\nAdditional Colors:\n'
+    colorInfo += '  ' + unnamedColors.map(c => c.hex).join(', ')
+  }
+  return colorInfo
+})()}
 
-IMPORTANT: Use these actual colors from the codebase! Pick the most prominent/brand-relevant ones for primary, secondary, and accent.
+IMPORTANT:
+- Use these actual colors from the codebase! Look for CSS variable names like "primary", "accent", "terminal" to pick the right colors.
+- Named colors are MORE RELIABLE than unnamed ones - they represent the actual theme.
+- If you see "--primary" or "--terminal", that's the main brand color!
+` : ''}
+${repoInfo.fonts?.extracted?.length ? `
+FONTS EXTRACTED FROM CODEBASE:
+${repoInfo.fonts.extracted.map(f => `- ${f.family}${f.source ? ` (from ${f.source})` : ''}`).join('\n')}
 ` : ''}
 
 README (excerpt):
