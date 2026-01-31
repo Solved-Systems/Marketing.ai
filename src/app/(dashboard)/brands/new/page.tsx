@@ -37,14 +37,9 @@ interface GitHubRepo {
   private: boolean
 }
 
-interface ExtractedColor {
-  hex: string
-  name?: string // CSS variable name like "primary", "accent", etc.
-}
-
-interface ExtractedFont {
-  family: string
-  source?: string
+interface StyleFile {
+  path: string
+  content: string
 }
 
 interface RepoInfo {
@@ -60,14 +55,7 @@ interface RepoInfo {
     description: string
     keywords: string[]
   } | null
-  colors: {
-    extracted: ExtractedColor[]
-    sources: { path: string; colors: ExtractedColor[] }[]
-  } | null
-  fonts: {
-    extracted: ExtractedFont[]
-    sources: { path: string; fonts: ExtractedFont[] }[]
-  } | null
+  styleFiles: StyleFile[]
   logos: { path: string; downloadUrl: string; size: number }[] | null
 }
 
@@ -205,11 +193,6 @@ export default function NewBrandPage() {
       if (repoInfo.packageJson) foundItems.push('package.json')
       if (repoInfo.topics?.length) foundItems.push(`${repoInfo.topics.length} topics`)
 
-      // Show colors found
-      const colorSources = repoInfo.colors?.sources?.map(s => s.path) || []
-      const colorsFound = repoInfo.colors?.extracted?.length || 0
-      const fontsFound = repoInfo.fonts?.extracted?.length || 0
-
       // Show logos found
       const logosFound = repoInfo.logos || []
       if (logosFound.length > 0) {
@@ -217,22 +200,15 @@ export default function NewBrandPage() {
         setFormData(prev => ({ ...prev, logoUrl: logosFound[0].downloadUrl }))
       }
 
+      // Show style files found
+      const styleFilesFound = repoInfo.styleFiles?.map(s => s.path) || []
+
       let statusMsg = `Connecting to **${repo.fullName}**...\n\n\`found: ${foundItems.join(', ')}\``
       if (logosFound.length > 0) {
         statusMsg += `\n\`found ${logosFound.length} logo(s): ${logosFound.map(l => l.path).join(', ')}\``
       }
-      if (colorsFound > 0) {
-        // Show named colors prominently
-        const namedColors = repoInfo.colors?.extracted?.filter(c => c.name) || []
-        if (namedColors.length > 0) {
-          statusMsg += `\n\`extracted theme colors: ${namedColors.map(c => `${c.name}: ${c.hex}`).slice(0, 6).join(', ')}\``
-        } else {
-          statusMsg += `\n\`extracted ${colorsFound} colors from: ${colorSources.join(', ')}\``
-        }
-      }
-      if (fontsFound > 0) {
-        const fontNames = repoInfo.fonts?.extracted?.map(f => f.family).slice(0, 3).join(', ') || ''
-        statusMsg += `\n\`found fonts: ${fontNames}\``
+      if (styleFilesFound.length > 0) {
+        statusMsg += `\n\`found style files: ${styleFilesFound.join(', ')}\``
       }
       statusMsg += `\n\`analyzing content with AI...\``
 
@@ -253,31 +229,18 @@ Topics: ${repoInfo.topics.join(', ') || 'None'}
 Language: ${repoInfo.language || 'Unknown'}
 ${repoInfo.packageJson ? `Package name: ${repoInfo.packageJson.name}\nPackage description: ${repoInfo.packageJson.description}` : ''}
 
-${repoInfo.colors?.extracted?.length ? `
-COLORS EXTRACTED FROM CODEBASE:
-${(() => {
-  const namedColors = repoInfo.colors!.extracted.filter(c => c.name)
-  const unnamedColors = repoInfo.colors!.extracted.filter(c => !c.name)
-  let colorInfo = ''
-  if (namedColors.length > 0) {
-    colorInfo += 'Theme Colors (from CSS variables):\n'
-    colorInfo += namedColors.map(c => `  --${c.name}: ${c.hex}`).join('\n')
-  }
-  if (unnamedColors.length > 0 && unnamedColors.length <= 10) {
-    colorInfo += '\nAdditional Colors:\n'
-    colorInfo += '  ' + unnamedColors.map(c => c.hex).join(', ')
-  }
-  return colorInfo
-})()}
+${repoInfo.styleFiles?.length ? `
+STYLE FILES FROM CODEBASE (use these to extract the actual brand colors and fonts):
+${repoInfo.styleFiles.map(f => `
+=== ${f.path} ===
+${f.content}
+`).join('\n')}
 
 IMPORTANT:
-- Use these actual colors from the codebase! Look for CSS variable names like "primary", "accent", "terminal" to pick the right colors.
-- Named colors are MORE RELIABLE than unnamed ones - they represent the actual theme.
-- If you see "--primary" or "--terminal", that's the main brand color!
-` : ''}
-${repoInfo.fonts?.extracted?.length ? `
-FONTS EXTRACTED FROM CODEBASE:
-${repoInfo.fonts.extracted.map(f => `- ${f.family}${f.source ? ` (from ${f.source})` : ''}`).join('\n')}
+- Look for CSS variables like --primary, --accent, --terminal - these define the actual brand colors
+- Colors may be in oklch(), hsl(), rgb(), or hex format - convert them to hex for the response
+- Look for font-family declarations and next/font imports to find the brand fonts
+- The theme colors in :root or CSS variables are the TRUE brand colors - use them!
 ` : ''}
 
 README (excerpt):
