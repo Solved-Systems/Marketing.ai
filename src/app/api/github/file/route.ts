@@ -44,6 +44,7 @@ export async function GET(request: Request) {
     // Determine content type from file extension
     const ext = path.split('.').pop()?.toLowerCase()
     const contentTypes: Record<string, string> = {
+      // Images
       png: 'image/png',
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
@@ -51,6 +52,14 @@ export async function GET(request: Request) {
       svg: 'image/svg+xml',
       webp: 'image/webp',
       ico: 'image/x-icon',
+      // Fonts
+      woff: 'font/woff',
+      woff2: 'font/woff2',
+      ttf: 'font/ttf',
+      otf: 'font/otf',
+      eot: 'application/vnd.ms-fontobject',
+      // CSS
+      css: 'text/css',
     }
     const contentType = contentTypes[ext || ''] || 'application/octet-stream'
 

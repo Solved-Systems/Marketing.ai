@@ -415,36 +415,36 @@ export default function BrandDetailPage({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-muted-foreground font-mono">description</p>
-                  <p className="mt-1">{brand.description || 'No description'}</p>
+                  <p className="mt-1 break-words">{brand.description || 'No description'}</p>
                 </div>
                 {brand.website_url && (
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground font-mono">website</p>
                     <a
                       href={brand.website_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
+                      className="mt-1 text-primary hover:underline inline-flex items-center gap-1 break-all"
                     >
                       {brand.website_url}
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
                     </a>
                   </div>
                 )}
                 {brand.github_repo && (
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground font-mono">github</p>
                     <a
                       href={`https://github.com/${brand.github_repo}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
+                      className="mt-1 text-primary hover:underline inline-flex items-center gap-1 break-all"
                     >
-                      <Github className="h-3 w-3" />
+                      <Github className="h-3 w-3 flex-shrink-0" />
                       {brand.github_repo}
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
                     </a>
                   </div>
                 )}
@@ -508,12 +508,12 @@ export default function BrandDetailPage({
 
         <TabsContent value="products">
           <Card className="terminal-border bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="font-mono text-sm flex items-center gap-2">
                 <Package className="h-4 w-4 text-primary" />
                 products
               </CardTitle>
-              <Button variant="terminal" size="sm">
+              <Button variant="terminal" size="sm" className="w-fit">
                 <Plus className="h-4 w-4" />
                 Add Product
               </Button>
@@ -533,21 +533,21 @@ export default function BrandDetailPage({
         {/* GitHub Integration Tab */}
         <TabsContent value="github">
           <Card className="terminal-border bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="font-mono text-sm flex items-center gap-2">
                 <Github className="h-4 w-4 text-primary" />
                 github_integration
               </CardTitle>
               {brand.github_repo ? (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                   <a
                     href={`https://github.com/${brand.github_repo}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-mono text-primary hover:underline flex items-center gap-1"
+                    className="text-sm font-mono text-primary hover:underline flex items-center gap-1 truncate max-w-[200px] sm:max-w-none"
                   >
                     {brand.github_repo}
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
                   </a>
                   <Button
                     variant="ghost"
@@ -642,7 +642,7 @@ export default function BrandDetailPage({
                                 rel="noopener noreferrer"
                                 className="block p-3 rounded-md border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all"
                               >
-                                <div className="flex items-start justify-between gap-2">
+                                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate">
                                       {pr.title}
@@ -655,7 +655,7 @@ export default function BrandDetailPage({
                                       <span className="text-foreground">{pr.author}</span>
                                     </p>
                                   </div>
-                                  <Badge variant="outline" className="text-xs shrink-0">
+                                  <Badge variant="outline" className="text-xs shrink-0 truncate max-w-full sm:max-w-[200px]">
                                     {pr.sourceBranch} → {pr.targetBranch}
                                   </Badge>
                                 </div>
@@ -761,9 +761,9 @@ export default function BrandDetailPage({
 
         <TabsContent value="content">
           <Card className="terminal-border bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="font-mono text-sm">content_library</CardTitle>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
                 <Button variant="outline" size="sm">All</Button>
                 <Button variant="ghost" size="sm">Videos</Button>
                 <Button variant="ghost" size="sm">Images</Button>
@@ -784,13 +784,13 @@ export default function BrandDetailPage({
 
         <TabsContent value="settings">
           <Card className="terminal-border bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="font-mono text-sm flex items-center gap-2">
                 <Settings className="h-4 w-4 text-primary" />
                 brand_settings
               </CardTitle>
               {!isEditing ? (
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                <Button variant="outline" size="sm" className="w-fit" onClick={() => setIsEditing(true)}>
                   Edit
                 </Button>
               ) : (
