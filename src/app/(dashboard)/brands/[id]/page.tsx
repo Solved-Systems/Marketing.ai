@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -115,6 +117,11 @@ export default function BrandDetailPage({
   // Logo state
   const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
   const [isLoadingLogos, setIsLoadingLogos] = useState(false)
+
+  // Delete state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Fetch brand data
   useEffect(() => {
@@ -259,14 +266,21 @@ export default function BrandDetailPage({
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this brand?')) return
+    setIsDeleting(true)
+    setDeleteError(null)
     try {
       const response = await fetch(`/api/brands/${id}`, { method: 'DELETE' })
       if (response.ok) {
         router.push('/brands')
+      } else {
+        const data = await response.json()
+        setDeleteError(data.error || 'Failed to delete brand')
+        setIsDeleting(false)
       }
     } catch (err) {
       console.error('Error deleting brand:', err)
+      setDeleteError('Failed to delete brand. Please try again.')
+      setIsDeleting(false)
     }
   }
 
@@ -1009,10 +1023,69 @@ export default function BrandDetailPage({
               {/* Danger Zone */}
               <div className="space-y-4 pt-6 border-t border-border">
                 <h3 className="font-mono text-xs text-destructive">danger_zone</h3>
-                <Button variant="destructive" size="sm" onClick={handleDelete}>
-                  <Trash2 className="h-4 w-4" />
-                  Delete Brand
-                </Button>
+                <div className="p-4 rounded-lg border border-destructive/20 bg-destructive/5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium text-sm">Delete this brand</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Once deleted, all brand data will be permanently removed. This action cannot be undone.
+                      </p>
+                    </div>
+                    <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="destructive" size="sm" className="shrink-0">
+                          <Trash2 className="h-4 w-4" />
+                          Delete Brand
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="terminal-border bg-card">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2 text-destructive">
+                            <Trash2 className="h-5 w-5" />
+                            Delete Brand
+                          </DialogTitle>
+                          <DialogDescription>
+                            Are you sure you want to delete <span className="font-semibold text-foreground">{brand.name}</span>? This will permanently remove the brand and all associated content. This action cannot be undone.
+                          </DialogDescription>
+                        </DialogHeader>
+                        {deleteError && (
+                          <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                            {deleteError}
+                          </div>
+                        )}
+                        <DialogFooter className="gap-2 sm:gap-0">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setDeleteDialogOpen(false)
+                              setDeleteError(null)
+                            }}
+                            disabled={isDeleting}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                          >
+                            {isDeleting ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Deleting...
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="h-4 w-4" />
+                                Delete Brand
+                              </>
+                            )}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
