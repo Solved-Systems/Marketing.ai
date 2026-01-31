@@ -6,6 +6,13 @@ interface StyleFile {
   content: string
 }
 
+interface PublicAsset {
+  path: string
+  downloadUrl: string
+  size: number
+  type: 'image' | 'font' | 'other'
+}
+
 // Fetch file content from GitHub
 async function fetchFileContent(repo: string, path: string, headers: HeadersInit): Promise<string | null> {
   try {
@@ -19,6 +26,17 @@ async function fetchFileContent(repo: string, path: string, headers: HeadersInit
   } catch {
     return null
   }
+}
+
+// Determine asset type from file extension
+function getAssetType(filename: string): 'image' | 'font' | 'other' {
+  const lower = filename.toLowerCase()
+  const imageExtensions = ['.png', '.svg', '.jpg', '.jpeg', '.webp', '.gif', '.ico']
+  const fontExtensions = ['.woff', '.woff2', '.ttf', '.otf', '.eot']
+
+  if (imageExtensions.some(ext => lower.endsWith(ext))) return 'image'
+  if (fontExtensions.some(ext => lower.endsWith(ext))) return 'font'
+  return 'other'
 }
 
 export async function GET(request: Request) {
@@ -80,16 +98,9 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch ALL images from public folder and subdirectories
-    const imageExtensions = ['.png', '.svg', '.jpg', '.jpeg', '.webp', '.gif', '.ico']
-
-    interface ImageFile {
-      path: string
-      downloadUrl: string
-      size: number
-    }
-
-    async function findImagesInDirectory(dirPath: string): Promise<ImageFile[]> {
+    // Fetch ALL files from public folder and subdirectories
+    async function findAssetsInDirectory(dirPath: string, maxDepth: number = 5): Promise<PublicAsset[]> {
+      if (maxDepth <= 0) return []
       try {
         const url = `https://api.github.com/repos/${repo}/contents/${dirPath}`
         const response = await fetch(url, { headers })
@@ -97,84 +108,140 @@ export async function GET(request: Request) {
         const contents = await response.json()
         if (!Array.isArray(contents)) return []
 
-        const images: ImageFile[] = []
+        const assets: PublicAsset[] = []
         const subdirs: string[] = []
 
         for (const item of contents) {
           if (item.type === 'dir') {
             subdirs.push(item.path)
           } else if (item.type === 'file') {
-            const name = item.name.toLowerCase()
-            if (imageExtensions.some(ext => name.endsWith(ext))) {
-              const downloadUrl = item.download_url || `/api/github/file?repo=${encodeURIComponent(repo!)}&path=${encodeURIComponent(item.path)}`
-              images.push({
-                path: item.path,
-                downloadUrl,
-                size: item.size,
-              })
-            }
+            const downloadUrl = item.download_url || `/api/github/file?repo=${encodeURIComponent(repo!)}&path=${encodeURIComponent(item.path)}`
+            assets.push({
+              path: item.path,
+              downloadUrl,
+              size: item.size,
+              type: getAssetType(item.name),
+            })
           }
         }
 
-        // Recursively search subdirectories (limit depth)
+        // Recursively search subdirectories
         if (subdirs.length > 0) {
-          const subResults = await Promise.all(subdirs.map(dir => findImagesInDirectory(dir)))
-          images.push(...subResults.flat())
+          const subResults = await Promise.all(subdirs.map(dir => findAssetsInDirectory(dir, maxDepth - 1)))
+          assets.push(...subResults.flat())
         }
 
-        return images
+        return assets
       } catch {
         return []
       }
     }
 
-    // Fetch all images from public folder
-    const logosFound = await findImagesInDirectory('public')
+    // Recursively find all CSS/SCSS/style files in the repo
+    const styleExtensions = ['.css', '.scss', '.sass', '.less']
+    const styleFileNames = ['tailwind.config', 'theme', 'variables', 'globals', 'styles']
 
-    // Fetch styling files - pass raw content to AI for analysis
-    const styleFilePaths = [
-      // CSS files (most likely to have theme colors)
-      'src/app/globals.css',
-      'app/globals.css',
-      'styles/globals.css',
-      'src/styles/globals.css',
-      'src/index.css',
-      // SCSS
-      'src/styles/variables.scss',
-      'src/styles/_variables.scss',
-      'styles/variables.scss',
-      // Tailwind configs
+    async function findStyleFilesInDirectory(dirPath: string, maxDepth: number = 4): Promise<string[]> {
+      if (maxDepth <= 0) return []
+      try {
+        const url = `https://api.github.com/repos/${repo}/contents/${dirPath}`
+        const response = await fetch(url, { headers })
+        if (!response.ok) return []
+        const contents = await response.json()
+        if (!Array.isArray(contents)) return []
+
+        const stylePaths: string[] = []
+        const subdirs: string[] = []
+
+        for (const item of contents) {
+          if (item.type === 'dir') {
+            // Skip common non-style directories
+            const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '__tests__', 'test']
+            if (!skipDirs.includes(item.name)) {
+              subdirs.push(item.path)
+            }
+          } else if (item.type === 'file') {
+            const name = item.name.toLowerCase()
+            // Include all CSS/SCSS files
+            if (styleExtensions.some(ext => name.endsWith(ext))) {
+              stylePaths.push(item.path)
+            }
+            // Include config files that might have theme/style info
+            if (name.includes('tailwind') && (name.endsWith('.js') || name.endsWith('.ts') || name.endsWith('.mjs'))) {
+              stylePaths.push(item.path)
+            }
+            // Include layout files (may have font imports)
+            if (name === 'layout.tsx' || name === 'layout.js') {
+              stylePaths.push(item.path)
+            }
+            // Include theme files
+            if (name.startsWith('theme') && (name.endsWith('.ts') || name.endsWith('.js') || name.endsWith('.json'))) {
+              stylePaths.push(item.path)
+            }
+            // Include components.json (shadcn/ui)
+            if (name === 'components.json') {
+              stylePaths.push(item.path)
+            }
+          }
+        }
+
+        // Recursively search subdirectories (prioritize src, app, styles directories)
+        const priorityDirs = subdirs.filter(d => ['src', 'app', 'styles', 'theme', 'css'].some(p => d.includes(p)))
+        const otherDirs = subdirs.filter(d => !priorityDirs.includes(d))
+
+        // Search priority dirs first with higher depth
+        if (priorityDirs.length > 0) {
+          const priorityResults = await Promise.all(priorityDirs.map(dir => findStyleFilesInDirectory(dir, maxDepth)))
+          stylePaths.push(...priorityResults.flat())
+        }
+
+        // Search other dirs with lower depth
+        if (otherDirs.length > 0) {
+          const otherResults = await Promise.all(otherDirs.map(dir => findStyleFilesInDirectory(dir, maxDepth - 1)))
+          stylePaths.push(...otherResults.flat())
+        }
+
+        return stylePaths
+      } catch {
+        return []
+      }
+    }
+
+    // Fetch all assets from public folder
+    const publicAssets = await findAssetsInDirectory('public')
+    // Filter just images for logo selection (backwards compatible)
+    const logosFound = publicAssets.filter(a => a.type === 'image')
+
+    // Dynamically find all style files in the repo
+    const discoveredStylePaths = await findStyleFilesInDirectory('')
+
+    // Also check common root-level config files
+    const rootConfigPaths = [
       'tailwind.config.js',
       'tailwind.config.ts',
       'tailwind.config.mjs',
-      // Theme files (styled-components, emotion, etc.)
-      'src/theme.ts',
-      'src/theme.js',
-      'src/styles/theme.ts',
-      'theme/index.ts',
-      'theme/index.js',
-      // shadcn/ui
       'components.json',
-      // Layout files (may have font imports)
-      'src/app/layout.tsx',
-      'src/app/layout.js',
-      'app/layout.tsx',
-      'app/layout.js',
+      'theme.js',
+      'theme.ts',
     ]
 
+    // Combine discovered paths with root configs (deduplicate)
+    const allStylePaths = [...new Set([...discoveredStylePaths, ...rootConfigPaths])]
+
+    // Fetch all style file contents in parallel
     const styleContents = await Promise.all(
-      styleFilePaths.map(path => fetchFileContent(repo, path, headers))
+      allStylePaths.map(path => fetchFileContent(repo, path, headers))
     )
 
     // Collect found style files with their content
     const styleFiles: StyleFile[] = []
-    styleFilePaths.forEach((path, index) => {
+    allStylePaths.forEach((path, index) => {
       const content = styleContents[index]
       if (content) {
-        // Limit each file to 4000 chars to keep prompt reasonable
+        // Increase limit to 8000 chars per file for more complete CSS extraction
         styleFiles.push({
           path,
-          content: content.length > 4000 ? content.substring(0, 4000) + '\n/* ... truncated ... */' : content
+          content: content.length > 8000 ? content.substring(0, 8000) + '\n/* ... truncated ... */' : content
         })
       }
     })
@@ -196,6 +263,7 @@ export async function GET(request: Request) {
       } : null,
       styleFiles,
       logos: logosFound,
+      publicAssets, // All files from public folder
     })
   } catch (error) {
     console.error('Error fetching repo info:', error)

@@ -42,6 +42,13 @@ interface StyleFile {
   content: string
 }
 
+interface PublicAsset {
+  path: string
+  downloadUrl: string
+  size: number
+  type: 'image' | 'font' | 'other'
+}
+
 interface RepoInfo {
   name: string
   fullName: string
@@ -57,6 +64,7 @@ interface RepoInfo {
   } | null
   styleFiles: StyleFile[]
   logos: { path: string; downloadUrl: string; size: number }[] | null
+  publicAssets: PublicAsset[] | null
 }
 
 interface BrandFormData {
@@ -203,12 +211,23 @@ export default function NewBrandPage() {
       // Show style files found
       const styleFilesFound = repoInfo.styleFiles?.map(s => s.path) || []
 
+      // Show public assets found
+      const publicAssets = repoInfo.publicAssets || []
+      const fontAssets = publicAssets.filter(a => a.type === 'font')
+      const otherAssets = publicAssets.filter(a => a.type === 'other')
+
       let statusMsg = `Connecting to **${repo.fullName}**...\n\n\`found: ${foundItems.join(', ')}\``
       if (logosFound.length > 0) {
-        statusMsg += `\n\`found ${logosFound.length} logo(s): ${logosFound.map(l => l.path).join(', ')}\``
+        statusMsg += `\n\`found ${logosFound.length} image(s) in public/\``
+      }
+      if (fontAssets.length > 0) {
+        statusMsg += `\n\`found ${fontAssets.length} font file(s): ${fontAssets.map(f => f.path.split('/').pop()).join(', ')}\``
+      }
+      if (otherAssets.length > 0) {
+        statusMsg += `\n\`found ${otherAssets.length} other asset(s) in public/\``
       }
       if (styleFilesFound.length > 0) {
-        statusMsg += `\n\`found style files: ${styleFilesFound.join(', ')}\``
+        statusMsg += `\n\`found ${styleFilesFound.length} style file(s): ${styleFilesFound.slice(0, 5).join(', ')}${styleFilesFound.length > 5 ? ` +${styleFilesFound.length - 5} more` : ''}\``
       }
       statusMsg += `\n\`analyzing content with AI...\``
 
@@ -230,23 +249,51 @@ Language: ${repoInfo.language || 'Unknown'}
 ${repoInfo.packageJson ? `Package name: ${repoInfo.packageJson.name}\nPackage description: ${repoInfo.packageJson.description}` : ''}
 
 ${repoInfo.styleFiles?.length ? `
-STYLE FILES FROM CODEBASE (use these to extract the actual brand colors and fonts):
+=== ALL CSS/STYLE FILES FROM CODEBASE ===
+(Use these to extract brand colors, fonts, and design tokens)
+
 ${repoInfo.styleFiles.map(f => `
-=== ${f.path} ===
+--- ${f.path} ---
 ${f.content}
 `).join('\n')}
+` : ''}
 
-IMPORTANT:
-- Look for CSS variables like --primary, --accent, --terminal - these define the actual brand colors
-- Colors may be in oklch(), hsl(), rgb(), or hex format - convert them to hex for the response
-- Look for font-family declarations and next/font imports to find the brand fonts
-- The theme colors in :root or CSS variables are the TRUE brand colors - use them!
+${fontAssets.length > 0 ? `
+=== FONT FILES IN PUBLIC FOLDER ===
+${fontAssets.map(f => f.path).join('\n')}
+` : ''}
+
+${publicAssets.length > 0 ? `
+=== ALL PUBLIC FOLDER ASSETS ===
+${publicAssets.map(a => `${a.path} (${a.type})`).join('\n')}
 ` : ''}
 
 README (excerpt):
 ${repoInfo.readme || 'No README available'}
 
-Based on this, generate a brand profile. Respond with ONLY a JSON block:
+=== EXTRACTION INSTRUCTIONS ===
+
+**COLORS - Extract ALL of these:**
+1. CSS Variables: --primary, --secondary, --accent, --background, --foreground, --muted, --border, --terminal, etc.
+2. Tailwind theme colors in tailwind.config.js/ts
+3. Colors in ANY format: oklch(), hsl(), hsla(), rgb(), rgba(), hex (#fff, #ffffff)
+4. Look in :root, [data-theme], .dark, .light selectors
+5. shadcn/ui cssVariables in components.json
+
+**FONTS - Extract ALL of these:**
+1. CSS font-family declarations
+2. next/font imports (Inter, Geist, JetBrains_Mono, etc.)
+3. Google Fonts @import statements
+4. @font-face declarations
+5. Font files in public folder (woff, woff2, ttf, otf)
+6. Tailwind fontFamily configuration
+
+**COLOR CONVERSION:**
+- Convert oklch(0.7 0.15 150) to hex
+- Convert hsl(220 14% 10%) to hex
+- Convert rgb(255, 140, 0) to hex
+
+Respond with ONLY a JSON block:
 \`\`\`json
 {
   "fieldUpdates": {
@@ -255,29 +302,42 @@ Based on this, generate a brand profile. Respond with ONLY a JSON block:
     "tagline": "A catchy tagline (5-10 words)",
     "website_url": "homepage URL or empty string",
     "primaryColor": "#hexcode",
-    "secondaryColor": "#hexcode (dark)",
+    "secondaryColor": "#hexcode (dark/background)",
     "accentColor": "#hexcode"
+  },
+  "fonts": {
+    "primary": "Font name for headings (e.g., 'Inter', 'Geist')",
+    "secondary": "Font name for body text",
+    "mono": "Monospace font if found (e.g., 'JetBrains Mono', 'Geist Mono')",
+    "sources": ["layout.tsx next/font import", "globals.css font-family", "public/fonts/custom.woff2"]
+  },
+  "allColors": {
+    "primary": "#hex - CSS variable name or source",
+    "secondary": "#hex - CSS variable name or source",
+    "accent": "#hex - CSS variable name or source",
+    "background": "#hex - if found",
+    "foreground": "#hex - if found",
+    "muted": "#hex - if found",
+    "border": "#hex - if found"
   },
   "sources": {
     "name": "source (e.g., 'repo name', 'package.json name field')",
     "description": "source (e.g., 'README.md intro', 'repo description')",
     "tagline": "source (e.g., 'derived from README tagline', 'created from topics')",
     "website_url": "source (e.g., 'repo homepage field', 'none')",
-    "colors": "source file and reasoning (e.g., 'primary #3B82F6 from tailwind.config.ts, accent #10B981 from globals.css')"
+    "colors": "Detailed: 'primary #ff8c00 from --primary in globals.css, secondary #1a1a1a from --background in globals.css'",
+    "fonts": "Detailed: 'Inter from next/font in layout.tsx, JetBrains Mono from --font-mono in globals.css'"
   },
-  "summary": "Brief explanation with specific references to where you found information"
+  "summary": "Brief explanation with specific file:line references"
 }
 \`\`\`
 
-IMPORTANT:
-1. If colors were extracted from the codebase, USE THOSE ACTUAL COLORS - don't make up new ones!
-2. In the summary, cite specific sources like:
-   - "Name from repo name 'Vizual'"
-   - "Description derived from README.md first paragraph"
-   - "Primary color #ff8c00 from globals.css"
-   - "Accent color #3B82F6 from tailwind.config.ts"
-
-Only suggest new colors if none were found in the codebase.`,
+CRITICAL RULES:
+1. ALWAYS use actual colors from the codebase - NEVER invent colors if they exist in the files
+2. If you find oklch/hsl/rgb colors, CONVERT them to hex accurately
+3. List ALL fonts found, even if there are multiple
+4. The --primary, --terminal, --accent variables are the TRUE brand colors
+5. For dark themes, use the dark background as secondaryColor`,
         }),
       })
 
@@ -304,6 +364,27 @@ Only suggest new colors if none were found in the codebase.`,
           if (parsed.sources.description) sourcesText += `\n• Description: ${parsed.sources.description}`
           if (parsed.sources.tagline) sourcesText += `\n• Tagline: ${parsed.sources.tagline}`
           if (parsed.sources.colors) sourcesText += `\n• Colors: ${parsed.sources.colors}`
+          if (parsed.sources.fonts) sourcesText += `\n• Fonts: ${parsed.sources.fonts}`
+        }
+
+        // Add font info if available
+        if (parsed.fonts) {
+          sourcesText += '\n\n**Fonts detected:**'
+          if (parsed.fonts.primary) sourcesText += `\n• Primary: ${parsed.fonts.primary}`
+          if (parsed.fonts.secondary && parsed.fonts.secondary !== parsed.fonts.primary) {
+            sourcesText += `\n• Secondary: ${parsed.fonts.secondary}`
+          }
+          if (parsed.fonts.mono) sourcesText += `\n• Mono: ${parsed.fonts.mono}`
+        }
+
+        // Add all colors if available
+        if (parsed.allColors) {
+          sourcesText += '\n\n**All colors found:**'
+          Object.entries(parsed.allColors).forEach(([key, value]) => {
+            if (value && typeof value === 'string') {
+              sourcesText += `\n• ${key}: ${value}`
+            }
+          })
         }
 
         // Remove the "generating" message and add result
