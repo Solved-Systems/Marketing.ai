@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { DashboardNav } from '@/components/dashboard/nav'
+import { MobileNav } from '@/components/mobile-nav'
 
 export default async function DashboardLayout({
   children,
@@ -15,8 +16,16 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen">
-      <DashboardNav />
-      <main className="flex-1 overflow-auto">
+      {/* Mobile Navigation */}
+      <MobileNav variant="dashboard" />
+
+      {/* Desktop Sidebar - hidden on mobile */}
+      <div className="hidden lg:block">
+        <DashboardNav />
+      </div>
+
+      {/* Main Content - with top padding for mobile header */}
+      <main className="flex-1 overflow-auto pt-14 lg:pt-0">
         <div className="scanlines fixed inset-0 pointer-events-none" />
         {children}
       </main>

@@ -45,23 +45,23 @@ const integrations = [
 
 export default function IntegrationsPage() {
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-2">
           <span>$</span>
           <span className="text-primary">./integrations</span>
         </div>
-        <h1 className="text-3xl font-bold">Integrations</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-2xl md:text-3xl font-bold">Integrations</h1>
+        <p className="text-muted-foreground mt-2 text-sm md:text-base">
           Connect your accounts to automate content publishing
         </p>
       </div>
 
       {/* Source Integrations */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <h2 className="font-mono text-sm text-muted-foreground mb-4">source_integrations</h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {integrations
             .filter((i) => i.category === 'Source')
             .map((integration) => (
@@ -73,7 +73,7 @@ export default function IntegrationsPage() {
       {/* Publishing Integrations */}
       <div>
         <h2 className="font-mono text-sm text-muted-foreground mb-4">publishing_integrations</h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {integrations
             .filter((i) => i.category === 'Publishing')
             .map((integration) => (

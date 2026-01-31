@@ -8,15 +8,15 @@ import { Settings, User, Bell, Key, Palette } from 'lucide-react'
 
 export default function SettingsPage() {
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 md:p-8 max-w-4xl">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-2">
           <span>$</span>
           <span className="text-primary">./config</span>
         </div>
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
+        <p className="text-muted-foreground mt-2 text-sm md:text-base">
           Manage your account and application preferences
         </p>
       </div>

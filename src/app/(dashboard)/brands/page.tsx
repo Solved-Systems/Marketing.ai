@@ -38,21 +38,21 @@ export default function BrandsPage() {
   }, [])
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8">
         <div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-2">
             <span>$</span>
             <span className="text-primary">./brands</span>
           </div>
-          <h1 className="text-3xl font-bold">Brands</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl md:text-3xl font-bold">Brands</h1>
+          <p className="text-muted-foreground mt-2 text-sm md:text-base">
             Manage your brands and create content
           </p>
         </div>
-        <Link href="/brands/new">
-          <Button variant="terminal">
+        <Link href="/brands/new" className="self-start sm:self-auto">
+          <Button variant="terminal" className="w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             New Brand
           </Button>
@@ -86,7 +86,7 @@ export default function BrandsPage() {
         </Card>
       ) : (
         /* Brands Grid */
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {brands.map((brand) => (
             <BrandCard key={brand.id} brand={brand} />
           ))}

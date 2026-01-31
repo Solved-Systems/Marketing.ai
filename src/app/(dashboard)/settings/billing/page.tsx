@@ -217,9 +217,9 @@ function BillingContent() {
 
 export default function BillingSettingsPage() {
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 md:p-8 max-w-4xl">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <Link
           href="/settings"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -231,8 +231,8 @@ export default function BillingSettingsPage() {
           <span>$</span>
           <span className="text-primary">./settings/billing</span>
         </div>
-        <h1 className="text-3xl font-bold">Billing</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-2xl md:text-3xl font-bold">Billing</h1>
+        <p className="text-muted-foreground mt-2 text-sm md:text-base">
           Manage your subscription and credits
         </p>
       </div>

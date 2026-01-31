@@ -84,11 +84,11 @@ export default function AdminInvitesPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-8">
+      <div className="mb-6 md:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-mono font-bold text-red-500 flex items-center gap-2">
-            <Mail className="h-6 w-6" />
+          <h1 className="text-xl md:text-2xl font-mono font-bold text-red-500 flex items-center gap-2">
+            <Mail className="h-5 w-5 md:h-6 md:w-6" />
             Invitations
           </h1>
           <p className="text-muted-foreground font-mono text-sm mt-1">
@@ -97,7 +97,7 @@ export default function AdminInvitesPage() {
         </div>
         <Button
           onClick={() => setShowCreateForm(true)}
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-red-600 hover:bg-red-700 self-start sm:self-auto"
         >
           <Plus className="h-4 w-4 mr-2" />
           New Invitation
@@ -176,7 +176,7 @@ export default function AdminInvitesPage() {
       )}
 
       {/* Status Filter */}
-      <div className="mb-6 flex gap-2">
+      <div className="mb-4 md:mb-6 flex gap-2 flex-wrap">
         {(['pending', 'accepted', 'expired', 'all'] as const).map((s) => (
           <Button
             key={s}

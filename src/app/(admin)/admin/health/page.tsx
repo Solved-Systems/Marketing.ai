@@ -197,11 +197,11 @@ export default function AdminHealthPage() {
         : 'healthy'
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="p-4 md:p-8">
+      <div className="mb-6 md:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-mono font-bold text-red-500 flex items-center gap-2">
-            <Activity className="h-6 w-6" />
+          <h1 className="text-xl md:text-2xl font-mono font-bold text-red-500 flex items-center gap-2">
+            <Activity className="h-5 w-5 md:h-6 md:w-6" />
             System Health
           </h1>
           <p className="text-muted-foreground font-mono text-sm mt-1">
@@ -212,7 +212,7 @@ export default function AdminHealthPage() {
           onClick={runHealthChecks}
           disabled={isRefreshing}
           variant="outline"
-          className="border-red-900/50"
+          className="border-red-900/50 self-start sm:self-auto"
         >
           {isRefreshing ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -226,7 +226,7 @@ export default function AdminHealthPage() {
       {/* Overall Status */}
       <Card
         className={cn(
-          'mb-8',
+          'mb-6 md:mb-8',
           overallStatus === 'healthy'
             ? 'border-green-500/30'
             : overallStatus === 'degraded'
@@ -262,7 +262,7 @@ export default function AdminHealthPage() {
       </Card>
 
       {/* Service Checks */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
         {checks.map((check) => (
           <Card
             key={check.name}
@@ -316,7 +316,7 @@ export default function AdminHealthPage() {
       </div>
 
       {/* System Info */}
-      <Card className="mt-8 border-red-900/30">
+      <Card className="mt-6 md:mt-8 border-red-900/30">
         <CardHeader>
           <CardTitle className="font-mono text-sm text-muted-foreground">
             $ uname -a

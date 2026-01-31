@@ -23,7 +23,7 @@ export default function AdminStatsPage() {
 
   if (isLoading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[50vh]">
+      <div className="p-4 md:p-8 flex items-center justify-center min-h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-red-500" />
       </div>
     )
@@ -31,7 +31,7 @@ export default function AdminStatsPage() {
 
   if (error) {
     return (
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         <div className="p-4 bg-red-950/50 border border-red-500/50 rounded text-red-400 font-mono text-sm">
           {error}
         </div>
@@ -40,10 +40,10 @@ export default function AdminStatsPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-mono font-bold text-red-500 flex items-center gap-2">
-          <BarChart3 className="h-6 w-6" />
+    <div className="p-4 md:p-8">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-mono font-bold text-red-500 flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 md:h-6 md:w-6" />
           Statistics
         </h1>
         <p className="text-muted-foreground font-mono text-sm mt-1">
@@ -52,12 +52,12 @@ export default function AdminStatsPage() {
       </div>
 
       {/* User Stats */}
-      <div className="mb-8">
-        <h2 className="text-lg font-mono font-semibold mb-4 flex items-center gap-2">
-          <Users className="h-5 w-5 text-red-500" />
+      <div className="mb-6 md:mb-8">
+        <h2 className="text-base md:text-lg font-mono font-semibold mb-3 md:mb-4 flex items-center gap-2">
+          <Users className="h-4 w-4 md:h-5 md:w-5 text-red-500" />
           Users
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <Card className="border-red-900/30">
             <CardContent className="p-4">
               <p className="text-muted-foreground font-mono text-xs mb-1">Total Users</p>
@@ -94,12 +94,12 @@ export default function AdminStatsPage() {
       </div>
 
       {/* Subscription Stats */}
-      <div className="mb-8">
-        <h2 className="text-lg font-mono font-semibold mb-4 flex items-center gap-2">
-          <CreditCard className="h-5 w-5 text-red-500" />
+      <div className="mb-6 md:mb-8">
+        <h2 className="text-base md:text-lg font-mono font-semibold mb-3 md:mb-4 flex items-center gap-2">
+          <CreditCard className="h-4 w-4 md:h-5 md:w-5 text-red-500" />
           Subscriptions
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <Card className="border-red-900/30">
             <CardContent className="p-4">
               <p className="text-muted-foreground font-mono text-xs mb-1">Total</p>
@@ -141,12 +141,12 @@ export default function AdminStatsPage() {
       </div>
 
       {/* Credit Usage Stats */}
-      <div className="mb-8">
-        <h2 className="text-lg font-mono font-semibold mb-4 flex items-center gap-2">
-          <Zap className="h-5 w-5 text-red-500" />
+      <div className="mb-6 md:mb-8">
+        <h2 className="text-base md:text-lg font-mono font-semibold mb-3 md:mb-4 flex items-center gap-2">
+          <Zap className="h-4 w-4 md:h-5 md:w-5 text-red-500" />
           Credit Usage
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
           <Card className="border-red-900/30">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-4">
@@ -200,11 +200,11 @@ export default function AdminStatsPage() {
 
       {/* Invitation Stats */}
       <div>
-        <h2 className="text-lg font-mono font-semibold mb-4 flex items-center gap-2">
-          <Mail className="h-5 w-5 text-red-500" />
+        <h2 className="text-base md:text-lg font-mono font-semibold mb-3 md:mb-4 flex items-center gap-2">
+          <Mail className="h-4 w-4 md:h-5 md:w-5 text-red-500" />
           Invitations
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-3 md:gap-4">
           <Card className="border-red-900/30">
             <CardContent className="p-4">
               <p className="text-muted-foreground font-mono text-xs mb-1">Pending</p>

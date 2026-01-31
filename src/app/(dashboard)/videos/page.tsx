@@ -7,22 +7,22 @@ import { Button } from '@/components/ui/button'
 
 export default function VideosPage() {
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-2">
           <span>$</span>
           <span className="text-primary">./videos</span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Video Library</h1>
-            <p className="text-muted-foreground mt-2">
+            <h1 className="text-2xl md:text-3xl font-bold">Video Library</h1>
+            <p className="text-muted-foreground mt-2 text-sm md:text-base">
               All your AI-generated videos in one place
             </p>
           </div>
-          <Link href="/brands">
-            <Button variant="terminal">
+          <Link href="/brands" className="self-start sm:self-auto">
+            <Button variant="terminal" className="w-full sm:w-auto">
               <Plus className="h-4 w-4" />
               Create Video
             </Button>
