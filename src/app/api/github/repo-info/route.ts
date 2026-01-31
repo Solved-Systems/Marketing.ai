@@ -115,7 +115,8 @@ export async function GET(request: Request) {
           if (item.type === 'dir') {
             subdirs.push(item.path)
           } else if (item.type === 'file') {
-            const downloadUrl = item.download_url || `/api/github/file?repo=${encodeURIComponent(repo!)}&path=${encodeURIComponent(item.path)}`
+            // Always use our proxy endpoint for consistent auth handling (works for both public and private repos)
+            const downloadUrl = `/api/github/file?repo=${encodeURIComponent(repo!)}&path=${encodeURIComponent(item.path)}`
             assets.push({
               path: item.path,
               downloadUrl,
@@ -207,8 +208,51 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch all assets from public folder
-    const publicAssets = await findAssetsInDirectory('public')
+    // Fetch all assets from common asset directories (public, static, assets, images)
+    const assetDirectories = ['public', 'static', 'assets', 'images', 'img']
+    const allPublicAssets: PublicAsset[] = []
+
+    for (const dir of assetDirectories) {
+      const dirAssets = await findAssetsInDirectory(dir)
+      allPublicAssets.push(...dirAssets)
+    }
+
+    // Also check root level for common logo files
+    try {
+      const rootResponse = await fetch(`https://api.github.com/repos/${repo}/contents/`, { headers })
+      if (rootResponse.ok) {
+        const rootContents = await rootResponse.json()
+        if (Array.isArray(rootContents)) {
+          for (const item of rootContents) {
+            if (item.type === 'file') {
+              const name = item.name.toLowerCase()
+              // Look for common logo files at root
+              if (name.includes('logo') || name.includes('icon') || name.includes('favicon')) {
+                const assetType = getAssetType(item.name)
+                if (assetType === 'image') {
+                  // Always use our proxy endpoint for consistent auth handling
+                  const downloadUrl = `/api/github/file?repo=${encodeURIComponent(repo!)}&path=${encodeURIComponent(item.path)}`
+                  allPublicAssets.push({
+                    path: item.path,
+                    downloadUrl,
+                    size: item.size,
+                    type: assetType,
+                  })
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore root level errors
+    }
+
+    // Deduplicate by path
+    const publicAssets = allPublicAssets.filter((asset, index, self) =>
+      index === self.findIndex(a => a.path === asset.path)
+    )
+
     // Filter just images for logo selection (backwards compatible)
     const logosFound = publicAssets.filter(a => a.type === 'image')
 
