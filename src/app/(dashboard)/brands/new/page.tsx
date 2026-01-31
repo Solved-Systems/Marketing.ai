@@ -122,6 +122,8 @@ export default function NewBrandPage() {
   })
   const [showPreview, setShowPreview] = useState(false)
   const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
+  const [availableFonts, setAvailableFonts] = useState<PublicAsset[]>([])
+  const [detectedFonts, setDetectedFonts] = useState<{ primary?: string; secondary?: string; mono?: string; sources?: string[] } | null>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -206,6 +208,12 @@ export default function NewBrandPage() {
       if (logosFound.length > 0) {
         setAvailableLogos(logosFound)
         setFormData(prev => ({ ...prev, logoUrl: logosFound[0].downloadUrl }))
+      }
+
+      // Store font assets from public folder
+      const fontAssets = (repoInfo.publicAssets || []).filter(a => a.type === 'font')
+      if (fontAssets.length > 0) {
+        setAvailableFonts(fontAssets)
       }
 
       // Show style files found
@@ -354,6 +362,11 @@ CRITICAL RULES:
             ...parsed.fieldUpdates,
             githubRepo: repo.fullName,
           }))
+        }
+
+        // Store detected fonts from AI analysis
+        if (parsed.fonts) {
+          setDetectedFonts(parsed.fonts)
         }
 
         // Build sources annotation
@@ -688,7 +701,7 @@ If the brand looks complete and they seem satisfied, let them know they can save
 
                 {/* Brand Card Preview - Editable */}
                 <div
-                  className="p-4 md:p-6 rounded-lg border"
+                  className="p-4 md:p-6 rounded-lg border overflow-hidden"
                   style={{ backgroundColor: formData.secondaryColor, borderColor: formData.primaryColor + '30' }}
                 >
                   <div className="flex items-center gap-3 md:gap-4 mb-3 md:mb-4">
@@ -706,12 +719,12 @@ If the brand looks complete and they seem satisfied, let them know they can save
                         {formData.name[0]?.toUpperCase()}
                       </div>
                     )}
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 overflow-hidden">
                       <input
                         type="text"
                         value={formData.name}
                         onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                        className="text-lg md:text-xl font-bold bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1"
+                        className="text-lg md:text-xl font-bold bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1 truncate"
                         style={{ color: formData.primaryColor }}
                         placeholder="Brand Name"
                       />
@@ -719,7 +732,7 @@ If the brand looks complete and they seem satisfied, let them know they can save
                         type="text"
                         value={formData.tagline}
                         onChange={(e) => setFormData(prev => ({ ...prev, tagline: e.target.value }))}
-                        className="text-xs md:text-sm text-gray-400 bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1"
+                        className="text-xs md:text-sm text-gray-400 bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1 truncate"
                         placeholder="Tagline"
                       />
                     </div>
@@ -727,15 +740,16 @@ If the brand looks complete and they seem satisfied, let them know they can save
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    className="text-xs md:text-sm text-gray-300 bg-transparent border-none outline-none w-full resize-none focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1 mb-3 md:mb-4"
+                    className="text-xs md:text-sm text-gray-300 bg-transparent border-none outline-none w-full resize-none focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1 mb-3 md:mb-4 break-words"
                     placeholder="Brand description..."
                     rows={3}
+                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                   />
                   <input
                     type="url"
                     value={formData.website_url}
                     onChange={(e) => setFormData(prev => ({ ...prev, website_url: e.target.value }))}
-                    className="text-xs bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1"
+                    className="text-xs bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1 truncate"
                     style={{ color: formData.accentColor }}
                     placeholder="https://website.com"
                   />
@@ -833,6 +847,55 @@ If the brand looks complete and they seem satisfied, let them know they can save
                     </div>
                   </div>
                 </div>
+
+                {/* Fonts Section */}
+                {(detectedFonts || availableFonts.length > 0) && (
+                  <div>
+                    <p className="font-mono text-xs text-muted-foreground mb-2">fonts</p>
+                    <div className="space-y-2">
+                      {detectedFonts && (
+                        <div className="flex flex-wrap gap-2">
+                          {detectedFonts.primary && (
+                            <div className="px-3 py-1.5 rounded border border-border bg-muted/50">
+                              <span className="text-xs text-muted-foreground">Primary: </span>
+                              <span className="text-xs font-medium">{detectedFonts.primary}</span>
+                            </div>
+                          )}
+                          {detectedFonts.secondary && detectedFonts.secondary !== detectedFonts.primary && (
+                            <div className="px-3 py-1.5 rounded border border-border bg-muted/50">
+                              <span className="text-xs text-muted-foreground">Secondary: </span>
+                              <span className="text-xs font-medium">{detectedFonts.secondary}</span>
+                            </div>
+                          )}
+                          {detectedFonts.mono && (
+                            <div className="px-3 py-1.5 rounded border border-border bg-muted/50">
+                              <span className="text-xs text-muted-foreground">Mono: </span>
+                              <span className="text-xs font-mono font-medium">{detectedFonts.mono}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {availableFonts.length > 0 && (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Font files in public folder:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {availableFonts.map((font) => (
+                              <span
+                                key={font.path}
+                                className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-mono truncate max-w-[150px]"
+                                title={font.path}
+                              >
+                                {font.path.split('/').pop()}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Colors - Editable */}
                 <div>
