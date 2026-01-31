@@ -66,10 +66,10 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-mono font-bold text-red-500 flex items-center gap-2">
-          <Users className="h-6 w-6" />
+    <div className="p-4 md:p-8">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-mono font-bold text-red-500 flex items-center gap-2">
+          <Users className="h-5 w-5 md:h-6 md:w-6" />
           User Management
         </h1>
         <p className="text-muted-foreground font-mono text-sm mt-1">
@@ -78,18 +78,18 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Filters */}
-      <Card className="mb-6 border-red-900/30">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4 items-center">
-            <form onSubmit={handleSearch} className="flex gap-2">
-              <div className="relative">
+      <Card className="mb-4 md:mb-6 border-red-900/30">
+        <CardContent className="p-3 md:p-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3 md:gap-4 items-stretch sm:items-center">
+            <form onSubmit={handleSearch} className="flex gap-2 flex-1 sm:flex-initial">
+              <div className="relative flex-1 sm:flex-initial">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search users..."
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  className="pl-10 pr-4 py-2 bg-background border border-border rounded font-mono text-sm w-64"
+                  className="pl-10 pr-4 py-2 bg-background border border-border rounded font-mono text-sm w-full sm:w-64"
                 />
               </div>
               <Button type="submit" variant="outline" size="sm">
@@ -111,7 +111,7 @@ export default function AdminUsersPage() {
               <option value="super_admin">Super Admin</option>
             </select>
 
-            <span className="text-muted-foreground font-mono text-sm ml-auto">
+            <span className="text-muted-foreground font-mono text-sm sm:ml-auto text-center sm:text-left">
               {total} users total
             </span>
           </div>

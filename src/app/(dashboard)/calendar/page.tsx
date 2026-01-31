@@ -6,21 +6,21 @@ import { Button } from '@/components/ui/button'
 
 export default function CalendarPage() {
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-2">
           <span>$</span>
           <span className="text-primary">./calendar</span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Content Calendar</h1>
-            <p className="text-muted-foreground mt-2">
+            <h1 className="text-2xl md:text-3xl font-bold">Content Calendar</h1>
+            <p className="text-muted-foreground mt-2 text-sm md:text-base">
               Schedule and manage your content publishing
             </p>
           </div>
-          <Button variant="terminal">
+          <Button variant="terminal" className="self-start sm:self-auto w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             Schedule Content
           </Button>

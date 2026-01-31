@@ -293,7 +293,7 @@ export default function BrandDetailPage({
 
   if (isLoading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[60vh]">
+      <div className="p-4 md:p-8 flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
@@ -301,7 +301,7 @@ export default function BrandDetailPage({
 
   if (error || !brand) {
     return (
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         <Link
           href="/brands"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -319,9 +319,9 @@ export default function BrandDetailPage({
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 md:p-8">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <Link
           href="/brands"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -330,47 +330,47 @@ export default function BrandDetailPage({
           Back to Brands
         </Link>
 
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             {brand.logo_url ? (
               <img
                 src={brand.logo_url}
                 alt={brand.name}
-                className="w-16 h-16 rounded-lg object-contain bg-muted"
+                className="w-12 h-12 md:w-16 md:h-16 rounded-lg object-contain bg-muted flex-shrink-0"
               />
             ) : (
               <div
-                className="w-16 h-16 rounded-lg flex items-center justify-center"
+                className="w-12 h-12 md:w-16 md:h-16 rounded-lg flex items-center justify-center flex-shrink-0"
                 style={{ backgroundColor: brand.primary_color }}
               >
-                <span className="text-white font-bold text-2xl">
+                <span className="text-white font-bold text-xl md:text-2xl">
                   {brand.name[0].toUpperCase()}
                 </span>
               </div>
             )}
-            <div>
-              <h1 className="text-3xl font-bold">{brand.name}</h1>
-              <p className="text-muted-foreground">{brand.tagline}</p>
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-3xl font-bold truncate">{brand.name}</h1>
+              <p className="text-muted-foreground text-sm md:text-base truncate">{brand.tagline}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
             <Link href={`/brands/${id}/create/video`}>
               <Button variant="outline" size="sm">
                 <Video className="h-4 w-4" />
-                Video
+                <span className="hidden sm:inline">Video</span>
               </Button>
             </Link>
             <Link href={`/brands/${id}/create/image`}>
               <Button variant="outline" size="sm">
                 <Image className="h-4 w-4" />
-                Image
+                <span className="hidden sm:inline">Image</span>
               </Button>
             </Link>
             <Link href={`/brands/${id}/create/post`}>
               <Button variant="outline" size="sm">
                 <MessageSquare className="h-4 w-4" />
-                Post
+                <span className="hidden sm:inline">Post</span>
               </Button>
             </Link>
           </div>
@@ -378,20 +378,20 @@ export default function BrandDetailPage({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="products">Products</TabsTrigger>
-          <TabsTrigger value="github">
-            <Github className="h-4 w-4 mr-1" />
-            GitHub
+      <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
+        <TabsList className="bg-muted/50 w-full justify-start overflow-x-auto">
+          <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+          <TabsTrigger value="products" className="text-xs sm:text-sm">Products</TabsTrigger>
+          <TabsTrigger value="github" className="text-xs sm:text-sm">
+            <Github className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">GitHub</span>
           </TabsTrigger>
-          <TabsTrigger value="content">Content</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="content" className="text-xs sm:text-sm">Content</TabsTrigger>
+          <TabsTrigger value="settings" className="text-xs sm:text-sm">Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             {/* Brand Info */}
             <Card className="terminal-border bg-card/50">
               <CardHeader>
