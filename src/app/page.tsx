@@ -190,9 +190,10 @@ export default function Home() {
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-              <Link href="/docs">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                  Read the Docs
+              <Link href="/pricing">
+                <Button variant="outline" size="lg" className="w-full sm:w-auto border-primary/50 hover:border-primary hover:bg-primary/10">
+                  <Zap className="h-4 w-4 text-primary" />
+                  View Pricing
                 </Button>
               </Link>
             </div>
