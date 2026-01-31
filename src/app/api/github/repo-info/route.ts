@@ -207,8 +207,27 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch all assets from public folder
-    const publicAssets = await findAssetsInDirectory('public')
+    // Fetch all assets from public folder (check multiple common locations)
+    const publicFolderPaths = [
+      'public',
+      'client/public',
+      'frontend/public',
+      'app/public',
+      'web/public',
+      'src/public',
+      'static',
+      'assets',
+    ]
+
+    // Try each possible public folder location
+    let publicAssets: PublicAsset[] = []
+    for (const folderPath of publicFolderPaths) {
+      const assets = await findAssetsInDirectory(folderPath)
+      if (assets.length > 0) {
+        publicAssets = [...publicAssets, ...assets]
+      }
+    }
+
     // Filter just images for logo selection (backwards compatible)
     const logosFound = publicAssets.filter(a => a.type === 'image')
 
