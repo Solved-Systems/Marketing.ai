@@ -37,6 +37,11 @@ interface GitHubRepo {
   private: boolean
 }
 
+interface StyleFile {
+  path: string
+  content: string
+}
+
 interface RepoInfo {
   name: string
   fullName: string
@@ -50,10 +55,7 @@ interface RepoInfo {
     description: string
     keywords: string[]
   } | null
-  colors: {
-    extracted: string[]
-    sources: { path: string; colors: string[] }[]
-  } | null
+  styleFiles: StyleFile[]
   logos: { path: string; downloadUrl: string; size: number }[] | null
 }
 
@@ -191,10 +193,6 @@ export default function NewBrandPage() {
       if (repoInfo.packageJson) foundItems.push('package.json')
       if (repoInfo.topics?.length) foundItems.push(`${repoInfo.topics.length} topics`)
 
-      // Show colors found
-      const colorSources = repoInfo.colors?.sources?.map(s => s.path) || []
-      const colorsFound = repoInfo.colors?.extracted?.length || 0
-
       // Show logos found
       const logosFound = repoInfo.logos || []
       if (logosFound.length > 0) {
@@ -202,12 +200,15 @@ export default function NewBrandPage() {
         setFormData(prev => ({ ...prev, logoUrl: logosFound[0].downloadUrl }))
       }
 
+      // Show style files found
+      const styleFilesFound = repoInfo.styleFiles?.map(s => s.path) || []
+
       let statusMsg = `Connecting to **${repo.fullName}**...\n\n\`found: ${foundItems.join(', ')}\``
       if (logosFound.length > 0) {
         statusMsg += `\n\`found ${logosFound.length} logo(s): ${logosFound.map(l => l.path).join(', ')}\``
       }
-      if (colorsFound > 0) {
-        statusMsg += `\n\`extracted ${colorsFound} colors from: ${colorSources.join(', ')}\``
+      if (styleFilesFound.length > 0) {
+        statusMsg += `\n\`found style files: ${styleFilesFound.join(', ')}\``
       }
       statusMsg += `\n\`analyzing content with AI...\``
 
@@ -228,11 +229,18 @@ Topics: ${repoInfo.topics.join(', ') || 'None'}
 Language: ${repoInfo.language || 'Unknown'}
 ${repoInfo.packageJson ? `Package name: ${repoInfo.packageJson.name}\nPackage description: ${repoInfo.packageJson.description}` : ''}
 
-${repoInfo.colors?.extracted?.length ? `
-COLORS EXTRACTED FROM CODEBASE:
-${repoInfo.colors.sources.map(s => `- ${s.path}: ${s.colors.join(', ')}`).join('\n')}
+${repoInfo.styleFiles?.length ? `
+STYLE FILES FROM CODEBASE (use these to extract the actual brand colors and fonts):
+${repoInfo.styleFiles.map(f => `
+=== ${f.path} ===
+${f.content}
+`).join('\n')}
 
-IMPORTANT: Use these actual colors from the codebase! Pick the most prominent/brand-relevant ones for primary, secondary, and accent.
+IMPORTANT:
+- Look for CSS variables like --primary, --accent, --terminal - these define the actual brand colors
+- Colors may be in oklch(), hsl(), rgb(), or hex format - convert them to hex for the response
+- Look for font-family declarations and next/font imports to find the brand fonts
+- The theme colors in :root or CSS variables are the TRUE brand colors - use them!
 ` : ''}
 
 README (excerpt):

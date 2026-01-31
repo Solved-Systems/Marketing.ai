@@ -1,17 +1,9 @@
 import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 
-// Extract hex colors from content
-function extractColors(content: string): string[] {
-  const hexPattern = /#(?:[0-9a-fA-F]{3}){1,2}\b/g
-  const matches = content.match(hexPattern) || []
-  // Deduplicate and filter out common non-brand colors
-  const filtered = [...new Set(matches)].filter(c => {
-    const lower = c.toLowerCase()
-    // Filter out pure black/white/gray
-    return !['#fff', '#ffffff', '#000', '#000000', '#111', '#222', '#333', '#444', '#555', '#666', '#777', '#888', '#999', '#aaa', '#bbb', '#ccc', '#ddd', '#eee'].includes(lower)
-  })
-  return filtered.slice(0, 20) // Limit to 20 colors
+interface StyleFile {
+  path: string
+  content: string
 }
 
 // Fetch file content from GitHub
@@ -139,48 +131,53 @@ export async function GET(request: Request) {
     // Fetch all images from public folder
     const logosFound = await findImagesInDirectory('public')
 
-    // Fetch styling files to extract colors
-    const styleFiles = [
-      'tailwind.config.js',
-      'tailwind.config.ts',
+    // Fetch styling files - pass raw content to AI for analysis
+    const styleFilePaths = [
+      // CSS files (most likely to have theme colors)
       'src/app/globals.css',
       'app/globals.css',
       'styles/globals.css',
       'src/styles/globals.css',
       'src/index.css',
-      'src/App.css',
+      // SCSS
+      'src/styles/variables.scss',
+      'src/styles/_variables.scss',
+      'styles/variables.scss',
+      // Tailwind configs
+      'tailwind.config.js',
+      'tailwind.config.ts',
+      'tailwind.config.mjs',
+      // Theme files (styled-components, emotion, etc.)
+      'src/theme.ts',
+      'src/theme.js',
+      'src/styles/theme.ts',
+      'theme/index.ts',
+      'theme/index.js',
+      // shadcn/ui
+      'components.json',
+      // Layout files (may have font imports)
+      'src/app/layout.tsx',
+      'src/app/layout.js',
+      'app/layout.tsx',
+      'app/layout.js',
     ]
 
     const styleContents = await Promise.all(
-      styleFiles.map(path => fetchFileContent(repo, path, headers))
+      styleFilePaths.map(path => fetchFileContent(repo, path, headers))
     )
 
-    // Extract colors from all style files
-    const allColors: string[] = []
-    const styleFilesFound: { path: string; colors: string[] }[] = []
-
-    styleFiles.forEach((path, index) => {
+    // Collect found style files with their content
+    const styleFiles: StyleFile[] = []
+    styleFilePaths.forEach((path, index) => {
       const content = styleContents[index]
       if (content) {
-        const colors = extractColors(content)
-        if (colors.length > 0) {
-          styleFilesFound.push({ path, colors })
-          allColors.push(...colors)
-        }
+        // Limit each file to 4000 chars to keep prompt reasonable
+        styleFiles.push({
+          path,
+          content: content.length > 4000 ? content.substring(0, 4000) + '\n/* ... truncated ... */' : content
+        })
       }
     })
-
-    // Also extract colors from README if it has color codes
-    if (readmeContent) {
-      const readmeColors = extractColors(readmeContent)
-      if (readmeColors.length > 0) {
-        styleFilesFound.push({ path: 'README.md', colors: readmeColors })
-        allColors.push(...readmeColors)
-      }
-    }
-
-    // Deduplicate colors
-    const uniqueColors = [...new Set(allColors)]
 
     return NextResponse.json({
       name: repoData.name,
@@ -197,10 +194,7 @@ export async function GET(request: Request) {
         keywords: packageJson.keywords,
         author: packageJson.author,
       } : null,
-      colors: {
-        extracted: uniqueColors,
-        sources: styleFilesFound,
-      },
+      styleFiles,
       logos: logosFound,
     })
   } catch (error) {
