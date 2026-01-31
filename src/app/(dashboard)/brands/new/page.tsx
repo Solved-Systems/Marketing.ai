@@ -210,12 +210,6 @@ export default function NewBrandPage() {
         setFormData(prev => ({ ...prev, logoUrl: logosFound[0].downloadUrl }))
       }
 
-      // Store font assets from public folder
-      const fontAssets = (repoInfo.publicAssets || []).filter(a => a.type === 'font')
-      if (fontAssets.length > 0) {
-        setAvailableFonts(fontAssets)
-      }
-
       // Show style files found
       const styleFilesFound = repoInfo.styleFiles?.map(s => s.path) || []
 
@@ -223,6 +217,11 @@ export default function NewBrandPage() {
       const publicAssets = repoInfo.publicAssets || []
       const fontAssets = publicAssets.filter(a => a.type === 'font')
       const otherAssets = publicAssets.filter(a => a.type === 'other')
+
+      // Store font assets in state
+      if (fontAssets.length > 0) {
+        setAvailableFonts(fontAssets)
+      }
 
       let statusMsg = `Connecting to **${repo.fullName}**...\n\n\`found: ${foundItems.join(', ')}\``
       if (logosFound.length > 0) {
