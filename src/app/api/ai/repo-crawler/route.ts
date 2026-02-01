@@ -271,11 +271,23 @@ export async function POST(request: NextRequest) {
 
         let result
         try {
+          await sendEvent('status', { message: `Calling AI model...` })
           result = await generateText({
             model: gateway('anthropic/claude-sonnet-4-20250514'),
             system: systemPrompt,
             tools,
             messages,
+            maxOutputTokens: 4096,
+          })
+          // Log what we got back
+          console.log('AI result:', {
+            hasText: !!result.text,
+            textLength: result.text?.length,
+            toolCallsCount: result.toolCalls?.length || 0,
+            finishReason: result.finishReason,
+          })
+          await sendEvent('status', {
+            message: `AI responded: ${result.toolCalls?.length || 0} tool calls, finish: ${result.finishReason}`
           })
         } catch (aiError) {
           console.error('AI generation error:', aiError)
@@ -386,12 +398,17 @@ export async function POST(request: NextRequest) {
             content: toolResults,
           })
         } else {
-          // No tool calls, we're done
+          // No tool calls - model finished without using tools
+          console.log('No tool calls in iteration', i + 1, 'text:', result.text?.substring(0, 200))
+          await sendEvent('status', {
+            message: `Agent finished without tool calls. Iterations: ${i + 1}, Total tools used: ${toolCallCount}`
+          })
           break
         }
 
         // If we got brand data, we're done
         if (brandData) {
+          await sendEvent('status', { message: 'Brand data extracted successfully!' })
           break
         }
       }
@@ -403,9 +420,14 @@ export async function POST(request: NextRequest) {
           toolCalls: toolCallCount,
         })
       } else {
+        // Provide more context about why we failed
+        const failureReason = toolCallCount === 0
+          ? 'AI model did not use any tools - tool calling may not be supported by the gateway'
+          : `Explored repo with ${toolCallCount} tool calls but agent did not report brand data`
+        console.log('Crawler failed:', failureReason)
         await sendEvent('complete', {
           success: false,
-          error: 'Could not extract complete brand data',
+          error: failureReason,
           toolCalls: toolCallCount,
         })
       }
