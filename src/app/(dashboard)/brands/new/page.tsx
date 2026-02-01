@@ -23,9 +23,7 @@ import {
   Lock,
   Search,
   Save,
-  RefreshCw,
   Plus,
-  Upload,
 } from 'lucide-react'
 
 interface GitHubRepo {
@@ -35,36 +33,6 @@ interface GitHubRepo {
   url: string
   description: string | null
   private: boolean
-}
-
-interface StyleFile {
-  path: string
-  content: string
-}
-
-interface PublicAsset {
-  path: string
-  downloadUrl: string
-  size: number
-  type: 'image' | 'font' | 'other'
-}
-
-interface RepoInfo {
-  name: string
-  fullName: string
-  description: string | null
-  homepage: string | null
-  topics: string[]
-  language: string | null
-  readme: string | null
-  packageJson: {
-    name: string
-    description: string
-    keywords: string[]
-  } | null
-  styleFiles: StyleFile[]
-  logos: { path: string; downloadUrl: string; size: number }[] | null
-  publicAssets: PublicAsset[] | null
 }
 
 interface BrandFormData {
@@ -182,221 +150,98 @@ export default function NewBrandPage() {
     addMessage({ role: 'user', content: `Connect ${repo.fullName}` })
     addMessage({
       role: 'assistant',
-      content: `Connecting to **${repo.fullName}**...\n\n\`fetching repository metadata...\``,
+      content: `Connecting to **${repo.fullName}**...\n\n\`initializing AI agent...\``,
       action: 'generating',
     })
     setIsLoading(true)
 
     try {
-      // Fetch repo info
-      updateGeneratingMessage(`Connecting to **${repo.fullName}**...\n\n\`fetching README.md...\``)
-      const repoInfoResponse = await fetch(`/api/github/repo-info?repo=${encodeURIComponent(repo.fullName)}`)
-      if (!repoInfoResponse.ok) throw new Error('Failed to fetch repo info')
-      const repoInfo: RepoInfo = await repoInfoResponse.json()
+      // Use the agentic repo crawler
+      updateGeneratingMessage(`Connecting to **${repo.fullName}**...\n\n\`AI agent exploring repository structure...\``)
 
-      // Show what we found
-      const foundItems = []
-      if (repoInfo.readme) foundItems.push('README.md')
-      if (repoInfo.description) foundItems.push('description')
-      if (repoInfo.packageJson) foundItems.push('package.json')
-      if (repoInfo.topics?.length) foundItems.push(`${repoInfo.topics.length} topics`)
-
-      // Show logos found
-      const logosFound = repoInfo.logos || []
-      if (logosFound.length > 0) {
-        setAvailableLogos(logosFound)
-        setFormData(prev => ({ ...prev, logoUrl: logosFound[0].downloadUrl }))
-      }
-
-      // Show style files found
-      const styleFilesFound = repoInfo.styleFiles?.map(s => s.path) || []
-
-      // Show public assets found
-      const publicAssets = repoInfo.publicAssets || []
-      const fontAssets = publicAssets.filter(a => a.type === 'font')
-      const otherAssets = publicAssets.filter(a => a.type === 'other')
-
-      let statusMsg = `Connecting to **${repo.fullName}**...\n\n\`found: ${foundItems.join(', ')}\``
-      if (logosFound.length > 0) {
-        statusMsg += `\n\`found ${logosFound.length} image(s) in public/\``
-      }
-      if (fontAssets.length > 0) {
-        statusMsg += `\n\`found ${fontAssets.length} font file(s): ${fontAssets.map(f => f.path.split('/').pop()).join(', ')}\``
-      }
-      if (otherAssets.length > 0) {
-        statusMsg += `\n\`found ${otherAssets.length} other asset(s) in public/\``
-      }
-      if (styleFilesFound.length > 0) {
-        statusMsg += `\n\`found ${styleFilesFound.length} style file(s): ${styleFilesFound.slice(0, 5).join(', ')}${styleFilesFound.length > 5 ? ` +${styleFilesFound.length - 5} more` : ''}\``
-      }
-      statusMsg += `\n\`analyzing content with AI...\``
-
-      updateGeneratingMessage(statusMsg)
-
-      // Call AI to generate brand from repo info
-      const aiResponse = await fetch('/api/ai/chat', {
+      const crawlerResponse = await fetch('/api/ai/repo-crawler', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: 'Generate a brand profile from the repository information provided.' }],
-          system: `You are a brand strategist AI. Generate a brand profile from this GitHub repository information.
-
-Repository: ${repoInfo.fullName}
-Description: ${repoInfo.description || 'No description'}
-Homepage: ${repoInfo.homepage || 'None'}
-Topics: ${repoInfo.topics.join(', ') || 'None'}
-Language: ${repoInfo.language || 'Unknown'}
-${repoInfo.packageJson ? `Package name: ${repoInfo.packageJson.name}\nPackage description: ${repoInfo.packageJson.description}` : ''}
-
-${repoInfo.styleFiles?.length ? `
-=== ALL CSS/STYLE FILES FROM CODEBASE ===
-(Use these to extract brand colors, fonts, and design tokens)
-
-${repoInfo.styleFiles.map(f => `
---- ${f.path} ---
-${f.content}
-`).join('\n')}
-` : ''}
-
-${fontAssets.length > 0 ? `
-=== FONT FILES IN PUBLIC FOLDER ===
-${fontAssets.map(f => f.path).join('\n')}
-` : ''}
-
-${publicAssets.length > 0 ? `
-=== ALL PUBLIC FOLDER ASSETS ===
-${publicAssets.map(a => `${a.path} (${a.type})`).join('\n')}
-` : ''}
-
-README (excerpt):
-${repoInfo.readme || 'No README available'}
-
-=== EXTRACTION INSTRUCTIONS ===
-
-**COLORS - Extract ALL of these:**
-1. CSS Variables: --primary, --secondary, --accent, --background, --foreground, --muted, --border, --terminal, etc.
-2. Tailwind theme colors in tailwind.config.js/ts
-3. Colors in ANY format: oklch(), hsl(), hsla(), rgb(), rgba(), hex (#fff, #ffffff)
-4. Look in :root, [data-theme], .dark, .light selectors
-5. shadcn/ui cssVariables in components.json
-
-**FONTS - Extract ALL of these:**
-1. CSS font-family declarations
-2. next/font imports (Inter, Geist, JetBrains_Mono, etc.)
-3. Google Fonts @import statements
-4. @font-face declarations
-5. Font files in public folder (woff, woff2, ttf, otf)
-6. Tailwind fontFamily configuration
-
-**COLOR CONVERSION:**
-- Convert oklch(0.7 0.15 150) to hex
-- Convert hsl(220 14% 10%) to hex
-- Convert rgb(255, 140, 0) to hex
-
-Respond with ONLY a JSON block:
-\`\`\`json
-{
-  "fieldUpdates": {
-    "name": "Brand Name",
-    "description": "2-3 sentence description",
-    "tagline": "A catchy tagline (5-10 words)",
-    "website_url": "homepage URL or empty string",
-    "primaryColor": "#hexcode",
-    "secondaryColor": "#hexcode (dark/background)",
-    "accentColor": "#hexcode"
-  },
-  "fonts": {
-    "primary": "Font name for headings (e.g., 'Inter', 'Geist')",
-    "secondary": "Font name for body text",
-    "mono": "Monospace font if found (e.g., 'JetBrains Mono', 'Geist Mono')",
-    "sources": ["layout.tsx next/font import", "globals.css font-family", "public/fonts/custom.woff2"]
-  },
-  "allColors": {
-    "primary": "#hex - CSS variable name or source",
-    "secondary": "#hex - CSS variable name or source",
-    "accent": "#hex - CSS variable name or source",
-    "background": "#hex - if found",
-    "foreground": "#hex - if found",
-    "muted": "#hex - if found",
-    "border": "#hex - if found"
-  },
-  "sources": {
-    "name": "source (e.g., 'repo name', 'package.json name field')",
-    "description": "source (e.g., 'README.md intro', 'repo description')",
-    "tagline": "source (e.g., 'derived from README tagline', 'created from topics')",
-    "website_url": "source (e.g., 'repo homepage field', 'none')",
-    "colors": "Detailed: 'primary #ff8c00 from --primary in globals.css, secondary #1a1a1a from --background in globals.css'",
-    "fonts": "Detailed: 'Inter from next/font in layout.tsx, JetBrains Mono from --font-mono in globals.css'"
-  },
-  "summary": "Brief explanation with specific file:line references"
-}
-\`\`\`
-
-CRITICAL RULES:
-1. ALWAYS use actual colors from the codebase - NEVER invent colors if they exist in the files
-2. If you find oklch/hsl/rgb colors, CONVERT them to hex accurately
-3. List ALL fonts found, even if there are multiple
-4. The --primary, --terminal, --accent variables are the TRUE brand colors
-5. For dark themes, use the dark background as secondaryColor`,
-        }),
+        body: JSON.stringify({ repo: repo.fullName }),
       })
 
-      const aiData = await aiResponse.json()
-      const content = aiData.content || ''
+      if (!crawlerResponse.ok) {
+        throw new Error('Failed to analyze repository')
+      }
 
-      // Extract JSON
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/)
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[1])
-        if (parsed.fieldUpdates) {
-          setFormData(prev => ({
-            ...prev,
-            ...parsed.fieldUpdates,
-            githubRepo: repo.fullName,
-          }))
+      const crawlerData = await crawlerResponse.json()
+
+      if (crawlerData.success && crawlerData.brandData) {
+        const brandData = crawlerData.brandData
+
+        // Update form with extracted data
+        setFormData(prev => ({
+          ...prev,
+          name: brandData.name || prev.name,
+          description: brandData.description || prev.description,
+          tagline: brandData.tagline || prev.tagline,
+          website_url: brandData.website_url || prev.website_url,
+          primaryColor: brandData.primaryColor || prev.primaryColor,
+          secondaryColor: brandData.secondaryColor || prev.secondaryColor,
+          accentColor: brandData.accentColor || prev.accentColor,
+          logoUrl: brandData.logos?.[0]?.url || prev.logoUrl,
+          githubRepo: repo.fullName,
+        }))
+
+        // Set available logos
+        if (brandData.logos && brandData.logos.length > 0) {
+          setAvailableLogos(brandData.logos.map((logo: { path: string; url: string }) => ({
+            path: logo.path,
+            downloadUrl: logo.url,
+          })))
         }
 
         // Build sources annotation
         let sourcesText = ''
-        if (parsed.sources) {
+        if (brandData.sources) {
           sourcesText = '\n\n**Sources:**'
-          if (parsed.sources.name) sourcesText += `\n• Name: ${parsed.sources.name}`
-          if (parsed.sources.description) sourcesText += `\n• Description: ${parsed.sources.description}`
-          if (parsed.sources.tagline) sourcesText += `\n• Tagline: ${parsed.sources.tagline}`
-          if (parsed.sources.colors) sourcesText += `\n• Colors: ${parsed.sources.colors}`
-          if (parsed.sources.fonts) sourcesText += `\n• Fonts: ${parsed.sources.fonts}`
-        }
-
-        // Add font info if available
-        if (parsed.fonts) {
-          sourcesText += '\n\n**Fonts detected:**'
-          if (parsed.fonts.primary) sourcesText += `\n• Primary: ${parsed.fonts.primary}`
-          if (parsed.fonts.secondary && parsed.fonts.secondary !== parsed.fonts.primary) {
-            sourcesText += `\n• Secondary: ${parsed.fonts.secondary}`
-          }
-          if (parsed.fonts.mono) sourcesText += `\n• Mono: ${parsed.fonts.mono}`
-        }
-
-        // Add all colors if available
-        if (parsed.allColors) {
-          sourcesText += '\n\n**All colors found:**'
-          Object.entries(parsed.allColors).forEach(([key, value]) => {
+          Object.entries(brandData.sources).forEach(([key, value]) => {
             if (value && typeof value === 'string') {
               sourcesText += `\n• ${key}: ${value}`
             }
           })
         }
 
+        // Add font info if available
+        if (brandData.fonts) {
+          sourcesText += '\n\n**Fonts detected:**'
+          if (brandData.fonts.primary) sourcesText += `\n• Primary: ${brandData.fonts.primary}`
+          if (brandData.fonts.secondary && brandData.fonts.secondary !== brandData.fonts.primary) {
+            sourcesText += `\n• Secondary: ${brandData.fonts.secondary}`
+          }
+          if (brandData.fonts.mono) sourcesText += `\n• Mono: ${brandData.fonts.mono}`
+        }
+
+        // Add all colors if available
+        if (brandData.allColors) {
+          sourcesText += '\n\n**All colors found:**'
+          Object.entries(brandData.allColors).forEach(([key, value]) => {
+            if (value && typeof value === 'string') {
+              sourcesText += `\n• ${key}: ${value}`
+            }
+          })
+        }
+
+        // Add exploration stats
+        sourcesText += `\n\n\`AI agent made ${crawlerData.toolCalls} tool calls to explore the repo\``
+
         // Remove the "generating" message and add result
         setMessages(prev => prev.filter(m => m.action !== 'generating'))
         addMessage({
           role: 'assistant',
-          content: `I've analyzed **${repo.fullName}** and generated your brand profile:\n\n${parsed.summary || 'Brand details have been filled based on the repository.'}${sourcesText}\n\nYou can ask me to adjust anything - colors, tagline, description - just let me know!`,
+          content: `I've explored **${repo.fullName}** and extracted your brand profile.${sourcesText}\n\nYou can ask me to adjust anything - colors, tagline, description - just let me know!`,
           action: 'show_preview',
         })
         setShowPreview(true)
-        // Auto-switch to preview on mobile
         setMobileTab('preview')
+      } else {
+        // Fallback if crawler didn't find complete data
+        throw new Error(crawlerData.error || 'Could not extract brand data')
       }
     } catch (error) {
       console.error('Error:', error)
