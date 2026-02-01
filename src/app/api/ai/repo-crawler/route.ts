@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateText, createGateway } from 'ai'
+import { generateText, createGateway, tool, type ModelMessage } from 'ai'
 import { auth } from '@/auth'
 import { z } from 'zod'
 
@@ -136,7 +136,7 @@ WHEN TO REPORT:
 - Include sources for each piece of data so the user knows where it came from`
 
 // Execute a tool call
-async function executeTool(
+async function executeToolFn(
   toolName: string,
   args: Record<string, unknown>,
   repo: string,
@@ -185,28 +185,44 @@ export async function POST(request: NextRequest) {
     let brandData: Record<string, unknown> | null = null
     let toolCallCount = 0
 
-    // Define tools WITHOUT execute function
+    // Define tools using the tool() helper with inputSchema
     const tools = {
-      list_directory: {
+      list_directory: tool({
         description: 'List files and folders in a directory of the GitHub repository. Use empty string "" for root directory.',
-        parameters: listDirectorySchema,
-      },
-      read_file: {
+        inputSchema: listDirectorySchema,
+      }),
+      read_file: tool({
         description: 'Read the contents of a file from the GitHub repository. Use this for text files like CSS, JS, JSON, MD, etc.',
-        parameters: readFileSchema,
-      },
-      get_asset_url: {
+        inputSchema: readFileSchema,
+      }),
+      get_asset_url: tool({
         description: 'Get a URL for an image or binary asset from the repository. Use this for logos, images, fonts, etc.',
-        parameters: getAssetUrlSchema,
-      },
-      report_brand_data: {
+        inputSchema: getAssetUrlSchema,
+      }),
+      report_brand_data: tool({
         description: 'Report the final extracted brand data when you have gathered enough information.',
-        parameters: reportBrandDataSchema,
-      },
+        inputSchema: reportBrandDataSchema,
+      }),
     }
 
-    // Build messages array for the conversation
-    type Message = { role: 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }
+    // Build messages array for the conversation using SDK types
+    type ToolResultPart = {
+      type: 'tool-result'
+      toolCallId: string
+      toolName: string
+      output: { type: 'text'; value: string }
+    }
+    type ToolCallPart = {
+      type: 'tool-call'
+      toolCallId: string
+      toolName: string
+      args: Record<string, unknown>
+    }
+    type Message =
+      | { role: 'user'; content: string }
+      | { role: 'assistant'; content: string | Array<{ type: 'text'; text: string } | ToolCallPart> }
+      | { role: 'tool'; content: ToolResultPart[] }
+
     const messages: Message[] = [
       {
         role: 'user',
@@ -221,24 +237,37 @@ export async function POST(request: NextRequest) {
         model: gateway('anthropic/claude-sonnet-4-20250514'),
         system: systemPrompt,
         tools,
-        messages,
+        messages: messages as ModelMessage[],
       })
 
       // Check if there are tool calls
       if (result.toolCalls && result.toolCalls.length > 0) {
-        // Add assistant message with tool calls
+        // Build assistant message content with tool calls
+        const assistantContent: Array<{ type: 'text'; text: string } | ToolCallPart> = []
+        if (result.text) {
+          assistantContent.push({ type: 'text', text: result.text })
+        }
+        for (const tc of result.toolCalls) {
+          assistantContent.push({
+            type: 'tool-call',
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName,
+            args: tc.input as Record<string, unknown>,
+          })
+        }
         messages.push({
           role: 'assistant',
-          content: result.text || '',
+          content: assistantContent,
         })
 
-        // Process each tool call
+        // Process each tool call and collect results
+        const toolResults: ToolResultPart[] = []
         for (const toolCall of result.toolCalls) {
           toolCallCount++
 
-          const toolResult = await executeTool(
+          const toolResult = await executeToolFn(
             toolCall.toolName,
-            toolCall.args as Record<string, unknown>,
+            toolCall.input as Record<string, unknown>,
             repo,
             accessToken
           )
@@ -248,13 +277,20 @@ export async function POST(request: NextRequest) {
             brandData = (toolResult as { data: Record<string, unknown> }).data
           }
 
-          // Add tool result message
-          messages.push({
-            role: 'tool',
-            content: JSON.stringify(toolResult),
-            tool_call_id: toolCall.toolCallId,
+          // Add tool result to array
+          toolResults.push({
+            type: 'tool-result',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            output: { type: 'text', value: JSON.stringify(toolResult) },
           })
         }
+
+        // Add all tool results as a single tool message
+        messages.push({
+          role: 'tool',
+          content: toolResults,
+        })
       } else {
         // No tool calls, we're done
         break
