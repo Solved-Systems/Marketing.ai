@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateText, createGateway, tool, type ModelMessage } from 'ai'
+import {
+  generateText,
+  createGateway,
+  tool,
+  type ModelMessage,
+  type ToolResultPart,
+  type ToolCallPart,
+} from 'ai'
 import { auth } from '@/auth'
 import { z } from 'zod'
 
@@ -206,24 +213,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Build messages array for the conversation using SDK types
-    type ToolResultPart = {
-      type: 'tool-result'
-      toolCallId: string
-      toolName: string
-      output: { type: 'text'; value: string }
-    }
-    type ToolCallPart = {
-      type: 'tool-call'
-      toolCallId: string
-      toolName: string
-      args: Record<string, unknown>
-    }
-    type Message =
-      | { role: 'user'; content: string }
-      | { role: 'assistant'; content: string | Array<{ type: 'text'; text: string } | ToolCallPart> }
-      | { role: 'tool'; content: ToolResultPart[] }
-
-    const messages: Message[] = [
+    const messages: ModelMessage[] = [
       {
         role: 'user',
         content: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
@@ -237,7 +227,7 @@ export async function POST(request: NextRequest) {
         model: gateway('anthropic/claude-sonnet-4-20250514'),
         system: systemPrompt,
         tools,
-        messages: messages as ModelMessage[],
+        messages,
       })
 
       // Check if there are tool calls
@@ -252,7 +242,7 @@ export async function POST(request: NextRequest) {
             type: 'tool-call',
             toolCallId: tc.toolCallId,
             toolName: tc.toolName,
-            args: tc.input as Record<string, unknown>,
+            input: tc.input,
           })
         }
         messages.push({
@@ -277,12 +267,15 @@ export async function POST(request: NextRequest) {
             brandData = (toolResult as { data: Record<string, unknown> }).data
           }
 
-          // Add tool result to array
+          // Add tool result to array using SDK's ToolResultPart format
           toolResults.push({
             type: 'tool-result',
             toolCallId: toolCall.toolCallId,
             toolName: toolCall.toolName,
-            output: { type: 'text', value: JSON.stringify(toolResult) },
+            output: {
+              type: 'text',
+              value: JSON.stringify(toolResult),
+            },
           })
         }
 
