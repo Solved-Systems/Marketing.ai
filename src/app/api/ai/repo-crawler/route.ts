@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateText, createGateway, tool } from 'ai'
 import { auth } from '@/auth'
-import { z } from 'zod'
+import Anthropic from '@anthropic-ai/sdk'
 
 // Tool to list directory contents in a GitHub repo
 async function listDirectory(
@@ -73,100 +72,125 @@ function getAssetUrl(repo: string, path: string): string {
   return `/api/github/file?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = await auth()
-
-    if (!session?.accessToken) {
-      return NextResponse.json({ error: 'Not authenticated with GitHub' }, { status: 401 })
-    }
-
-    const { repo } = await request.json() as { repo: string }
-
-    if (!repo) {
-      return NextResponse.json({ error: 'Repo parameter is required' }, { status: 400 })
-    }
-
-    const apiKey = process.env.AI_GATEWAY_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'AI Gateway API key not configured' }, { status: 500 })
-    }
-
-    const gateway = createGateway({ apiKey })
-    const accessToken = session.accessToken
-
-    // Define tools for Claude to use
-    const tools = {
-      list_directory: tool({
-        description: 'List files and folders in a directory of the GitHub repository. Use empty string "" for root directory.',
-        parameters: z.object({
-          path: z.string().describe('The directory path to list (use "" for root)'),
-        }),
-        execute: async ({ path }) => {
-          const contents = await listDirectory(repo, path, accessToken)
-          return contents
+// Tool definitions for Claude
+const toolDefinitions: Anthropic.Tool[] = [
+  {
+    name: 'list_directory',
+    description: 'List files and folders in a directory of the GitHub repository. Use empty string "" for root directory.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: 'The directory path to list (use "" for root)',
         },
-      }),
-
-      read_file: tool({
-        description: 'Read the contents of a file from the GitHub repository. Use this for text files like CSS, JS, JSON, MD, etc.',
-        parameters: z.object({
-          path: z.string().describe('The file path to read'),
-        }),
-        execute: async ({ path }) => {
-          const content = await readFile(repo, path, accessToken)
-          return content || 'File not found or could not be read'
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'read_file',
+    description: 'Read the contents of a file from the GitHub repository. Use this for text files like CSS, JS, JSON, MD, etc.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: 'The file path to read',
         },
-      }),
-
-      get_asset_url: tool({
-        description: 'Get a URL for an image or binary asset from the repository. Use this for logos, images, fonts, etc.',
-        parameters: z.object({
-          path: z.string().describe('The asset path'),
-        }),
-        execute: async ({ path }) => {
-          return {
-            path,
-            url: getAssetUrl(repo, path),
-          }
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'get_asset_url',
+    description: 'Get a URL for an image or binary asset from the repository. Use this for logos, images, fonts, etc.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: 'The asset path',
         },
-      }),
-
-      report_brand_data: tool({
-        description: 'Report the final extracted brand data when you have gathered enough information.',
-        parameters: z.object({
-          name: z.string().describe('Brand name'),
-          description: z.string().describe('Brand description (2-3 sentences)'),
-          tagline: z.string().describe('Brand tagline (5-10 words)'),
-          website_url: z.string().optional().describe('Website URL if found'),
-          primaryColor: z.string().describe('Primary brand color in hex format'),
-          secondaryColor: z.string().describe('Secondary/background color in hex format'),
-          accentColor: z.string().describe('Accent color in hex format'),
-          logos: z.array(z.object({
-            path: z.string(),
-            url: z.string(),
-          })).describe('Array of logo images found'),
-          fonts: z.object({
-            primary: z.string().optional(),
-            secondary: z.string().optional(),
-            mono: z.string().optional(),
-          }).optional().describe('Font families found'),
-          allColors: z.record(z.string()).optional().describe('All colors found with their sources'),
-          sources: z.record(z.string()).optional().describe('Sources for each piece of data'),
-        }),
-        execute: async (data) => {
-          return { success: true, data }
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'report_brand_data',
+    description: 'Report the final extracted brand data when you have gathered enough information.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Brand name' },
+        description: { type: 'string', description: 'Brand description (2-3 sentences)' },
+        tagline: { type: 'string', description: 'Brand tagline (5-10 words)' },
+        website_url: { type: 'string', description: 'Website URL if found' },
+        primaryColor: { type: 'string', description: 'Primary brand color in hex format' },
+        secondaryColor: { type: 'string', description: 'Secondary/background color in hex format' },
+        accentColor: { type: 'string', description: 'Accent color in hex format' },
+        logos: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              path: { type: 'string' },
+              url: { type: 'string' },
+            },
+            required: ['path', 'url'],
+          },
+          description: 'Array of logo images found',
         },
-      }),
-    }
+        fonts: {
+          type: 'object',
+          properties: {
+            primary: { type: 'string' },
+            secondary: { type: 'string' },
+            mono: { type: 'string' },
+          },
+          description: 'Font families found',
+        },
+        allColors: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: 'All colors found with their sources',
+        },
+        sources: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: 'Sources for each piece of data',
+        },
+      },
+      required: ['name', 'description', 'tagline', 'primaryColor', 'secondaryColor', 'accentColor'],
+    },
+  },
+]
 
-    // Run the agentic loop
-    const { text, toolCalls, toolResults } = await generateText({
-      model: gateway('anthropic/claude-sonnet-4-20250514'),
-      maxTokens: 4096,
-      maxSteps: 15, // Allow multiple tool calls
-      tools,
-      system: `You are a brand extraction agent. Your job is to explore a GitHub repository and extract brand information.
+// Execute a tool call
+async function executeTool(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  repo: string,
+  accessToken: string
+): Promise<unknown> {
+  switch (toolName) {
+    case 'list_directory':
+      return await listDirectory(repo, toolInput.path as string, accessToken)
+    case 'read_file':
+      return await readFile(repo, toolInput.path as string, accessToken)
+    case 'get_asset_url':
+      return {
+        path: toolInput.path,
+        url: getAssetUrl(repo, toolInput.path as string),
+      }
+    case 'report_brand_data':
+      return { success: true, data: toolInput }
+    default:
+      return { error: `Unknown tool: ${toolName}` }
+  }
+}
+
+const systemPrompt = `You are a brand extraction agent. Your job is to explore a GitHub repository and extract brand information.
 
 EXPLORATION STRATEGY:
 1. First, list the root directory to understand the repo structure
@@ -192,35 +216,109 @@ LOGO DETECTION:
 WHEN TO REPORT:
 - Once you have found: name, description, at least one color, and ideally a logo
 - Call report_brand_data with all the information you've gathered
-- Include sources for each piece of data so the user knows where it came from`,
-      messages: [
-        {
-          role: 'user',
-          content: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
-        },
-      ],
+- Include sources for each piece of data so the user knows where it came from`
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth()
+
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'Not authenticated with GitHub' }, { status: 401 })
+    }
+
+    const { repo } = (await request.json()) as { repo: string }
+
+    if (!repo) {
+      return NextResponse.json({ error: 'Repo parameter is required' }, { status: 400 })
+    }
+
+    const apiKey = process.env.AI_GATEWAY_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: 'AI Gateway API key not configured' }, { status: 500 })
+    }
+
+    const accessToken = session.accessToken
+
+    // Initialize Anthropic client
+    const anthropic = new Anthropic({
+      apiKey,
     })
 
-    // Extract the final brand data from tool results
-    const brandDataResult = toolResults?.find(
-      (r) => r.toolName === 'report_brand_data' && r.result?.success
-    )
+    // Agentic loop
+    const messages: Anthropic.MessageParam[] = [
+      {
+        role: 'user',
+        content: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
+      },
+    ]
 
-    if (brandDataResult?.result?.data) {
+    let toolCallCount = 0
+    const maxIterations = 15
+    let brandData: Record<string, unknown> | null = null
+
+    for (let i = 0; i < maxIterations; i++) {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: toolDefinitions,
+        messages,
+      })
+
+      // Check if we're done
+      if (response.stop_reason === 'end_turn') {
+        break
+      }
+
+      // Process tool uses
+      if (response.stop_reason === 'tool_use') {
+        const assistantContent = response.content
+        messages.push({ role: 'assistant', content: assistantContent })
+
+        const toolResults: Anthropic.ToolResultBlockParam[] = []
+
+        for (const block of assistantContent) {
+          if (block.type === 'tool_use') {
+            toolCallCount++
+            const result = await executeTool(
+              block.name,
+              block.input as Record<string, unknown>,
+              repo,
+              accessToken
+            )
+
+            // Check if this is the final brand data report
+            if (block.name === 'report_brand_data' && (result as { success?: boolean }).success) {
+              brandData = (result as { data: Record<string, unknown> }).data
+            }
+
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify(result),
+            })
+          }
+        }
+
+        messages.push({ role: 'user', content: toolResults })
+      } else {
+        // No more tool calls
+        break
+      }
+    }
+
+    if (brandData) {
       return NextResponse.json({
         success: true,
-        brandData: brandDataResult.result.data,
-        explorationLog: text,
-        toolCalls: toolCalls?.length || 0,
+        brandData,
+        toolCalls: toolCallCount,
       })
     }
 
-    // If no brand data was reported, return what we have
     return NextResponse.json({
       success: false,
       error: 'Could not extract complete brand data',
-      explorationLog: text,
-      toolCalls: toolCalls?.length || 0,
+      toolCalls: toolCallCount,
     })
   } catch (error) {
     console.error('Repo crawler error:', error)
