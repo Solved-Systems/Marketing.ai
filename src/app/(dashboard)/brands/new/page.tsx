@@ -855,6 +855,23 @@ If the brand looks complete and they seem satisfied, let them know they can save
                   </Button>
                 </div>
               </div>
+            ) : formData.githubRepo && isLoading ? (
+              // Show connected repo while agent is exploring
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center mb-4">
+                  <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                  <Github className="h-4 w-4" />
+                  <span className="font-mono">{formData.githubRepo}</span>
+                </div>
+                <p className="text-primary text-sm font-medium">
+                  Exploring repository...
+                </p>
+                <p className="text-muted-foreground/60 text-xs mt-1">
+                  AI agent is analyzing your codebase
+                </p>
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center mb-4">
