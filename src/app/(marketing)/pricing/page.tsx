@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Terminal, ArrowLeft, X, Zap, Loader2 } from 'lucide-react'
+import { Terminal, ArrowLeft, X, Zap, Loader2, Github } from 'lucide-react'
 import { PricingTable } from '@/components/billing/pricing-table'
 import { useSubscription } from '@/hooks/use-subscription'
 import { CREDIT_COSTS } from '@/lib/billing/models'
@@ -55,6 +55,24 @@ function PricingContent() {
             Simple, transparent pricing. All plans include access to all features.
             Only pay for what you use.
           </p>
+        </div>
+
+        {/* GitHub Integration Banner */}
+        <div className="terminal-border rounded-lg bg-card/50 p-4 mb-12 max-w-2xl mx-auto">
+          <div className="flex items-center gap-4">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+              <Github className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-mono text-sm text-primary">GitHub Integration Included</p>
+              <p className="text-xs text-muted-foreground">
+                Connect repos to auto-generate content from releases, PRs, and updates
+              </p>
+            </div>
+            <span className="hidden sm:inline-block bg-primary/20 text-primary text-xs font-mono px-2 py-1 rounded">
+              ALL PLANS
+            </span>
+          </div>
         </div>
 
         {/* Pricing Table */}

@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState } from 'react'
+import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,9 @@ import {
   Hash,
   Smile,
   Link2,
+  Wand2,
+  Github,
+  GitCommit,
 } from 'lucide-react'
 
 interface PostFormData {
@@ -38,6 +41,22 @@ interface PostFormData {
   includeEmoji: boolean
   includeCTA: boolean
   ctaLink: string
+}
+
+interface Brand {
+  id: string
+  name: string
+  github_repo: string | null
+}
+
+interface RecentCommit {
+  sha: string
+  message: string
+}
+
+interface MergedPR {
+  number: number
+  title: string
 }
 
 const formFields = [
@@ -60,6 +79,12 @@ export default function CreatePostPage({
 }) {
   const { id } = use(params)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isSuggesting, setIsSuggesting] = useState(false)
+  const [brand, setBrand] = useState<Brand | null>(null)
+  const [recentActivity, setRecentActivity] = useState<{
+    commits: RecentCommit[]
+    prs: MergedPR[]
+  } | null>(null)
   const [generatedPosts, setGeneratedPosts] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState<PostFormData>({
     topic: '',
@@ -70,6 +95,22 @@ export default function CreatePostPage({
     includeCTA: true,
     ctaLink: '',
   })
+
+  // Fetch brand data
+  useEffect(() => {
+    async function fetchBrand() {
+      try {
+        const response = await fetch(`/api/brands/${id}`)
+        if (response.ok) {
+          const data = await response.json()
+          setBrand(data)
+        }
+      } catch (err) {
+        console.error('Error fetching brand:', err)
+      }
+    }
+    fetchBrand()
+  }, [id])
 
   const handleFieldUpdate = (fieldName: string, value: unknown) => {
     setFormData(prev => ({
@@ -85,6 +126,48 @@ export default function CreatePostPage({
         ? prev.platforms.filter(p => p !== platform)
         : [...prev.platforms, platform],
     }))
+  }
+
+  const handleAISuggest = async () => {
+    if (!brand?.github_repo) return
+
+    setIsSuggesting(true)
+    try {
+      const response = await fetch('/api/ai/content-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brandId: id,
+          contentType: 'post',
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const { suggestion, activity } = data
+
+        // Update form with suggestions
+        setFormData(prev => ({
+          ...prev,
+          topic: suggestion.content || suggestion.title || prev.topic,
+        }))
+
+        // Store recent activity for display
+        if (activity) {
+          setRecentActivity({
+            commits: activity.recentCommits || [],
+            prs: activity.mergedPRs || [],
+          })
+        }
+      } else {
+        const error = await response.json()
+        console.error('AI suggest error:', error)
+      }
+    } catch (error) {
+      console.error('Error getting AI suggestions:', error)
+    } finally {
+      setIsSuggesting(false)
+    }
   }
 
   const handleGenerate = async () => {
@@ -170,13 +253,58 @@ export default function CreatePostPage({
 
         {/* Post Details */}
         <Card className="terminal-border bg-card/50">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="font-mono text-sm flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               post_config
             </CardTitle>
+            {brand?.github_repo && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAISuggest}
+                disabled={isSuggesting}
+                className="gap-2"
+              >
+                {isSuggesting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="h-4 w-4" />
+                    AI Suggest
+                  </>
+                )}
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* GitHub Activity Summary */}
+            {recentActivity && (recentActivity.commits.length > 0 || recentActivity.prs.length > 0) && (
+              <div className="p-3 rounded-md bg-muted/30 border border-border/50 space-y-2">
+                <p className="text-xs font-mono text-muted-foreground flex items-center gap-1">
+                  <Github className="h-3 w-3" />
+                  Based on recent activity:
+                </p>
+                {recentActivity.prs.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    <span className="text-green-500">PRs:</span>{' '}
+                    {recentActivity.prs.slice(0, 2).map(pr => `#${pr.number}`).join(', ')}
+                  </div>
+                )}
+                {recentActivity.commits.length > 0 && (
+                  <div className="text-xs text-muted-foreground flex items-start gap-1">
+                    <GitCommit className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span className="truncate">
+                      {recentActivity.commits[0]?.message}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Topic */}
             <div className="space-y-2">
               <Label htmlFor="topic" className="font-mono text-sm">
