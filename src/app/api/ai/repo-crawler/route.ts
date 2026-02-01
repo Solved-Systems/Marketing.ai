@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { generateText, createGateway, tool } from 'ai'
 import { auth } from '@/auth'
-import Anthropic from '@anthropic-ai/sdk'
+import { z } from 'zod'
 
 // Tool to list directory contents in a GitHub repo
-async function listDirectory(
+async function listDirectoryFn(
   repo: string,
   path: string,
   accessToken: string
@@ -39,7 +40,7 @@ async function listDirectory(
 }
 
 // Tool to read file contents from a GitHub repo
-async function readFile(
+async function readFileFn(
   repo: string,
   path: string,
   accessToken: string
@@ -68,126 +69,8 @@ async function readFile(
 }
 
 // Tool to get image/asset URL from a GitHub repo
-function getAssetUrl(repo: string, path: string): string {
+function getAssetUrlFn(repo: string, path: string): string {
   return `/api/github/file?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`
-}
-
-// Tool definitions for Claude
-const toolDefinitions: Anthropic.Tool[] = [
-  {
-    name: 'list_directory',
-    description: 'List files and folders in a directory of the GitHub repository. Use empty string "" for root directory.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        path: {
-          type: 'string',
-          description: 'The directory path to list (use "" for root)',
-        },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'read_file',
-    description: 'Read the contents of a file from the GitHub repository. Use this for text files like CSS, JS, JSON, MD, etc.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        path: {
-          type: 'string',
-          description: 'The file path to read',
-        },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'get_asset_url',
-    description: 'Get a URL for an image or binary asset from the repository. Use this for logos, images, fonts, etc.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        path: {
-          type: 'string',
-          description: 'The asset path',
-        },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'report_brand_data',
-    description: 'Report the final extracted brand data when you have gathered enough information.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Brand name' },
-        description: { type: 'string', description: 'Brand description (2-3 sentences)' },
-        tagline: { type: 'string', description: 'Brand tagline (5-10 words)' },
-        website_url: { type: 'string', description: 'Website URL if found' },
-        primaryColor: { type: 'string', description: 'Primary brand color in hex format' },
-        secondaryColor: { type: 'string', description: 'Secondary/background color in hex format' },
-        accentColor: { type: 'string', description: 'Accent color in hex format' },
-        logos: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              path: { type: 'string' },
-              url: { type: 'string' },
-            },
-            required: ['path', 'url'],
-          },
-          description: 'Array of logo images found',
-        },
-        fonts: {
-          type: 'object',
-          properties: {
-            primary: { type: 'string' },
-            secondary: { type: 'string' },
-            mono: { type: 'string' },
-          },
-          description: 'Font families found',
-        },
-        allColors: {
-          type: 'object',
-          additionalProperties: { type: 'string' },
-          description: 'All colors found with their sources',
-        },
-        sources: {
-          type: 'object',
-          additionalProperties: { type: 'string' },
-          description: 'Sources for each piece of data',
-        },
-      },
-      required: ['name', 'description', 'tagline', 'primaryColor', 'secondaryColor', 'accentColor'],
-    },
-  },
-]
-
-// Execute a tool call
-async function executeTool(
-  toolName: string,
-  toolInput: Record<string, unknown>,
-  repo: string,
-  accessToken: string
-): Promise<unknown> {
-  switch (toolName) {
-    case 'list_directory':
-      return await listDirectory(repo, toolInput.path as string, accessToken)
-    case 'read_file':
-      return await readFile(repo, toolInput.path as string, accessToken)
-    case 'get_asset_url':
-      return {
-        path: toolInput.path,
-        url: getAssetUrl(repo, toolInput.path as string),
-      }
-    case 'report_brand_data':
-      return { success: true, data: toolInput }
-    default:
-      return { error: `Unknown tool: ${toolName}` }
-  }
 }
 
 const systemPrompt = `You are a brand extraction agent. Your job is to explore a GitHub repository and extract brand information.
@@ -237,75 +120,91 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI Gateway API key not configured' }, { status: 500 })
     }
 
+    const gateway = createGateway({ apiKey })
     const accessToken = session.accessToken
 
-    // Initialize Anthropic client
-    const anthropic = new Anthropic({
-      apiKey,
-    })
-
-    // Agentic loop
-    const messages: Anthropic.MessageParam[] = [
-      {
-        role: 'user',
-        content: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
-      },
-    ]
-
-    let toolCallCount = 0
-    const maxIterations = 15
+    // Track brand data when reported
     let brandData: Record<string, unknown> | null = null
 
-    for (let i = 0; i < maxIterations; i++) {
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        system: systemPrompt,
-        tools: toolDefinitions,
-        messages,
-      })
+    // Define tools using AI SDK v6 syntax
+    const tools = {
+      list_directory: tool({
+        description: 'List files and folders in a directory of the GitHub repository. Use empty string "" for root directory.',
+        parameters: z.object({
+          path: z.string().describe('The directory path to list (use "" for root)'),
+        }),
+        execute: async ({ path }) => {
+          const contents = await listDirectoryFn(repo, path, accessToken)
+          return contents
+        },
+      }),
 
-      // Check if we're done
-      if (response.stop_reason === 'end_turn') {
-        break
-      }
+      read_file: tool({
+        description: 'Read the contents of a file from the GitHub repository. Use this for text files like CSS, JS, JSON, MD, etc.',
+        parameters: z.object({
+          path: z.string().describe('The file path to read'),
+        }),
+        execute: async ({ path }) => {
+          const content = await readFileFn(repo, path, accessToken)
+          return content || 'File not found or could not be read'
+        },
+      }),
 
-      // Process tool uses
-      if (response.stop_reason === 'tool_use') {
-        const assistantContent = response.content
-        messages.push({ role: 'assistant', content: assistantContent })
-
-        const toolResults: Anthropic.ToolResultBlockParam[] = []
-
-        for (const block of assistantContent) {
-          if (block.type === 'tool_use') {
-            toolCallCount++
-            const result = await executeTool(
-              block.name,
-              block.input as Record<string, unknown>,
-              repo,
-              accessToken
-            )
-
-            // Check if this is the final brand data report
-            if (block.name === 'report_brand_data' && (result as { success?: boolean }).success) {
-              brandData = (result as { data: Record<string, unknown> }).data
-            }
-
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: block.id,
-              content: JSON.stringify(result),
-            })
+      get_asset_url: tool({
+        description: 'Get a URL for an image or binary asset from the repository. Use this for logos, images, fonts, etc.',
+        parameters: z.object({
+          path: z.string().describe('The asset path'),
+        }),
+        execute: async ({ path }) => {
+          return {
+            path,
+            url: getAssetUrlFn(repo, path),
           }
-        }
+        },
+      }),
 
-        messages.push({ role: 'user', content: toolResults })
-      } else {
-        // No more tool calls
-        break
-      }
+      report_brand_data: tool({
+        description: 'Report the final extracted brand data when you have gathered enough information.',
+        parameters: z.object({
+          name: z.string().describe('Brand name'),
+          description: z.string().describe('Brand description (2-3 sentences)'),
+          tagline: z.string().describe('Brand tagline (5-10 words)'),
+          website_url: z.string().nullable().describe('Website URL if found'),
+          primaryColor: z.string().describe('Primary brand color in hex format'),
+          secondaryColor: z.string().describe('Secondary/background color in hex format'),
+          accentColor: z.string().describe('Accent color in hex format'),
+          logos: z.array(z.object({
+            path: z.string(),
+            url: z.string(),
+          })).describe('Array of logo images found'),
+          fonts: z.object({
+            primary: z.string().nullable(),
+            secondary: z.string().nullable(),
+            mono: z.string().nullable(),
+          }).nullable().describe('Font families found'),
+          allColors: z.record(z.string(), z.string()).nullable().describe('All colors found with their sources'),
+          sources: z.record(z.string(), z.string()).nullable().describe('Sources for each piece of data'),
+        }),
+        execute: async (data) => {
+          brandData = data
+          return { success: true }
+        },
+      }),
     }
+
+    // Run the agentic loop with maxSteps
+    const result = await generateText({
+      model: gateway('anthropic/claude-sonnet-4-20250514'),
+      system: systemPrompt,
+      tools,
+      maxSteps: 15, // Allow multiple tool calls
+      prompt: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
+    })
+
+    // Count tool calls from steps
+    const toolCallCount = result.steps?.reduce((count, step) => {
+      return count + (step.toolCalls?.length || 0)
+    }, 0) || 0
 
     if (brandData) {
       return NextResponse.json({
