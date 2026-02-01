@@ -68,6 +68,7 @@ export default function NewBrandPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [scrollTrigger, setScrollTrigger] = useState(0) // Used to force scroll on progress updates
 
   // Repo selection
   const [repoDialogOpen, setRepoDialogOpen] = useState(false)
@@ -95,7 +96,7 @@ export default function NewBrandPage() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, scrollTrigger])
 
   const fetchRepos = async () => {
     setIsLoadingRepos(true)
@@ -155,16 +156,18 @@ export default function NewBrandPage() {
     })
     setIsLoading(true)
 
-    // Track progress log for streaming updates
+    // Track progress log for streaming updates - keep all lines for scrolling
     const progressLog: string[] = []
 
     const updateProgress = (line: string) => {
       progressLog.push(line)
-      // Keep only last 8 lines for display
-      const displayLines = progressLog.slice(-8)
+      // Show all progress lines in a scrollable format
+      const progressText = progressLog.map(l => `\`${l}\``).join('\n')
       updateGeneratingMessage(
-        `Exploring **${repo.fullName}**...\n\n${displayLines.map(l => `\`${l}\``).join('\n')}`
+        `Exploring **${repo.fullName}**...\n\n${progressText}`
       )
+      // Trigger scroll to bottom
+      setScrollTrigger(prev => prev + 1)
     }
 
     try {
@@ -548,6 +551,7 @@ If the brand looks complete and they seem satisfied, let them know they can save
                     {msg.action === 'generating' && (
                       <div className="flex items-center gap-2 mt-2 mr-8 text-sm text-primary">
                         <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-xs text-muted-foreground">exploring repository...</span>
                       </div>
                     )}
                   </div>
