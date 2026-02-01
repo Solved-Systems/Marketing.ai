@@ -140,10 +140,13 @@ LOGO DETECTION:
 - Common extensions: .svg, .png, .ico, .jpg
 - Check multiple locations, logos might be in nested folders
 
-WHEN TO REPORT:
-- Once you have found: name, description, at least one color, and ideally a logo
-- Call report_brand_data with all the information you've gathered
-- Include sources for each piece of data so the user knows where it came from`
+CRITICAL - ALWAYS CALL report_brand_data:
+- After exploring 3-5 key files/directories, you MUST call report_brand_data
+- Do NOT wait to find everything - report what you have found so far
+- Use your best judgment to fill in any missing fields
+- For colors: if you found CSS variables, use those; otherwise make reasonable guesses based on the project
+- For name: use package.json name, README title, or repo name
+- NEVER finish without calling report_brand_data - this is required`
 
 // Execute a tool call
 async function executeToolFn(
@@ -410,6 +413,39 @@ export async function POST(request: NextRequest) {
         if (brandData) {
           await sendEvent('status', { message: 'Brand data extracted successfully!' })
           break
+        }
+      }
+
+      // If we explored but didn't get brand data, make one final request to report
+      if (!brandData && toolCallCount > 0) {
+        await sendEvent('status', { message: 'Requesting final brand report...' })
+
+        messages.push({
+          role: 'user',
+          content: 'Based on everything you have explored so far, please call report_brand_data now with the brand information you have gathered. Use your best judgment to fill in any missing fields based on what you found. This is required to complete the extraction.',
+        })
+
+        try {
+          const finalResult = await generateText({
+            model: gateway('anthropic/claude-sonnet-4-20250514'),
+            system: systemPrompt,
+            tools,
+            messages,
+            maxOutputTokens: 4096,
+          })
+
+          if (finalResult.toolCalls && finalResult.toolCalls.length > 0) {
+            for (const toolCall of finalResult.toolCalls) {
+              if (toolCall.toolName === 'report_brand_data') {
+                const args = toolCall.input as Record<string, unknown>
+                brandData = args
+                await sendEvent('brand_found', { brandData })
+                await sendEvent('status', { message: 'Brand data extracted successfully!' })
+              }
+            }
+          }
+        } catch (finalError) {
+          console.error('Final report request error:', finalError)
         }
       }
 
