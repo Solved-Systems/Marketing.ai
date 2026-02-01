@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateText, createGateway, tool } from 'ai'
+import { generateText, createGateway } from 'ai'
 import { auth } from '@/auth'
 import { z } from 'zod'
 
@@ -73,6 +73,40 @@ function getAssetUrlFn(repo: string, path: string): string {
   return `/api/github/file?repo=${encodeURIComponent(repo)}&path=${encodeURIComponent(path)}`
 }
 
+// Tool schemas (without execute - we'll handle manually)
+const listDirectorySchema = z.object({
+  path: z.string().describe('The directory path to list (use "" for root)'),
+})
+
+const readFileSchema = z.object({
+  path: z.string().describe('The file path to read'),
+})
+
+const getAssetUrlSchema = z.object({
+  path: z.string().describe('The asset path'),
+})
+
+const reportBrandDataSchema = z.object({
+  name: z.string().describe('Brand name'),
+  description: z.string().describe('Brand description (2-3 sentences)'),
+  tagline: z.string().describe('Brand tagline (5-10 words)'),
+  website_url: z.string().nullable().describe('Website URL if found'),
+  primaryColor: z.string().describe('Primary brand color in hex format'),
+  secondaryColor: z.string().describe('Secondary/background color in hex format'),
+  accentColor: z.string().describe('Accent color in hex format'),
+  logos: z.array(z.object({
+    path: z.string(),
+    url: z.string(),
+  })).describe('Array of logo images found'),
+  fonts: z.object({
+    primary: z.string().nullable(),
+    secondary: z.string().nullable(),
+    mono: z.string().nullable(),
+  }).nullable().describe('Font families found'),
+  allColors: z.record(z.string(), z.string()).nullable().describe('All colors found with their sources'),
+  sources: z.record(z.string(), z.string()).nullable().describe('Sources for each piece of data'),
+})
+
 const systemPrompt = `You are a brand extraction agent. Your job is to explore a GitHub repository and extract brand information.
 
 EXPLORATION STRATEGY:
@@ -101,6 +135,30 @@ WHEN TO REPORT:
 - Call report_brand_data with all the information you've gathered
 - Include sources for each piece of data so the user knows where it came from`
 
+// Execute a tool call
+async function executeTool(
+  toolName: string,
+  args: Record<string, unknown>,
+  repo: string,
+  accessToken: string
+): Promise<unknown> {
+  switch (toolName) {
+    case 'list_directory':
+      return await listDirectoryFn(repo, args.path as string, accessToken)
+    case 'read_file':
+      return await readFileFn(repo, args.path as string, accessToken)
+    case 'get_asset_url':
+      return {
+        path: args.path,
+        url: getAssetUrlFn(repo, args.path as string),
+      }
+    case 'report_brand_data':
+      return { success: true, data: args }
+    default:
+      return { error: `Unknown tool: ${toolName}` }
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await auth()
@@ -125,86 +183,88 @@ export async function POST(request: NextRequest) {
 
     // Track brand data when reported
     let brandData: Record<string, unknown> | null = null
+    let toolCallCount = 0
 
-    // Define tools using AI SDK v6 syntax
+    // Define tools WITHOUT execute function
     const tools = {
-      list_directory: tool({
+      list_directory: {
         description: 'List files and folders in a directory of the GitHub repository. Use empty string "" for root directory.',
-        parameters: z.object({
-          path: z.string().describe('The directory path to list (use "" for root)'),
-        }),
-        execute: async ({ path }) => {
-          const contents = await listDirectoryFn(repo, path, accessToken)
-          return contents
-        },
-      }),
-
-      read_file: tool({
+        parameters: listDirectorySchema,
+      },
+      read_file: {
         description: 'Read the contents of a file from the GitHub repository. Use this for text files like CSS, JS, JSON, MD, etc.',
-        parameters: z.object({
-          path: z.string().describe('The file path to read'),
-        }),
-        execute: async ({ path }) => {
-          const content = await readFileFn(repo, path, accessToken)
-          return content || 'File not found or could not be read'
-        },
-      }),
-
-      get_asset_url: tool({
+        parameters: readFileSchema,
+      },
+      get_asset_url: {
         description: 'Get a URL for an image or binary asset from the repository. Use this for logos, images, fonts, etc.',
-        parameters: z.object({
-          path: z.string().describe('The asset path'),
-        }),
-        execute: async ({ path }) => {
-          return {
-            path,
-            url: getAssetUrlFn(repo, path),
-          }
-        },
-      }),
-
-      report_brand_data: tool({
+        parameters: getAssetUrlSchema,
+      },
+      report_brand_data: {
         description: 'Report the final extracted brand data when you have gathered enough information.',
-        parameters: z.object({
-          name: z.string().describe('Brand name'),
-          description: z.string().describe('Brand description (2-3 sentences)'),
-          tagline: z.string().describe('Brand tagline (5-10 words)'),
-          website_url: z.string().nullable().describe('Website URL if found'),
-          primaryColor: z.string().describe('Primary brand color in hex format'),
-          secondaryColor: z.string().describe('Secondary/background color in hex format'),
-          accentColor: z.string().describe('Accent color in hex format'),
-          logos: z.array(z.object({
-            path: z.string(),
-            url: z.string(),
-          })).describe('Array of logo images found'),
-          fonts: z.object({
-            primary: z.string().nullable(),
-            secondary: z.string().nullable(),
-            mono: z.string().nullable(),
-          }).nullable().describe('Font families found'),
-          allColors: z.record(z.string(), z.string()).nullable().describe('All colors found with their sources'),
-          sources: z.record(z.string(), z.string()).nullable().describe('Sources for each piece of data'),
-        }),
-        execute: async (data) => {
-          brandData = data
-          return { success: true }
-        },
-      }),
+        parameters: reportBrandDataSchema,
+      },
     }
 
-    // Run the agentic loop with maxSteps
-    const result = await generateText({
-      model: gateway('anthropic/claude-sonnet-4-20250514'),
-      system: systemPrompt,
-      tools,
-      maxSteps: 15, // Allow multiple tool calls
-      prompt: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
-    })
+    // Build messages array for the conversation
+    type Message = { role: 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }
+    const messages: Message[] = [
+      {
+        role: 'user',
+        content: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
+      },
+    ]
 
-    // Count tool calls from steps
-    const toolCallCount = result.steps?.reduce((count, step) => {
-      return count + (step.toolCalls?.length || 0)
-    }, 0) || 0
+    const maxIterations = 15
+
+    for (let i = 0; i < maxIterations; i++) {
+      const result = await generateText({
+        model: gateway('anthropic/claude-sonnet-4-20250514'),
+        system: systemPrompt,
+        tools,
+        messages,
+      })
+
+      // Check if there are tool calls
+      if (result.toolCalls && result.toolCalls.length > 0) {
+        // Add assistant message with tool calls
+        messages.push({
+          role: 'assistant',
+          content: result.text || '',
+        })
+
+        // Process each tool call
+        for (const toolCall of result.toolCalls) {
+          toolCallCount++
+
+          const toolResult = await executeTool(
+            toolCall.toolName,
+            toolCall.args as Record<string, unknown>,
+            repo,
+            accessToken
+          )
+
+          // Check if this is the final brand data report
+          if (toolCall.toolName === 'report_brand_data' && (toolResult as { success?: boolean }).success) {
+            brandData = (toolResult as { data: Record<string, unknown> }).data
+          }
+
+          // Add tool result message
+          messages.push({
+            role: 'tool',
+            content: JSON.stringify(toolResult),
+            tool_call_id: toolCall.toolCallId,
+          })
+        }
+      } else {
+        // No tool calls, we're done
+        break
+      }
+
+      // If we got brand data, we're done
+      if (brandData) {
+        break
+      }
+    }
 
     if (brandData) {
       return NextResponse.json({
