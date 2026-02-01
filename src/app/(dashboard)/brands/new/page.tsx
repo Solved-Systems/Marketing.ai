@@ -200,72 +200,90 @@ export default function NewBrandPage() {
       let buffer = ''
       let brandData: Record<string, unknown> | null = null
       let toolCalls = 0
+      let lastError: string | null = null
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
 
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            const eventType = line.slice(7)
-            const dataLineIndex = lines.indexOf(line) + 1
-            if (dataLineIndex < lines.length && lines[dataLineIndex].startsWith('data: ')) {
-              try {
-                const data = JSON.parse(lines[dataLineIndex].slice(6))
+        // Parse SSE events - they come as "event: type\ndata: json\n\n"
+        const events = buffer.split('\n\n')
+        buffer = events.pop() || '' // Keep incomplete event in buffer
 
-                switch (eventType) {
-                  case 'status':
-                    updateProgress(data.message)
-                    break
-                  case 'thinking':
-                    updateProgress(`Agent thinking... (iteration ${data.iteration})`)
-                    break
-                  case 'thought':
-                    if (data.text) {
-                      updateProgress(`💭 ${data.text.slice(0, 60)}${data.text.length > 60 ? '...' : ''}`)
-                    }
-                    break
-                  case 'tool_call':
-                    updateProgress(`→ ${data.description}`)
-                    break
-                  case 'tool_result':
-                    if (data.summary) {
-                      updateProgress(`  ✓ ${data.summary}`)
-                    }
-                    break
-                  case 'brand_found':
-                    updateProgress('✨ Brand data compiled!')
-                    brandData = data.brandData
-                    break
-                  case 'complete':
-                    toolCalls = data.toolCalls || 0
-                    if (data.success && data.brandData) {
-                      brandData = data.brandData
-                    }
-                    break
-                  case 'error':
-                    throw new Error(data.message || 'Unknown error')
-                }
-              } catch {
-                // Skip malformed JSON
-              }
-            }
-          } else if (line.startsWith('data: ')) {
-            // Handle data-only lines (for events parsed incorrectly)
-            try {
-              const data = JSON.parse(line.slice(6))
-              if (data.message) {
-                updateProgress(data.message)
-              }
-            } catch {
-              // Skip malformed JSON
+        for (const event of events) {
+          if (!event.trim()) continue
+
+          const lines = event.split('\n')
+          let eventType = ''
+          let eventData = ''
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim()
+            } else if (line.startsWith('data: ')) {
+              eventData = line.slice(6)
             }
           }
+
+          if (!eventData) continue
+
+          try {
+            const data = JSON.parse(eventData)
+
+            switch (eventType) {
+              case 'status':
+                updateProgress(data.message)
+                break
+              case 'thinking':
+                updateProgress(`Agent thinking... (iteration ${data.iteration})`)
+                break
+              case 'thought':
+                if (data.text) {
+                  updateProgress(`💭 ${data.text.slice(0, 60)}${data.text.length > 60 ? '...' : ''}`)
+                }
+                break
+              case 'tool_call':
+                updateProgress(`→ ${data.description}`)
+                break
+              case 'tool_result':
+                if (data.summary) {
+                  updateProgress(`  ✓ ${data.summary}`)
+                }
+                break
+              case 'brand_found':
+                updateProgress('✨ Brand data compiled!')
+                brandData = data.brandData
+                break
+              case 'complete':
+                toolCalls = data.toolCalls || 0
+                if (data.success && data.brandData) {
+                  brandData = data.brandData
+                } else if (!data.success) {
+                  lastError = data.error || 'Could not extract brand data'
+                  updateProgress(`⚠️ ${lastError}`)
+                }
+                break
+              case 'error':
+                lastError = data.message || 'Unknown error'
+                updateProgress(`❌ Error: ${lastError}`)
+                break
+              default:
+                // Handle events without explicit type
+                if (data.message) {
+                  updateProgress(data.message)
+                }
+            }
+          } catch (parseError) {
+            console.warn('SSE parse error:', parseError, 'data:', eventData)
+          }
         }
+      }
+
+      // Check for errors after stream completes
+      if (lastError && !brandData) {
+        throw new Error(lastError)
       }
 
       if (brandData) {
