@@ -10,6 +10,9 @@ import {
 import { auth } from '@/auth'
 import { z } from 'zod'
 
+// Extend Vercel function timeout (Pro plan allows up to 300s)
+export const maxDuration = 60
+
 // Tool to list directory contents in a GitHub repo
 async function listDirectoryFn(
   repo: string,
@@ -259,19 +262,29 @@ export async function POST(request: NextRequest) {
         },
       ]
 
-      const maxIterations = 15
+      const maxIterations = 10 // Reduced to stay within timeout limits
 
       await sendEvent('status', { message: 'Starting repository exploration...' })
 
       for (let i = 0; i < maxIterations; i++) {
-        await sendEvent('thinking', { iteration: i + 1, message: 'Agent is thinking...' })
+        await sendEvent('thinking', { iteration: i + 1, message: `Agent thinking... (step ${i + 1}/${maxIterations})` })
 
-        const result = await generateText({
-          model: gateway('anthropic/claude-sonnet-4-20250514'),
-          system: systemPrompt,
-          tools,
-          messages,
-        })
+        let result
+        try {
+          result = await generateText({
+            model: gateway('anthropic/claude-sonnet-4-20250514'),
+            system: systemPrompt,
+            tools,
+            messages,
+          })
+        } catch (aiError) {
+          console.error('AI generation error:', aiError)
+          await sendEvent('error', {
+            message: `AI error: ${aiError instanceof Error ? aiError.message : 'Unknown AI error'}`,
+          })
+          await writer.close()
+          return
+        }
 
         // Check if there are tool calls
         if (result.toolCalls && result.toolCalls.length > 0) {
@@ -307,12 +320,22 @@ export async function POST(request: NextRequest) {
               description: getToolDescription(toolCall.toolName, args),
             })
 
-            const toolResult = await executeToolFn(
-              toolCall.toolName,
-              args,
-              repo,
-              accessToken
-            )
+            let toolResult: unknown
+            try {
+              toolResult = await executeToolFn(
+                toolCall.toolName,
+                args,
+                repo,
+                accessToken
+              )
+            } catch (toolError) {
+              console.error(`Tool ${toolCall.toolName} error:`, toolError)
+              toolResult = { error: toolError instanceof Error ? toolError.message : 'Tool execution failed' }
+              await sendEvent('tool_result', {
+                tool: toolCall.toolName,
+                summary: `Error: ${toolError instanceof Error ? toolError.message : 'Failed'}`,
+              })
+            }
 
             // Send tool result summary
             if (toolCall.toolName === 'list_directory') {
