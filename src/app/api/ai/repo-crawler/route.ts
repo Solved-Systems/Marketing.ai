@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
         },
       ]
 
-      const maxIterations = 10 // Reduced to stay within timeout limits
+      const maxIterations = 25 // Allow thorough exploration (60s timeout)
 
       await sendEvent('status', { message: 'Starting repository exploration...' })
 

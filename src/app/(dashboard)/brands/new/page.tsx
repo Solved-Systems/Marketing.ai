@@ -166,8 +166,15 @@ export default function NewBrandPage() {
       updateGeneratingMessage(
         `Exploring **${repo.fullName}**...\n\n${progressText}`
       )
-      // Trigger scroll to bottom
+      // Trigger scroll to bottom of main chat
       setScrollTrigger(prev => prev + 1)
+      // Also scroll the progress container to bottom
+      setTimeout(() => {
+        const progressScroll = document.getElementById('progress-scroll')
+        if (progressScroll) {
+          progressScroll.scrollTop = progressScroll.scrollHeight
+        }
+      }, 10)
     }
 
     try {
@@ -515,15 +522,39 @@ If the brand looks complete and they seem satisfied, let them know they can save
               <div className="space-y-4">
                 {messages.map((msg) => (
                   <div key={msg.id}>
-                    <div
-                      className={`text-sm p-3 rounded-lg ${
-                        msg.role === 'user'
-                          ? 'bg-primary/20 ml-8'
-                          : 'bg-muted mr-8'
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                    </div>
+                    {msg.action === 'generating' ? (
+                      // Special rendering for generating message with scrollable progress
+                      <div className="bg-muted mr-8 rounded-lg overflow-hidden">
+                        <div className="p-3 border-b border-border/30">
+                          <p className="text-sm font-medium">{msg.content.split('\n\n')[0]}</p>
+                        </div>
+                        <div className="max-h-[200px] overflow-y-auto p-3" id="progress-scroll">
+                          <div className="space-y-1 font-mono text-xs">
+                            {msg.content.split('\n\n').slice(1).join('\n\n').split('\n').map((line, i) => (
+                              <div key={i} className={`${
+                                line.includes('→') ? 'text-primary' :
+                                line.includes('✓') ? 'text-green-500' :
+                                line.includes('✨') ? 'text-yellow-500' :
+                                line.includes('💭') ? 'text-blue-400' :
+                                'text-muted-foreground'
+                              }`}>
+                                {line.replace(/`/g, '')}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className={`text-sm p-3 rounded-lg ${
+                          msg.role === 'user'
+                            ? 'bg-primary/20 ml-8'
+                            : 'bg-muted mr-8'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      </div>
+                    )}
 
                     {/* Action buttons */}
                     {msg.action === 'connect_repo' && messages.length === 1 && (
