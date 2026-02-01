@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import {
   generateText,
   createGateway,
@@ -166,153 +166,244 @@ async function executeToolFn(
   }
 }
 
+// Get friendly description for tool calls
+function getToolDescription(toolName: string, args: Record<string, unknown>): string {
+  switch (toolName) {
+    case 'list_directory':
+      return args.path ? `Exploring \`${args.path}/\`` : 'Listing root directory'
+    case 'read_file':
+      return `Reading \`${args.path}\``
+    case 'get_asset_url':
+      return `Found asset: \`${args.path}\``
+    case 'report_brand_data':
+      return 'Compiling brand data...'
+    default:
+      return `Executing ${toolName}`
+  }
+}
+
 export async function POST(request: NextRequest) {
-  try {
-    const session = await auth()
+  const session = await auth()
 
-    if (!session?.accessToken) {
-      return NextResponse.json({ error: 'Not authenticated with GitHub' }, { status: 401 })
-    }
+  if (!session?.accessToken) {
+    return new Response(JSON.stringify({ error: 'Not authenticated with GitHub' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 
-    const { repo } = (await request.json()) as { repo: string }
+  const { repo } = (await request.json()) as { repo: string }
 
-    if (!repo) {
-      return NextResponse.json({ error: 'Repo parameter is required' }, { status: 400 })
-    }
+  if (!repo) {
+    return new Response(JSON.stringify({ error: 'Repo parameter is required' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 
-    const apiKey = process.env.AI_GATEWAY_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'AI Gateway API key not configured' }, { status: 500 })
-    }
+  const apiKey = process.env.AI_GATEWAY_API_KEY
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'AI Gateway API key not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 
-    const gateway = createGateway({ apiKey })
-    const accessToken = session.accessToken
+  // Create a streaming response using Server-Sent Events
+  const encoder = new TextEncoder()
+  const stream = new TransformStream()
+  const writer = stream.writable.getWriter()
 
-    // Track brand data when reported
-    let brandData: Record<string, unknown> | null = null
-    let toolCallCount = 0
+  // Helper to send SSE events
+  const sendEvent = async (event: string, data: unknown) => {
+    await writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+  }
 
-    // Define tools using the tool() helper with inputSchema
-    const tools = {
-      list_directory: tool({
-        description: 'List files and folders in a directory of the GitHub repository. Use empty string "" for root directory.',
-        inputSchema: listDirectorySchema,
-      }),
-      read_file: tool({
-        description: 'Read the contents of a file from the GitHub repository. Use this for text files like CSS, JS, JSON, MD, etc.',
-        inputSchema: readFileSchema,
-      }),
-      get_asset_url: tool({
-        description: 'Get a URL for an image or binary asset from the repository. Use this for logos, images, fonts, etc.',
-        inputSchema: getAssetUrlSchema,
-      }),
-      report_brand_data: tool({
-        description: 'Report the final extracted brand data when you have gathered enough information.',
-        inputSchema: reportBrandDataSchema,
-      }),
-    }
+  // Start the async processing
+  const processRepo = async () => {
+    try {
+      const gateway = createGateway({ apiKey })
+      const accessToken = session.accessToken!
 
-    // Build messages array for the conversation using SDK types
-    const messages: ModelMessage[] = [
-      {
-        role: 'user',
-        content: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
-      },
-    ]
+      // Track brand data when reported
+      let brandData: Record<string, unknown> | null = null
+      let toolCallCount = 0
 
-    const maxIterations = 15
+      await sendEvent('status', { message: 'Initializing AI agent...' })
 
-    for (let i = 0; i < maxIterations; i++) {
-      const result = await generateText({
-        model: gateway('anthropic/claude-sonnet-4-20250514'),
-        system: systemPrompt,
-        tools,
-        messages,
-      })
+      // Define tools using the tool() helper with inputSchema
+      const tools = {
+        list_directory: tool({
+          description: 'List files and folders in a directory of the GitHub repository. Use empty string "" for root directory.',
+          inputSchema: listDirectorySchema,
+        }),
+        read_file: tool({
+          description: 'Read the contents of a file from the GitHub repository. Use this for text files like CSS, JS, JSON, MD, etc.',
+          inputSchema: readFileSchema,
+        }),
+        get_asset_url: tool({
+          description: 'Get a URL for an image or binary asset from the repository. Use this for logos, images, fonts, etc.',
+          inputSchema: getAssetUrlSchema,
+        }),
+        report_brand_data: tool({
+          description: 'Report the final extracted brand data when you have gathered enough information.',
+          inputSchema: reportBrandDataSchema,
+        }),
+      }
 
-      // Check if there are tool calls
-      if (result.toolCalls && result.toolCalls.length > 0) {
-        // Build assistant message content with tool calls
-        const assistantContent: Array<{ type: 'text'; text: string } | ToolCallPart> = []
-        if (result.text) {
-          assistantContent.push({ type: 'text', text: result.text })
-        }
-        for (const tc of result.toolCalls) {
-          assistantContent.push({
-            type: 'tool-call',
-            toolCallId: tc.toolCallId,
-            toolName: tc.toolName,
-            input: tc.input,
-          })
-        }
-        messages.push({
-          role: 'assistant',
-          content: assistantContent,
+      // Build messages array for the conversation using SDK types
+      const messages: ModelMessage[] = [
+        {
+          role: 'user',
+          content: `Explore the repository "${repo}" and extract brand information. Find the brand name, description, colors (from CSS/config files), and any logos or brand images.`,
+        },
+      ]
+
+      const maxIterations = 15
+
+      await sendEvent('status', { message: 'Starting repository exploration...' })
+
+      for (let i = 0; i < maxIterations; i++) {
+        await sendEvent('thinking', { iteration: i + 1, message: 'Agent is thinking...' })
+
+        const result = await generateText({
+          model: gateway('anthropic/claude-sonnet-4-20250514'),
+          system: systemPrompt,
+          tools,
+          messages,
         })
 
-        // Process each tool call and collect results
-        const toolResults: ToolResultPart[] = []
-        for (const toolCall of result.toolCalls) {
-          toolCallCount++
+        // Check if there are tool calls
+        if (result.toolCalls && result.toolCalls.length > 0) {
+          // Build assistant message content with tool calls
+          const assistantContent: Array<{ type: 'text'; text: string } | ToolCallPart> = []
+          if (result.text) {
+            assistantContent.push({ type: 'text', text: result.text })
+            await sendEvent('thought', { text: result.text })
+          }
+          for (const tc of result.toolCalls) {
+            assistantContent.push({
+              type: 'tool-call',
+              toolCallId: tc.toolCallId,
+              toolName: tc.toolName,
+              input: tc.input,
+            })
+          }
+          messages.push({
+            role: 'assistant',
+            content: assistantContent,
+          })
 
-          const toolResult = await executeToolFn(
-            toolCall.toolName,
-            toolCall.input as Record<string, unknown>,
-            repo,
-            accessToken
-          )
+          // Process each tool call and collect results
+          const toolResults: ToolResultPart[] = []
+          for (const toolCall of result.toolCalls) {
+            toolCallCount++
+            const args = toolCall.input as Record<string, unknown>
 
-          // Check if this is the final brand data report
-          if (toolCall.toolName === 'report_brand_data' && (toolResult as { success?: boolean }).success) {
-            brandData = (toolResult as { data: Record<string, unknown> }).data
+            // Send tool call event
+            await sendEvent('tool_call', {
+              tool: toolCall.toolName,
+              args,
+              description: getToolDescription(toolCall.toolName, args),
+            })
+
+            const toolResult = await executeToolFn(
+              toolCall.toolName,
+              args,
+              repo,
+              accessToken
+            )
+
+            // Send tool result summary
+            if (toolCall.toolName === 'list_directory') {
+              const items = toolResult as { name: string; type: string }[]
+              const dirs = items.filter(i => i.type === 'dir').map(i => i.name)
+              const files = items.filter(i => i.type === 'file').map(i => i.name)
+              await sendEvent('tool_result', {
+                tool: toolCall.toolName,
+                summary: `Found ${dirs.length} folders, ${files.length} files`,
+                dirs: dirs.slice(0, 10),
+                files: files.slice(0, 10),
+              })
+            } else if (toolCall.toolName === 'read_file') {
+              const content = toolResult as string | null
+              await sendEvent('tool_result', {
+                tool: toolCall.toolName,
+                summary: content ? `Read ${content.length} characters` : 'File not found',
+              })
+            } else if (toolCall.toolName === 'get_asset_url') {
+              await sendEvent('tool_result', {
+                tool: toolCall.toolName,
+                summary: `Asset URL generated`,
+                asset: toolResult,
+              })
+            }
+
+            // Check if this is the final brand data report
+            if (toolCall.toolName === 'report_brand_data' && (toolResult as { success?: boolean }).success) {
+              brandData = (toolResult as { data: Record<string, unknown> }).data
+              await sendEvent('brand_found', { brandData })
+            }
+
+            // Add tool result to array using SDK's ToolResultPart format
+            toolResults.push({
+              type: 'tool-result',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              output: {
+                type: 'text',
+                value: JSON.stringify(toolResult),
+              },
+            })
           }
 
-          // Add tool result to array using SDK's ToolResultPart format
-          toolResults.push({
-            type: 'tool-result',
-            toolCallId: toolCall.toolCallId,
-            toolName: toolCall.toolName,
-            output: {
-              type: 'text',
-              value: JSON.stringify(toolResult),
-            },
+          // Add all tool results as a single tool message
+          messages.push({
+            role: 'tool',
+            content: toolResults,
           })
+        } else {
+          // No tool calls, we're done
+          break
         }
 
-        // Add all tool results as a single tool message
-        messages.push({
-          role: 'tool',
-          content: toolResults,
+        // If we got brand data, we're done
+        if (brandData) {
+          break
+        }
+      }
+
+      if (brandData) {
+        await sendEvent('complete', {
+          success: true,
+          brandData,
+          toolCalls: toolCallCount,
         })
       } else {
-        // No tool calls, we're done
-        break
+        await sendEvent('complete', {
+          success: false,
+          error: 'Could not extract complete brand data',
+          toolCalls: toolCallCount,
+        })
       }
-
-      // If we got brand data, we're done
-      if (brandData) {
-        break
-      }
-    }
-
-    if (brandData) {
-      return NextResponse.json({
-        success: true,
-        brandData,
-        toolCalls: toolCallCount,
+    } catch (error) {
+      console.error('Repo crawler error:', error)
+      await sendEvent('error', {
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
       })
+    } finally {
+      await writer.close()
     }
-
-    return NextResponse.json({
-      success: false,
-      error: 'Could not extract complete brand data',
-      toolCalls: toolCallCount,
-    })
-  } catch (error) {
-    console.error('Repo crawler error:', error)
-    return NextResponse.json(
-      { error: 'An unexpected error occurred while crawling the repository' },
-      { status: 500 }
-    )
   }
+
+  // Start processing in the background
+  processRepo()
+
+  return new Response(stream.readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
 }

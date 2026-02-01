@@ -155,42 +155,128 @@ export default function NewBrandPage() {
     })
     setIsLoading(true)
 
-    try {
-      // Use the agentic repo crawler
-      updateGeneratingMessage(`Connecting to **${repo.fullName}**...\n\n\`AI agent exploring repository structure...\``)
+    // Track progress log for streaming updates
+    const progressLog: string[] = []
 
-      const crawlerResponse = await fetch('/api/ai/repo-crawler', {
+    const updateProgress = (line: string) => {
+      progressLog.push(line)
+      // Keep only last 8 lines for display
+      const displayLines = progressLog.slice(-8)
+      updateGeneratingMessage(
+        `Exploring **${repo.fullName}**...\n\n${displayLines.map(l => `\`${l}\``).join('\n')}`
+      )
+    }
+
+    try {
+      // Use the streaming agentic repo crawler
+      const response = await fetch('/api/ai/repo-crawler', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ repo: repo.fullName }),
       })
 
-      if (!crawlerResponse.ok) {
-        throw new Error('Failed to analyze repository')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to analyze repository')
       }
 
-      const crawlerData = await crawlerResponse.json()
+      // Handle SSE stream
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('No response body')
+      }
 
-      if (crawlerData.success && crawlerData.brandData) {
-        const brandData = crawlerData.brandData
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let brandData: Record<string, unknown> | null = null
+      let toolCalls = 0
 
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            const eventType = line.slice(7)
+            const dataLineIndex = lines.indexOf(line) + 1
+            if (dataLineIndex < lines.length && lines[dataLineIndex].startsWith('data: ')) {
+              try {
+                const data = JSON.parse(lines[dataLineIndex].slice(6))
+
+                switch (eventType) {
+                  case 'status':
+                    updateProgress(data.message)
+                    break
+                  case 'thinking':
+                    updateProgress(`Agent thinking... (iteration ${data.iteration})`)
+                    break
+                  case 'thought':
+                    if (data.text) {
+                      updateProgress(`💭 ${data.text.slice(0, 60)}${data.text.length > 60 ? '...' : ''}`)
+                    }
+                    break
+                  case 'tool_call':
+                    updateProgress(`→ ${data.description}`)
+                    break
+                  case 'tool_result':
+                    if (data.summary) {
+                      updateProgress(`  ✓ ${data.summary}`)
+                    }
+                    break
+                  case 'brand_found':
+                    updateProgress('✨ Brand data compiled!')
+                    brandData = data.brandData
+                    break
+                  case 'complete':
+                    toolCalls = data.toolCalls || 0
+                    if (data.success && data.brandData) {
+                      brandData = data.brandData
+                    }
+                    break
+                  case 'error':
+                    throw new Error(data.message || 'Unknown error')
+                }
+              } catch {
+                // Skip malformed JSON
+              }
+            }
+          } else if (line.startsWith('data: ')) {
+            // Handle data-only lines (for events parsed incorrectly)
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.message) {
+                updateProgress(data.message)
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+          }
+        }
+      }
+
+      if (brandData) {
         // Update form with extracted data
         setFormData(prev => ({
           ...prev,
-          name: brandData.name || prev.name,
-          description: brandData.description || prev.description,
-          tagline: brandData.tagline || prev.tagline,
-          website_url: brandData.website_url || prev.website_url,
-          primaryColor: brandData.primaryColor || prev.primaryColor,
-          secondaryColor: brandData.secondaryColor || prev.secondaryColor,
-          accentColor: brandData.accentColor || prev.accentColor,
-          logoUrl: brandData.logos?.[0]?.url || prev.logoUrl,
+          name: (brandData.name as string) || prev.name,
+          description: (brandData.description as string) || prev.description,
+          tagline: (brandData.tagline as string) || prev.tagline,
+          website_url: (brandData.website_url as string) || prev.website_url,
+          primaryColor: (brandData.primaryColor as string) || prev.primaryColor,
+          secondaryColor: (brandData.secondaryColor as string) || prev.secondaryColor,
+          accentColor: (brandData.accentColor as string) || prev.accentColor,
+          logoUrl: (brandData.logos as { path: string; url: string }[])?.[0]?.url || prev.logoUrl,
           githubRepo: repo.fullName,
         }))
 
         // Set available logos
-        if (brandData.logos && brandData.logos.length > 0) {
-          setAvailableLogos(brandData.logos.map((logo: { path: string; url: string }) => ({
+        const logos = brandData.logos as { path: string; url: string }[] | undefined
+        if (logos && logos.length > 0) {
+          setAvailableLogos(logos.map(logo => ({
             path: logo.path,
             downloadUrl: logo.url,
           })))
@@ -198,9 +284,10 @@ export default function NewBrandPage() {
 
         // Build sources annotation
         let sourcesText = ''
-        if (brandData.sources) {
+        const sources = brandData.sources as Record<string, string> | undefined
+        if (sources) {
           sourcesText = '\n\n**Sources:**'
-          Object.entries(brandData.sources).forEach(([key, value]) => {
+          Object.entries(sources).forEach(([key, value]) => {
             if (value && typeof value === 'string') {
               sourcesText += `\n• ${key}: ${value}`
             }
@@ -208,19 +295,21 @@ export default function NewBrandPage() {
         }
 
         // Add font info if available
-        if (brandData.fonts) {
+        const fonts = brandData.fonts as { primary?: string; secondary?: string; mono?: string } | undefined
+        if (fonts) {
           sourcesText += '\n\n**Fonts detected:**'
-          if (brandData.fonts.primary) sourcesText += `\n• Primary: ${brandData.fonts.primary}`
-          if (brandData.fonts.secondary && brandData.fonts.secondary !== brandData.fonts.primary) {
-            sourcesText += `\n• Secondary: ${brandData.fonts.secondary}`
+          if (fonts.primary) sourcesText += `\n• Primary: ${fonts.primary}`
+          if (fonts.secondary && fonts.secondary !== fonts.primary) {
+            sourcesText += `\n• Secondary: ${fonts.secondary}`
           }
-          if (brandData.fonts.mono) sourcesText += `\n• Mono: ${brandData.fonts.mono}`
+          if (fonts.mono) sourcesText += `\n• Mono: ${fonts.mono}`
         }
 
         // Add all colors if available
-        if (brandData.allColors) {
+        const allColors = brandData.allColors as Record<string, string> | undefined
+        if (allColors) {
           sourcesText += '\n\n**All colors found:**'
-          Object.entries(brandData.allColors).forEach(([key, value]) => {
+          Object.entries(allColors).forEach(([key, value]) => {
             if (value && typeof value === 'string') {
               sourcesText += `\n• ${key}: ${value}`
             }
@@ -228,7 +317,7 @@ export default function NewBrandPage() {
         }
 
         // Add exploration stats
-        sourcesText += `\n\n\`AI agent made ${crawlerData.toolCalls} tool calls to explore the repo\``
+        sourcesText += `\n\n\`AI agent made ${toolCalls} tool calls to explore the repo\``
 
         // Remove the "generating" message and add result
         setMessages(prev => prev.filter(m => m.action !== 'generating'))
@@ -241,14 +330,14 @@ export default function NewBrandPage() {
         setMobileTab('preview')
       } else {
         // Fallback if crawler didn't find complete data
-        throw new Error(crawlerData.error || 'Could not extract brand data')
+        throw new Error('Could not extract brand data')
       }
     } catch (error) {
       console.error('Error:', error)
       setMessages(prev => prev.filter(m => m.action !== 'generating'))
       addMessage({
         role: 'assistant',
-        content: `I had trouble analyzing the repository. Let's set up your brand manually instead.\n\nWhat's your **brand name**?`,
+        content: `I had trouble analyzing the repository: ${error instanceof Error ? error.message : 'Unknown error'}\n\nLet's set up your brand manually instead.\n\nWhat's your **brand name**?`,
       })
     } finally {
       setIsLoading(false)
