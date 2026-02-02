@@ -14,10 +14,10 @@ export async function GET() {
 
     const supabase = createAdminClient()
 
-    // Get user from Supabase
+    // Get user from Supabase (include role for super_admin check)
     const { data: user } = await supabase
       .from('users')
-      .select('id')
+      .select('id, role')
       .eq('email', session.user.email)
       .single()
 
@@ -60,16 +60,19 @@ export async function GET() {
       .limit(1)
       .single()
 
+    // Super admins get unlimited credits
+    const isSuperAdmin = user.role === 'super_admin'
+
     const billingState: BillingState = {
       subscription: subscription || null,
       credits: {
-        remaining: creditBalance?.credits_remaining || 0,
+        remaining: isSuperAdmin ? 999999 : (creditBalance?.credits_remaining || 0),
         used: creditBalance?.credits_used || 0,
-        total: subscription?.plan?.monthly_credits || 0,
+        total: isSuperAdmin ? 999999 : (subscription?.plan?.monthly_credits || 0),
         periodEnd: creditBalance?.period_end || null,
       },
-      isSubscribed: !!subscription && subscription.status === 'active',
-      canGenerate: (creditBalance?.credits_remaining || 0) > 0,
+      isSubscribed: isSuperAdmin || (!!subscription && subscription.status === 'active'),
+      canGenerate: isSuperAdmin || (creditBalance?.credits_remaining || 0) > 0,
     }
 
     return NextResponse.json(billingState)
