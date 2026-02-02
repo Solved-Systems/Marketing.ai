@@ -1,10 +1,11 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
 import fs from 'fs'
 import { bundle } from '@remotion/bundler'
 import { renderMedia, selectComposition } from '@remotion/renderer'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const app = express()
 app.use(cors())
@@ -12,11 +13,20 @@ app.use(express.json())
 
 const PORT = process.env.PORT || 10000
 
-// Supabase client for storing rendered videos
-const supabase = createClient(
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+// Lazy-initialize Supabase client
+let supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!url || !key) {
+      throw new Error('Supabase credentials not configured')
+    }
+    supabase = createClient(url, key)
+  }
+  return supabase
+}
 
 // Store for tracking render jobs
 const renderJobs = new Map<string, {
@@ -137,7 +147,7 @@ async function renderVideo(
     const fileBuffer = fs.readFileSync(outputPath)
     const fileName = `videos/${jobId}.mp4`
 
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await getSupabase().storage
       .from('renders')
       .upload(fileName, fileBuffer, {
         contentType: 'video/mp4',
@@ -150,7 +160,7 @@ async function renderVideo(
     }
 
     // Get public URL
-    const { data: urlData } = supabase.storage
+    const { data: urlData } = getSupabase().storage
       .from('renders')
       .getPublicUrl(fileName)
 
@@ -158,7 +168,7 @@ async function renderVideo(
 
     // Update video record in database if videoId was provided
     if (jobId.startsWith('job-') === false) {
-      await supabase
+      await getSupabase()
         .from('videos')
         .update({
           status: 'completed',
@@ -188,7 +198,7 @@ async function renderVideo(
 
     // Update database status if this was a real video
     if (jobId.startsWith('job-') === false) {
-      await supabase
+      await getSupabase()
         .from('videos')
         .update({
           status: 'failed',
