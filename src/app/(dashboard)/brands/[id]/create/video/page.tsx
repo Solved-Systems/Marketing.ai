@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { AIChatAssistant } from '@/components/ui/ai-chat-assistant'
 import { VideoPreview } from '@/components/video/VideoPreview'
-import { ArrowLeft, Video, Loader2, Sparkles, Play, Download, CheckCircle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Video, Loader2, Sparkles, Play, Download, CheckCircle, AlertCircle, Wand2 } from 'lucide-react'
 import { useCredits } from '@/hooks/use-credits'
 import { VIDEO_TIERS, getVideoGenerationType, getCreditCost } from '@/lib/billing/models'
 import type { ModelQuality } from '@/lib/billing/models'
@@ -35,9 +35,13 @@ interface VideoFormData {
 interface Brand {
   id: string
   name: string
+  description: string | null
+  tagline: string | null
   primary_color: string | null
   secondary_color: string | null
   accent_color: string | null
+  website_url: string | null
+  github_repo: string | null
 }
 
 const formFields = [
@@ -79,6 +83,7 @@ export default function CreateVideoPage({
   const [videoId, setVideoId] = useState<string | null>(null)
   const [renderProgress, setRenderProgress] = useState(0)
   const [outputUrl, setOutputUrl] = useState<string | null>(null)
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
   const { remaining: credits, refetch: refreshCredits, canAfford: checkCanAfford } = useCredits()
 
   const [formData, setFormData] = useState<VideoFormData>({
@@ -147,6 +152,99 @@ export default function CreateVideoPage({
       if (newData.title && newData.template) {
         setShowPreview(true)
       }
+    }
+  }
+
+  const handleGenerateWithAI = async () => {
+    if (!formData.template) {
+      setErrorMessage('Please select a template first')
+      setGenerationStatus('error')
+      return
+    }
+
+    if (!brand) {
+      setErrorMessage('Brand data not loaded')
+      setGenerationStatus('error')
+      return
+    }
+
+    setIsGeneratingAI(true)
+    setErrorMessage('')
+
+    const templateLabels: Record<string, string> = {
+      feature: 'Feature Announcement',
+      product: 'Product Demo',
+      social: 'Social Teaser',
+      release: 'Release Notes',
+    }
+
+    const prompt = `Generate video content for a "${templateLabels[formData.template]}" marketing video.
+
+Brand Information:
+- Name: ${brand.name}
+- Description: ${brand.description || 'Not provided'}
+- Tagline: ${brand.tagline || 'Not provided'}
+- Website: ${brand.website_url || 'Not provided'}
+
+Video Settings:
+- Template: ${templateLabels[formData.template]}
+- Duration: ${formData.duration}
+- Style: ${formData.style}
+
+Generate compelling marketing content that fits this template. Return your response as a JSON object with these exact fields:
+{
+  "title": "A catchy, impactful video title (max 50 characters)",
+  "description": "A brief description of what the video communicates (1-2 sentences)",
+  "features": "3-5 key features or points to highlight, one per line",
+  "callToAction": "A clear call to action (e.g., 'Get Started Free', 'Learn More')"
+}
+
+Only return the JSON object, no other text.`
+
+    try {
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: prompt }],
+          system: 'You are a marketing expert that creates compelling video content. Always respond with valid JSON only.',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate content')
+      }
+
+      const data = await response.json()
+
+      // Parse the JSON response
+      let parsed
+      try {
+        // Try to extract JSON from the response
+        const jsonMatch = data.content.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0])
+        } else {
+          throw new Error('No JSON found in response')
+        }
+      } catch {
+        console.error('Failed to parse AI response:', data.content)
+        throw new Error('Failed to parse AI response')
+      }
+
+      // Update form fields
+      if (parsed.title) handleFieldUpdate('title', parsed.title)
+      if (parsed.description) handleFieldUpdate('description', parsed.description)
+      if (parsed.features) handleFieldUpdate('features', parsed.features)
+      if (parsed.callToAction) handleFieldUpdate('callToAction', parsed.callToAction)
+
+      setShowPreview(true)
+    } catch (error) {
+      console.error('AI generation error:', error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to generate with AI')
+      setGenerationStatus('error')
+    } finally {
+      setIsGeneratingAI(false)
     }
   }
 
@@ -265,11 +363,30 @@ export default function CreateVideoPage({
 
           {/* Video Details */}
           <Card className="terminal-border bg-card/50">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-mono text-sm flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
                 video_config
               </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateWithAI}
+                disabled={isGeneratingAI || !formData.template}
+                className="h-8"
+              >
+                {isGeneratingAI ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="h-3 w-3 mr-1" />
+                    Auto-fill with AI
+                  </>
+                )}
+              </Button>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Title */}
