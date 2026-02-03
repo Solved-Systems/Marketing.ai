@@ -114,12 +114,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<GrokVideo
       prompt, // Store the full prompt
       template, // Required field
       duration, // Required field
+      style: 'Modern' as const, // Default style for Grok
+      call_to_action: '', // Not used for Grok
+      features: [], // Not used for Grok
       engine: 'grok-imagine', // Track which engine was used
       status: 'processing' as const,
       quality,
       aspect_ratio: aspectRatio,
       resolution,
+      primary_color: brand.primary_color || '#6366f1',
+      secondary_color: brand.secondary_color || '#8b5cf6',
+      accent_color: brand.accent_color || '#22c55e',
       brand_name: brand.name,
+      created_at: new Date().toISOString(),
       ...(imageUrl && { source_image_url: imageUrl }),
     }
 
