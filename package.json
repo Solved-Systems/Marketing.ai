@@ -9,9 +9,7 @@
     "lint": "eslint",
     "remotion:studio": "remotion studio src/remotion/index.tsx",
     "remotion:render": "remotion render src/remotion/index.tsx",
-    "server": "tsx server/index.ts",
-    "server:build": "tsc server/index.ts --outDir dist/server --esModuleInterop --module NodeNext --moduleResolution NodeNext",
-    "server:start": "node dist/server/index.js"
+    "lambda:deploy": "npx remotion lambda functions deploy && npx remotion lambda sites create src/remotion/index.tsx --site-name mrktcmd"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.30",
@@ -27,6 +25,8 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@remotion/bundler": "^4.0.417",
     "@remotion/cli": "^4.0.417",
+    "@remotion/lambda": "^4.0.417",
+    "@remotion/lambda-client": "^4.0.417",
     "@remotion/player": "^4.0.417",
     "@remotion/renderer": "^4.0.417",
     "@stripe/stripe-js": "^8.7.0",
@@ -34,9 +34,7 @@
     "ai": "^6.0.61",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "cors": "^2.8.6",
     "dotenv": "^17.2.3",
-    "express": "^5.2.1",
     "lucide-react": "^0.563.0",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
@@ -44,12 +42,11 @@
     "react-dom": "19.2.3",
     "remotion": "^4.0.417",
     "stripe": "^20.3.0",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "zod": "^3.22.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

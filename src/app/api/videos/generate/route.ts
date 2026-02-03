@@ -4,8 +4,58 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { deductCredits, hasEnoughCredits } from '@/lib/billing/credits'
 import { getVideoGenerationType } from '@/lib/billing/models'
 import type { ModelQuality } from '@/lib/billing/models'
+import { startLambdaRender, checkLambdaProgress } from '@/lib/remotion/lambda'
 
-const RENDER_SERVER_URL = process.env.RENDER_SERVER_URL || 'https://marketing-ai-xy6r.onrender.com'
+// Background polling to update video status when Lambda render completes
+async function pollLambdaCompletion(videoId: string, renderId: string, bucketName: string) {
+  const supabase = createAdminClient()
+  const maxAttempts = 150 // ~5 minutes at 2s intervals
+  let attempts = 0
+
+  while (attempts < maxAttempts) {
+    attempts++
+    await new Promise(resolve => setTimeout(resolve, 2000))
+
+    try {
+      const progress = await checkLambdaProgress(renderId, bucketName)
+
+      if (progress.fatalErrorEncountered) {
+        await supabase
+          .from('videos')
+          .update({
+            status: 'failed',
+            error_message: progress.errors?.join(', ') || 'Render failed',
+          })
+          .eq('id', videoId)
+        return
+      }
+
+      if (progress.done && progress.outputFile) {
+        await supabase
+          .from('videos')
+          .update({
+            status: 'completed',
+            output_url: progress.outputFile,
+            rendered_at: new Date().toISOString(),
+          })
+          .eq('id', videoId)
+        console.log(`Video ${videoId} completed: ${progress.outputFile}`)
+        return
+      }
+    } catch (error) {
+      console.error(`Poll error for ${videoId}:`, error)
+    }
+  }
+
+  // Timeout
+  await supabase
+    .from('videos')
+    .update({
+      status: 'failed',
+      error_message: 'Render timed out',
+    })
+    .eq('id', videoId)
+}
 
 export interface VideoGenerationRequest {
   brandId: string
@@ -198,30 +248,38 @@ export async function POST(request: NextRequest): Promise<NextResponse<VideoGene
       style,
     }
 
-    // Send render request to the Render server
+    // Start Lambda render
     try {
-      const renderResponse = await fetch(`${RENDER_SERVER_URL}/render`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          compositionId,
-          inputProps,
-          videoId,
-        }),
-      })
+      const { renderId, bucketName } = await startLambdaRender(compositionId, inputProps)
+      console.log('Lambda render started:', renderId)
 
-      if (!renderResponse.ok) {
-        const errorData = await renderResponse.json().catch(() => ({}))
-        console.error('Render server error:', errorData)
-        // Don't fail the request - the video is created and credits are deducted
-        // The render will be retried or marked as failed
-      } else {
-        const renderData = await renderResponse.json()
-        console.log('Render job started:', renderData.jobId)
+      // Store render metadata for status checking
+      if (video?.id) {
+        await supabase
+          .from('videos')
+          .update({
+            render_id: renderId,
+            render_bucket: bucketName,
+          })
+          .eq('id', video.id)
       }
+
+      // Start background polling to update status when complete
+      pollLambdaCompletion(videoId, renderId, bucketName).catch(err => {
+        console.error('Lambda polling error:', err)
+      })
     } catch (renderError) {
-      // Log but don't fail - the render server might be waking up (free tier)
-      console.error('Failed to contact render server:', renderError)
+      console.error('Failed to start Lambda render:', renderError)
+      // Update video status to failed
+      if (video?.id) {
+        await supabase
+          .from('videos')
+          .update({
+            status: 'failed',
+            error_message: renderError instanceof Error ? renderError.message : 'Lambda render failed',
+          })
+          .eq('id', video.id)
+      }
     }
 
     return NextResponse.json({
@@ -276,24 +334,19 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (video) {
-      return NextResponse.json(video)
-    }
-
-    // If not in database, check render server for status
-    try {
-      const statusResponse = await fetch(`${RENDER_SERVER_URL}/render/${videoId}`)
-      if (statusResponse.ok) {
-        const statusData = await statusResponse.json()
-        return NextResponse.json({
-          id: videoId,
-          status: statusData.status,
-          progress: statusData.progress,
-          output_url: statusData.outputUrl,
-          error_message: statusData.error,
-        })
+      // If video is processing and has Lambda render info, check progress
+      if (video.status === 'processing' && video.render_id && video.render_bucket) {
+        try {
+          const progress = await checkLambdaProgress(video.render_id, video.render_bucket)
+          return NextResponse.json({
+            ...video,
+            render_progress: progress.progress,
+          })
+        } catch {
+          // Lambda check failed, return stored data
+        }
       }
-    } catch {
-      // Render server not available
+      return NextResponse.json(video)
     }
 
     return NextResponse.json({ error: 'Video not found' }, { status: 404 })

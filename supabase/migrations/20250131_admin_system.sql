@@ -4,24 +4,28 @@
 -- ============================================
 -- 1. USER ROLE ENUM
 -- ============================================
-CREATE TYPE user_role AS ENUM ('user', 'admin', 'super_admin');
+DO $$ BEGIN
+  CREATE TYPE user_role AS ENUM ('user', 'admin', 'super_admin');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================
 -- 2. ADD ROLE AND LOCK COLUMNS TO USERS
 -- ============================================
-ALTER TABLE users ADD COLUMN role user_role NOT NULL DEFAULT 'user';
-ALTER TABLE users ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE users ADD COLUMN locked_at TIMESTAMP WITH TIME ZONE;
-ALTER TABLE users ADD COLUMN locked_by UUID REFERENCES users(id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role user_role NOT NULL DEFAULT 'user';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_by UUID REFERENCES users(id);
 
 -- Index for role-based queries
-CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_users_is_locked ON users(is_locked) WHERE is_locked = true;
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_is_locked ON users(is_locked) WHERE is_locked = true;
 
 -- ============================================
 -- 3. INVITATIONS TABLE
 -- ============================================
-CREATE TABLE invitations (
+CREATE TABLE IF NOT EXISTS invitations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL,
   role user_role NOT NULL DEFAULT 'user',
@@ -33,15 +37,15 @@ CREATE TABLE invitations (
 );
 
 -- Indexes for invitations
-CREATE INDEX idx_invitations_email ON invitations(email);
-CREATE INDEX idx_invitations_token ON invitations(token);
-CREATE INDEX idx_invitations_expires ON invitations(expires_at);
-CREATE INDEX idx_invitations_pending ON invitations(accepted_at) WHERE accepted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
+CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
+CREATE INDEX IF NOT EXISTS idx_invitations_expires ON invitations(expires_at);
+CREATE INDEX IF NOT EXISTS idx_invitations_pending ON invitations(accepted_at) WHERE accepted_at IS NULL;
 
 -- ============================================
 -- 4. SYSTEM SETTINGS TABLE
 -- ============================================
-CREATE TABLE system_settings (
+CREATE TABLE IF NOT EXISTS system_settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   key TEXT UNIQUE NOT NULL,
   value JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -51,12 +55,12 @@ CREATE TABLE system_settings (
 );
 
 -- Index for key lookups
-CREATE INDEX idx_system_settings_key ON system_settings(key);
+CREATE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings(key);
 
 -- ============================================
 -- 5. ADMIN AUDIT LOG TABLE
 -- ============================================
-CREATE TABLE admin_audit_log (
+CREATE TABLE IF NOT EXISTS admin_audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id UUID NOT NULL REFERENCES users(id),
   action TEXT NOT NULL,
@@ -67,10 +71,10 @@ CREATE TABLE admin_audit_log (
 );
 
 -- Indexes for audit log queries
-CREATE INDEX idx_admin_audit_log_admin ON admin_audit_log(admin_id);
-CREATE INDEX idx_admin_audit_log_action ON admin_audit_log(action);
-CREATE INDEX idx_admin_audit_log_target ON admin_audit_log(target_type, target_id);
-CREATE INDEX idx_admin_audit_log_created ON admin_audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_admin ON admin_audit_log(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_action ON admin_audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_target ON admin_audit_log(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created ON admin_audit_log(created_at DESC);
 
 -- ============================================
 -- 6. ROW LEVEL SECURITY POLICIES
@@ -82,12 +86,15 @@ ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_audit_log ENABLE ROW LEVEL SECURITY;
 
 -- Service role full access for all new tables
+DROP POLICY IF EXISTS "Service role full access invitations" ON invitations;
 CREATE POLICY "Service role full access invitations" ON invitations
   FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
 
+DROP POLICY IF EXISTS "Service role full access system_settings" ON system_settings;
 CREATE POLICY "Service role full access system_settings" ON system_settings
   FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
 
+DROP POLICY IF EXISTS "Service role full access admin_audit_log" ON admin_audit_log;
 CREATE POLICY "Service role full access admin_audit_log" ON admin_audit_log
   FOR ALL USING (auth.jwt() ->> 'role' = 'service_role');
 
@@ -133,6 +140,7 @@ ON CONFLICT (key) DO NOTHING;
 -- ============================================
 -- 8. UPDATED_AT TRIGGER FOR SYSTEM SETTINGS
 -- ============================================
+DROP TRIGGER IF EXISTS update_system_settings_updated_at ON system_settings;
 CREATE TRIGGER update_system_settings_updated_at
   BEFORE UPDATE ON system_settings
   FOR EACH ROW

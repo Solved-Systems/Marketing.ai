@@ -1,5 +1,5 @@
 import React from 'react'
-import { Composition } from 'remotion'
+import { Composition, registerRoot } from 'remotion'
 import { FeatureAnnouncement, type FeatureAnnouncementProps } from './compositions/FeatureAnnouncement'
 import { ProductDemo } from './compositions/ProductDemo'
 import { SocialTeaser } from './compositions/SocialTeaser'
@@ -159,6 +159,9 @@ export const RemotionRoot: React.FC = () => {
     </>
   )
 }
+
+// Register root for Remotion
+registerRoot(RemotionRoot)
 
 // Export for use elsewhere
 export { FeatureAnnouncement, ProductDemo, SocialTeaser, ReleaseNotes }
