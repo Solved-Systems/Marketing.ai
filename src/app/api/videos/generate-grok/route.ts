@@ -113,6 +113,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GrokVideo
       description: prompt,
       prompt, // Store the full prompt
       template, // Required field
+      duration, // Required field
       engine: 'grok-imagine', // Track which engine was used
       status: 'processing' as const,
       quality,
