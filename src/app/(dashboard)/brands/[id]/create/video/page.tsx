@@ -588,10 +588,11 @@ Return ONLY the prompt text, no JSON or extra formatting. The prompt should be 2
 
     try {
       const endpoint = engine === 'grok' ? '/api/videos/generate-grok' : '/api/videos/generate'
-      const body = engine === 'grok' 
+      const body = engine === 'grok'
         ? {
             brandId: id,
             prompt: grokFormData.prompt,
+            template: grokFormData.template || 'social', // Default to social if not selected
             duration: grokFormData.duration,
             aspectRatio: grokFormData.aspectRatio,
             resolution: grokFormData.resolution,

@@ -122,6 +122,8 @@ export default function NewBrandPage() {
   })
   const [showPreview, setShowPreview] = useState(false)
   const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
+  const [availableFonts, setAvailableFonts] = useState<{ path: string; downloadUrl: string; name: string }[]>([])
+  const [detectedFontNames, setDetectedFontNames] = useState<string[]>([])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -214,6 +216,15 @@ export default function NewBrandPage() {
       // Show public assets found
       const publicAssets = repoInfo.publicAssets || []
       const fontAssets = publicAssets.filter(a => a.type === 'font')
+
+      // Store font files for display
+      if (fontAssets.length > 0) {
+        setAvailableFonts(fontAssets.map(f => ({
+          path: f.path,
+          downloadUrl: f.downloadUrl,
+          name: f.path.split('/').pop()?.replace(/\.(woff2?|ttf|otf|eot)$/i, '') || 'Unknown'
+        })))
+      }
       const otherAssets = publicAssets.filter(a => a.type === 'other')
 
       let statusMsg = `Connecting to **${repo.fullName}**...\n\n\`found: ${foundItems.join(', ')}\``
@@ -370,11 +381,22 @@ CRITICAL RULES:
         // Add font info if available
         if (parsed.fonts) {
           sourcesText += '\n\n**Fonts detected:**'
-          if (parsed.fonts.primary) sourcesText += `\n• Primary: ${parsed.fonts.primary}`
+          const detectedFonts: string[] = []
+          if (parsed.fonts.primary) {
+            sourcesText += `\n• Primary: ${parsed.fonts.primary}`
+            detectedFonts.push(parsed.fonts.primary)
+          }
           if (parsed.fonts.secondary && parsed.fonts.secondary !== parsed.fonts.primary) {
             sourcesText += `\n• Secondary: ${parsed.fonts.secondary}`
+            detectedFonts.push(parsed.fonts.secondary)
           }
-          if (parsed.fonts.mono) sourcesText += `\n• Mono: ${parsed.fonts.mono}`
+          if (parsed.fonts.mono) {
+            sourcesText += `\n• Mono: ${parsed.fonts.mono}`
+            detectedFonts.push(parsed.fonts.mono)
+          }
+          if (detectedFonts.length > 0) {
+            setDetectedFontNames(detectedFonts)
+          }
         }
 
         // Add all colors if available
@@ -833,6 +855,46 @@ If the brand looks complete and they seem satisfied, let them know they can save
                     </div>
                   </div>
                 </div>
+
+                {/* Fonts Section */}
+                {(detectedFontNames.length > 0 || availableFonts.length > 0) && (
+                  <div>
+                    <p className="font-mono text-xs text-muted-foreground mb-2">fonts</p>
+                    <div className="space-y-2">
+                      {/* Detected font names from styles */}
+                      {detectedFontNames.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {detectedFontNames.map((font, index) => (
+                            <div
+                              key={index}
+                              className="px-3 py-1.5 bg-muted rounded-md border border-border"
+                              style={{ fontFamily: font }}
+                            >
+                              <span className="text-sm">{font}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Font files found in repo */}
+                      {availableFonts.length > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          <span className="font-mono">files:</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {availableFonts.map((font, index) => (
+                              <span
+                                key={index}
+                                className="px-2 py-0.5 bg-background rounded border border-border/50 font-mono"
+                                title={font.path}
+                              >
+                                {font.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Colors - Editable */}
                 <div>

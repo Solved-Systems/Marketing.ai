@@ -9,6 +9,7 @@ import { getXAIClient } from '@/lib/xai/client'
 export interface GrokVideoRequest {
   brandId: string
   prompt: string
+  template?: 'feature' | 'product' | 'social' | 'release'
   duration?: number // 1-15 seconds
   aspectRatio?: '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3'
   resolution?: '720p' | '480p'
@@ -38,6 +39,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GrokVideo
     const {
       brandId,
       prompt,
+      template = 'social',
       duration = 5,
       aspectRatio = '16:9',
       resolution = '720p',
@@ -110,6 +112,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<GrokVideo
       title: prompt.slice(0, 100), // Use prompt as title
       description: prompt,
       prompt, // Store the full prompt
+      template, // Required field
       engine: 'grok-imagine', // Track which engine was used
       status: 'processing' as const,
       quality,
