@@ -45,6 +45,7 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  images?: string[] // URLs or data URLs for attached images
   action?: ChatAction
   timestamp: Date
 }

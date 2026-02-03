@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, DragEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -11,6 +11,8 @@ import {
   Upload,
   Image as ImageIcon,
   Play,
+  X,
+  Paperclip,
 } from 'lucide-react'
 import type {
   VideoCreationState,
@@ -40,8 +42,12 @@ export function ChatVideoCreator({
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [pendingImages, setPendingImages] = useState<string[]>([]) // Images to send with next message
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [initialized, setInitialized] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
   const { remaining: credits, canAfford, refetch: refreshCredits } = useCredits()
 
   // Helper to add messages
@@ -55,19 +61,61 @@ export function ChatVideoCreator({
     return newMsg.id
   }, [])
 
-  // Initialize with welcome message
+  // Initialize with welcome message - wait for brand to load
   useEffect(() => {
-    if (messages.length === 0) {
-      const hasLogo = brand?.logo_url
+    if (initialized || !brand) return
+    setInitialized(true)
+
+    const hasLogo = brand.logo_url
+    const hasColors = brand.primary_color && brand.secondary_color
+
+    if (hasLogo && hasColors) {
+      // Brand has logo and colors - skip logo phase and use them
+      const logoAnalysis: LogoAnalysis = {
+        colors: {
+          primary: brand.primary_color!,
+          secondary: brand.secondary_color!,
+          accent: brand.accent_color || brand.primary_color!,
+          dominant: [brand.primary_color!, brand.secondary_color!, brand.accent_color || brand.primary_color!],
+        },
+        style: 'Brand colors from repository',
+        composition: 'Pre-configured brand identity',
+        suggestions: ['Use brand colors for consistency'],
+      }
+
+      // Update state with existing brand assets
+      onStateChange({
+        ...state,
+        logoUrl: brand.logo_url,
+        logoAnalysis,
+        phase: 'background',
+      })
+
       addMessage({
         role: 'assistant',
-        content: hasLogo
-          ? `Let's create a video for **${brand?.name}**!\n\nI see you have a brand logo. Would you like to use it, or upload a different one?`
-          : `Let's create a video for **${brand?.name || 'your brand'}**!\n\nFirst, upload a logo to get started. I'll analyze it to suggest colors and style.`,
-        action: hasLogo ? 'use_brand_logo' : 'upload_logo',
+        content: `Let's create a video for **${brand.name}**!\n\nI found your brand logo and colors. Let me generate some background options.`,
+        action: 'suggest_background',
+      })
+
+      // Auto-generate backgrounds with brand colors
+      setTimeout(() => generateBackgrounds(logoAnalysis), 500)
+    } else if (hasLogo) {
+      // Has logo but no colors - analyze it
+      addMessage({
+        role: 'assistant',
+        content: `Let's create a video for **${brand.name}**!\n\nI found your brand logo. Would you like me to analyze it for colors, or upload a different one?`,
+        action: 'use_brand_logo',
+      })
+    } else {
+      // No logo - ask for upload
+      addMessage({
+        role: 'assistant',
+        content: `Let's create a video for **${brand.name}**!\n\nFirst, upload a logo to get started. I'll analyze it to suggest colors and style.\n\nYou can drag & drop an image here or click the button below.`,
+        action: 'upload_logo',
       })
     }
-  }, [brand, addMessage, messages.length])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand, initialized])
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -92,7 +140,6 @@ export function ChatVideoCreator({
               videoStatus: 'complete',
             })
             clearInterval(pollInterval)
-            // Move to copy phase
             handleGenerateCopy(data.output_url)
           } else if (data.status === 'failed') {
             onStateChange({
@@ -116,7 +163,73 @@ export function ChatVideoCreator({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.videoStatus, state.videoId])
 
-  // Handle logo upload
+  // Drag and drop handlers
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = async (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+    if (files.length > 0) {
+      await handleFilesSelected(files)
+    }
+  }
+
+  // Handle files selected (from input or drag/drop)
+  const handleFilesSelected = async (files: File[]) => {
+    const newImages: string[] = []
+
+    for (const file of files) {
+      // Create preview immediately
+      const reader = new FileReader()
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.readAsDataURL(file)
+      })
+      newImages.push(dataUrl)
+    }
+
+    setPendingImages(prev => [...prev, ...newImages])
+  }
+
+  // Remove a pending image
+  const removePendingImage = (index: number) => {
+    setPendingImages(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Upload image to server and get URL
+  const uploadImage = async (dataUrl: string): Promise<string> => {
+    // Convert data URL to blob
+    const response = await fetch(dataUrl)
+    const blob = await response.blob()
+    const file = new File([blob], 'image.png', { type: blob.type })
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const uploadResponse = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    })
+
+    const data = await uploadResponse.json()
+    if (!uploadResponse.ok) throw new Error(data.error || 'Upload failed')
+    return data.url
+  }
+
+  // Handle logo upload (single image for logo phase)
   const handleLogoUpload = async (file: File) => {
     setIsUploading(true)
     addMessage({ role: 'user', content: `Uploading ${file.name}...` })
@@ -157,13 +270,44 @@ export function ChatVideoCreator({
 
     addMessage({ role: 'user', content: 'Use brand logo' })
     onStateChange({ ...state, logoUrl: brand.logo_url })
-    addMessage({
-      role: 'assistant',
-      content: 'Using your brand logo! Analyzing colors and style...',
-      action: 'analyzing_logo',
-    })
 
-    await analyzeLogo(brand.logo_url)
+    // If we have brand colors, skip analysis
+    if (brand.primary_color && brand.secondary_color) {
+      const logoAnalysis: LogoAnalysis = {
+        colors: {
+          primary: brand.primary_color,
+          secondary: brand.secondary_color,
+          accent: brand.accent_color || brand.primary_color,
+          dominant: [brand.primary_color, brand.secondary_color, brand.accent_color || brand.primary_color],
+        },
+        style: 'Brand colors from repository',
+        composition: 'Pre-configured brand identity',
+        suggestions: ['Use brand colors for consistency'],
+      }
+
+      onStateChange({
+        ...state,
+        logoUrl: brand.logo_url,
+        logoAnalysis,
+        phase: 'background',
+      })
+
+      addMessage({
+        role: 'assistant',
+        content: `Using your brand logo and colors!\n\n**Colors:** ${brand.primary_color}, ${brand.secondary_color}${brand.accent_color ? `, ${brand.accent_color}` : ''}\n\nGenerating background options...`,
+        action: 'suggest_background',
+      })
+
+      await generateBackgrounds(logoAnalysis)
+    } else {
+      addMessage({
+        role: 'assistant',
+        content: 'Using your brand logo! Analyzing colors and style...',
+        action: 'analyzing_logo',
+      })
+
+      await analyzeLogo(brand.logo_url)
+    }
   }
 
   // Analyze logo with AI
@@ -207,7 +351,6 @@ Respond with ONLY a JSON block:
       const data = await response.json()
       const content = data.content || ''
 
-      // Parse JSON
       const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[1]) as LogoAnalysis
@@ -218,7 +361,6 @@ Respond with ONLY a JSON block:
           phase: 'background',
         })
 
-        // Remove the analyzing message and add result
         setMessages(prev => prev.filter(m => m.action !== 'analyzing_logo'))
         addMessage({
           role: 'assistant',
@@ -226,7 +368,6 @@ Respond with ONLY a JSON block:
           action: 'suggest_background',
         })
 
-        // Auto-generate backgrounds
         await generateBackgrounds(parsed)
       } else {
         throw new Error('Could not parse analysis')
@@ -238,7 +379,6 @@ Respond with ONLY a JSON block:
         role: 'assistant',
         content: `I had trouble analyzing the logo. Let me generate some background options anyway.`,
       })
-      // Generate backgrounds with default colors
       await generateBackgrounds(null)
     } finally {
       setIsLoading(false)
@@ -255,7 +395,6 @@ Respond with ONLY a JSON block:
     })
 
     try {
-      // First, generate a prompt with AI
       const colors = analysis?.colors || {
         primary: brand?.primary_color || '#6366f1',
         secondary: brand?.secondary_color || '#1a1a1a',
@@ -291,7 +430,6 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
 
       onStateChange({ ...state, backgroundPrompt })
 
-      // Generate images
       const imageResponse = await fetch('/api/images/generate-grok', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -306,7 +444,6 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
 
       const backgroundImages = imageData.images?.map((img: { url: string }) => img.url) || []
 
-      // Remove generating message and show results
       setMessages(prev => prev.filter(m => m.action !== 'generating_backgrounds'))
       onStateChange({
         ...state,
@@ -316,7 +453,7 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
 
       addMessage({
         role: 'assistant',
-        content: `I've generated ${backgroundImages.length} background options. Select one to continue, or describe what you'd like instead.`,
+        content: `I've generated ${backgroundImages.length} background options. Select one in the preview panel, or describe what you'd like instead.`,
         action: 'select_background',
       })
     } catch (error) {
@@ -375,7 +512,6 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
     onStateChange({ ...state, videoStatus: 'generating' })
 
     try {
-      // Generate video prompt
       const promptResponse = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -401,7 +537,6 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
       const promptData = await promptResponse.json()
       const videoPrompt = promptData.content?.trim() || 'Smooth camera pan with subtle particle effects and gentle lighting changes'
 
-      // Generate video
       const response = await fetch('/api/videos/generate-grok', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -428,7 +563,6 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
       })
       refreshCredits()
 
-      // Remove generating message and show status
       setMessages(prev => prev.filter(m => m.action !== 'generating_video'))
       addMessage({
         role: 'assistant',
@@ -524,14 +658,45 @@ Respond with ONLY a JSON block:
     }
   }
 
-  // Handle user input
+  // Handle user input submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isLoading) return
+    if ((!input.trim() && pendingImages.length === 0) || isLoading) return
 
     const userMessage = input.trim()
+    const userImages = [...pendingImages]
     setInput('')
-    addMessage({ role: 'user', content: userMessage })
+    setPendingImages([])
+
+    // Add user message with images
+    addMessage({
+      role: 'user',
+      content: userMessage || (userImages.length > 0 ? `Attached ${userImages.length} image(s)` : ''),
+      images: userImages.length > 0 ? userImages : undefined,
+    })
+
+    // If in logo phase and images attached, treat as logo upload
+    if (state.phase === 'logo' && userImages.length > 0) {
+      setIsUploading(true)
+      try {
+        const uploadedUrl = await uploadImage(userImages[0])
+        onStateChange({ ...state, logoUrl: uploadedUrl })
+        addMessage({
+          role: 'assistant',
+          content: 'Logo received! Analyzing colors and style...',
+          action: 'analyzing_logo',
+        })
+        await analyzeLogo(uploadedUrl)
+      } catch (error) {
+        addMessage({
+          role: 'assistant',
+          content: `Failed to process image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        })
+      } finally {
+        setIsUploading(false)
+      }
+      return
+    }
 
     // Simple command parsing
     const lowerInput = userMessage.toLowerCase()
@@ -551,9 +716,13 @@ Respond with ONLY a JSON block:
       return
     }
 
-    // General AI chat for other queries
+    // General AI chat with images if provided
     setIsLoading(true)
     try {
+      const messagePayload = userImages.length > 0
+        ? { role: 'user' as const, content: userMessage, images: userImages }
+        : { role: 'user' as const, content: userMessage }
+
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -561,8 +730,12 @@ Respond with ONLY a JSON block:
           messages: messages
             .filter(m => m.role !== 'system')
             .slice(-10)
-            .map(m => ({ role: m.role, content: m.content }))
-            .concat([{ role: 'user', content: userMessage }]),
+            .map(m => ({
+              role: m.role,
+              content: m.content,
+              ...(m.images && { images: m.images }),
+            }))
+            .concat([messagePayload]),
           system: `You are helping create a video for ${brand?.name || 'a brand'}. Current phase: ${state.phase}.
 
 Keep responses brief and helpful. If they want to change settings or regenerate content, confirm and explain what will happen.`,
@@ -592,7 +765,23 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
   const creditCost = getCreditCost(getVideoGenerationType('default'))
 
   return (
-    <div className="flex flex-col h-full">
+    <div
+      ref={dropZoneRef}
+      className={`flex flex-col h-full relative ${isDragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 bg-primary/10 z-10 flex items-center justify-center pointer-events-none">
+          <div className="text-center">
+            <Upload className="h-12 w-12 text-primary mx-auto mb-2" />
+            <p className="text-sm font-medium">Drop images here</p>
+          </div>
+        </div>
+      )}
+
       {/* Messages */}
       <ScrollArea className="flex-1 p-4" ref={scrollRef}>
         <div className="space-y-4">
@@ -605,6 +794,19 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
                     : 'bg-muted mr-8'
                 }`}
               >
+                {/* Image attachments */}
+                {msg.images && msg.images.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {msg.images.map((img, idx) => (
+                      <img
+                        key={idx}
+                        src={img}
+                        alt={`Attachment ${idx + 1}`}
+                        className="w-20 h-20 object-cover rounded border border-border"
+                      />
+                    ))}
+                  </div>
+                )}
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               </div>
 
@@ -627,7 +829,7 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
                 </div>
               )}
 
-              {msg.action === 'use_brand_logo' && messages.length <= 2 && (
+              {msg.action === 'use_brand_logo' && !state.logoUrl && (
                 <div className="flex flex-wrap gap-2 mt-3 mr-8">
                   <Button
                     variant="terminal"
@@ -727,20 +929,56 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
         </div>
       </ScrollArea>
 
+      {/* Pending Images Preview */}
+      {pendingImages.length > 0 && (
+        <div className="px-3 py-2 border-t border-border/50 bg-muted/30">
+          <div className="flex gap-2 flex-wrap">
+            {pendingImages.map((img, idx) => (
+              <div key={idx} className="relative group">
+                <img
+                  src={img}
+                  alt={`Pending ${idx + 1}`}
+                  className="w-16 h-16 object-cover rounded border border-border"
+                />
+                <button
+                  type="button"
+                  onClick={() => removePendingImage(idx)}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <form onSubmit={handleSubmit} className="p-3 border-t border-border/50">
         <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="flex-shrink-0"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={
-              state.phase === 'logo'
-                ? 'Describe your brand or ask for help...'
-                : state.phase === 'background'
-                  ? 'Describe the background you want...'
-                  : state.phase === 'video'
-                    ? 'Ask about video settings...'
-                    : 'Ask me anything...'
+              pendingImages.length > 0
+                ? 'Add a message or send images...'
+                : state.phase === 'logo'
+                  ? 'Drop an image or describe your brand...'
+                  : state.phase === 'background'
+                    ? 'Describe the background you want...'
+                    : state.phase === 'video'
+                      ? 'Ask about video settings...'
+                      : 'Ask me anything...'
             }
             disabled={isLoading}
             className="font-mono text-sm"
@@ -748,7 +986,7 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
           <Button
             type="submit"
             size="icon"
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || (!input.trim() && pendingImages.length === 0)}
             variant="terminal"
           >
             <Send className="h-4 w-4" />
@@ -756,7 +994,7 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
         </div>
         {credits !== null && (
           <p className="text-xs text-muted-foreground mt-2 text-center">
-            Credits: {credits}
+            Credits: {credits} • Drag & drop images anywhere
           </p>
         )}
       </form>
@@ -767,9 +1005,17 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
         ref={fileInputRef}
         className="hidden"
         accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+        multiple
         onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) handleLogoUpload(file)
+          const files = Array.from(e.target.files || [])
+          if (files.length > 0) {
+            if (state.phase === 'logo' && files.length === 1) {
+              handleLogoUpload(files[0])
+            } else {
+              handleFilesSelected(files)
+            }
+          }
+          e.target.value = '' // Reset for re-selection
         }}
       />
     </div>
