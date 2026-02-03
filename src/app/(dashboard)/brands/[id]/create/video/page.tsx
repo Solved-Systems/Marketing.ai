@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { AIChatAssistant } from '@/components/ui/ai-chat-assistant'
 import { VideoPreview } from '@/components/video/VideoPreview'
-import { ArrowLeft, Video, Loader2, Sparkles, Play, Download, CheckCircle, AlertCircle, Wand2, Clapperboard, Bot } from 'lucide-react'
+import { ArrowLeft, Video, Loader2, Sparkles, Play, Download, CheckCircle, AlertCircle, Wand2, Clapperboard, Bot, Upload, X, Image as ImageIcon } from 'lucide-react'
 import { useCredits } from '@/hooks/use-credits'
 import { VIDEO_TIERS, getVideoGenerationType, getCreditCost } from '@/lib/billing/models'
 import type { ModelQuality } from '@/lib/billing/models'
@@ -35,6 +35,7 @@ interface VideoFormData {
 }
 
 interface GrokFormData {
+  template: 'feature' | 'product' | 'social' | 'release' | ''
   prompt: string
   duration: number
   aspectRatio: '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3'
@@ -52,6 +53,24 @@ interface Brand {
   accent_color: string | null
   website_url: string | null
   github_repo: string | null
+}
+
+interface GitHubCommit {
+  sha: string
+  message: string
+  date: string
+  url: string
+  author: string
+  authorAvatar?: string
+}
+
+interface GitHubPR {
+  id: number
+  number: number
+  title: string
+  mergedAt: string
+  url: string
+  author: string
 }
 
 const formFields = [
@@ -118,12 +137,20 @@ export default function CreateVideoPage({
 
   // Grok Imagine form data
   const [grokFormData, setGrokFormData] = useState<GrokFormData>({
+    template: '',
     prompt: '',
     duration: 5,
     aspectRatio: '16:9',
     resolution: '720p',
     imageUrl: '',
   })
+  const [isGeneratingGrokAI, setIsGeneratingGrokAI] = useState(false)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [uploadedImagePreview, setUploadedImagePreview] = useState<string | null>(null)
+  const [commits, setCommits] = useState<GitHubCommit[]>([])
+  const [mergedPRs, setMergedPRs] = useState<GitHubPR[]>([])
+  const [selectedContent, setSelectedContent] = useState<'random' | 'latest' | string>('random')
+  const [loadingCommits, setLoadingCommits] = useState(false)
 
   // Fetch brand data for colors
   useEffect(() => {
@@ -140,6 +167,27 @@ export default function CreateVideoPage({
     }
     fetchBrand()
   }, [id])
+
+  // Fetch GitHub activity when brand has repo
+  useEffect(() => {
+    async function fetchActivity() {
+      if (!brand?.github_repo) return
+      setLoadingCommits(true)
+      try {
+        const response = await fetch(`/api/github/activity?repo=${encodeURIComponent(brand.github_repo)}`)
+        if (response.ok) {
+          const data = await response.json()
+          setCommits(data.recentCommits || [])
+          setMergedPRs(data.mergedPRs || [])
+        }
+      } catch (error) {
+        console.error('Failed to fetch GitHub activity:', error)
+      } finally {
+        setLoadingCommits(false)
+      }
+    }
+    fetchActivity()
+  }, [brand?.github_repo])
 
   // Poll for render status
   useEffect(() => {
@@ -193,6 +241,47 @@ export default function CreateVideoPage({
     }))
   }
 
+  const handleImageUpload = async (file: File) => {
+    setIsUploadingImage(true)
+    setErrorMessage('')
+
+    // Show preview immediately
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setUploadedImagePreview(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Upload failed')
+      }
+
+      handleGrokFieldUpdate('imageUrl', data.url)
+    } catch (error) {
+      console.error('Upload error:', error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to upload image')
+      setUploadedImagePreview(null)
+    } finally {
+      setIsUploadingImage(false)
+    }
+  }
+
+  const clearUploadedImage = () => {
+    setUploadedImagePreview(null)
+    handleGrokFieldUpdate('imageUrl', '')
+  }
+
   const handleGenerateWithAI = async () => {
     if (!formData.template) {
       setErrorMessage('Please select a template first')
@@ -216,6 +305,33 @@ export default function CreateVideoPage({
       release: 'Release Notes',
     }
 
+    // Build content context based on selection
+    let contentContext = ''
+    if (selectedContent === 'random') {
+      const randomContent = mergedPRs.length > 0
+        ? mergedPRs[Math.floor(Math.random() * Math.min(mergedPRs.length, 3))]
+        : commits.length > 0
+          ? commits[Math.floor(Math.random() * Math.min(commits.length, 3))]
+          : null
+      if (randomContent) {
+        contentContext = 'title' in randomContent
+          ? `Recent PR: "${randomContent.title}" by ${randomContent.author}`
+          : `Recent Commit: "${randomContent.message}" (${randomContent.sha}) by ${randomContent.author}`
+      }
+    } else if (selectedContent === 'latest') {
+      if (mergedPRs[0]) {
+        contentContext = `Latest PR: "${mergedPRs[0].title}" by ${mergedPRs[0].author}`
+      } else if (commits[0]) {
+        contentContext = `Latest Commit: "${commits[0].message}" (${commits[0].sha}) by ${commits[0].author}`
+      }
+    } else if (selectedContent.startsWith('pr:')) {
+      const [, number, title] = selectedContent.split(':')
+      contentContext = `Selected PR #${number}: "${title}"`
+    } else if (selectedContent.startsWith('commit:')) {
+      const [, sha, message] = selectedContent.split(':')
+      contentContext = `Selected Commit ${sha}: "${message}"`
+    }
+
     const prompt = `Generate video content for a "${templateLabels[formData.template]}" marketing video.
 
 Brand Information:
@@ -228,6 +344,8 @@ Video Settings:
 - Template: ${templateLabels[formData.template]}
 - Duration: ${formData.duration}
 - Style: ${formData.style}
+
+${contentContext ? `Content Source:\n${contentContext}\n\nFocus the video content on this specific update/feature.` : ''}
 
 Generate compelling marketing content that fits this template. Return your response as a JSON object with these exact fields:
 {
@@ -283,6 +401,119 @@ Only return the JSON object, no other text.`
       setGenerationStatus('error')
     } finally {
       setIsGeneratingAI(false)
+    }
+  }
+
+  const handleGenerateGrokWithAI = async () => {
+    if (!grokFormData.template) {
+      setErrorMessage('Please select a template first')
+      setGenerationStatus('error')
+      return
+    }
+
+    if (!brand) {
+      setErrorMessage('Brand data not loaded')
+      setGenerationStatus('error')
+      return
+    }
+
+    setIsGeneratingGrokAI(true)
+    setErrorMessage('')
+
+    const templateLabels: Record<string, string> = {
+      feature: 'Feature Announcement',
+      product: 'Product Demo',
+      social: 'Social Teaser',
+      release: 'Release Notes',
+    }
+
+    const templatePromptHints: Record<string, string> = {
+      feature: 'Focus on showcasing a new feature with dynamic motion, text overlays announcing the feature, and engaging transitions. Include product UI or abstract representations of the feature.',
+      product: 'Create a cinematic product showcase with the product as the hero. Use smooth camera movements, dramatic lighting, and professional presentation.',
+      social: 'Generate attention-grabbing, fast-paced content optimized for social media. Bold colors, quick cuts, trendy visual effects.',
+      release: 'Professional announcement style with version numbers, changelog highlights, and developer-focused aesthetics. Code snippets or terminal-style visuals.',
+    }
+
+    // Build content context based on selection
+    let contentContext = ''
+    if (selectedContent === 'random') {
+      const randomContent = mergedPRs.length > 0
+        ? mergedPRs[Math.floor(Math.random() * Math.min(mergedPRs.length, 3))]
+        : commits.length > 0
+          ? commits[Math.floor(Math.random() * Math.min(commits.length, 3))]
+          : null
+      if (randomContent) {
+        contentContext = 'title' in randomContent
+          ? `Feature/Update: "${randomContent.title}"`
+          : `Feature/Update: "${randomContent.message}"`
+      }
+    } else if (selectedContent === 'latest') {
+      if (mergedPRs[0]) {
+        contentContext = `Feature/Update: "${mergedPRs[0].title}"`
+      } else if (commits[0]) {
+        contentContext = `Feature/Update: "${commits[0].message}"`
+      }
+    } else if (selectedContent.startsWith('pr:')) {
+      const [, , title] = selectedContent.split(':')
+      contentContext = `Feature/Update: "${title}"`
+    } else if (selectedContent.startsWith('commit:')) {
+      const [, , message] = selectedContent.split(':')
+      contentContext = `Feature/Update: "${message}"`
+    }
+
+    const prompt = `Generate a detailed video generation prompt for Grok Imagine AI to create a "${templateLabels[grokFormData.template]}" marketing video.
+
+Brand Information:
+- Name: ${brand.name}
+- Description: ${brand.description || 'Not provided'}
+- Tagline: ${brand.tagline || 'Not provided'}
+- Primary Color: ${brand.primary_color || '#6366f1'}
+- Website: ${brand.website_url || 'Not provided'}
+${contentContext ? `\nContent Focus:\n${contentContext}\nMake sure the video focuses on announcing/showcasing this specific update.` : ''}
+
+Template Style:
+${templatePromptHints[grokFormData.template]}
+
+Aspect Ratio: ${grokFormData.aspectRatio}
+Duration: ${grokFormData.duration} seconds
+
+Generate a detailed, cinematic video prompt that:
+1. Describes the visual style, mood, and atmosphere
+2. Specifies camera movements and transitions
+3. Includes color palette suggestions matching the brand
+4. Describes any text, logos, or graphics to appear
+5. Sets the pacing and energy level
+
+Return ONLY the prompt text, no JSON or extra formatting. The prompt should be 2-4 sentences, highly descriptive and optimized for AI video generation.`
+
+    try {
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: prompt }],
+          system: 'You are an expert at crafting prompts for AI video generation. Create vivid, detailed prompts that result in stunning cinematic videos. Be specific about visual elements, motion, and mood.',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate prompt')
+      }
+
+      const data = await response.json()
+
+      // Clean up the response - remove any JSON artifacts or extra formatting
+      let generatedPrompt = data.content.trim()
+      // Remove markdown code blocks if present
+      generatedPrompt = generatedPrompt.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim()
+
+      handleGrokFieldUpdate('prompt', generatedPrompt)
+    } catch (error) {
+      console.error('AI generation error:', error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to generate with AI')
+      setGenerationStatus('error')
+    } finally {
+      setIsGeneratingGrokAI(false)
     }
   }
 
@@ -434,6 +665,116 @@ Only return the JSON object, no other text.`
               </div>
             </CardContent>
           </Card>
+
+          {/* Content Source Selection - only show if brand has GitHub repo */}
+          {brand?.github_repo && (
+            <Card className="terminal-border bg-card/50">
+              <CardHeader>
+                <CardTitle className="font-mono text-sm flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  content_source
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Choose what content to base your video on
+                </p>
+                <div className="space-y-2">
+                  {/* Random Option */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedContent('random')}
+                    className={`w-full p-3 rounded text-left terminal-border transition-all ${
+                      selectedContent === 'random'
+                        ? 'bg-primary/20 border-primary'
+                        : 'bg-card/30 hover:bg-card/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wand2 className="h-4 w-4" />
+                      <span className="font-semibold">Auto / Random</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">AI picks the best recent activity</p>
+                  </button>
+
+                  {/* Latest Option */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedContent('latest')}
+                    className={`w-full p-3 rounded text-left terminal-border transition-all ${
+                      selectedContent === 'latest'
+                        ? 'bg-primary/20 border-primary'
+                        : 'bg-card/30 hover:bg-card/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Play className="h-4 w-4" />
+                      <span className="font-semibold">Latest Activity</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Use the most recent commit or PR</p>
+                  </button>
+
+                  {/* Loading state */}
+                  {loadingCommits && (
+                    <div className="flex items-center gap-2 p-3 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Loading commits...</span>
+                    </div>
+                  )}
+
+                  {/* Recent Merged PRs */}
+                  {!loadingCommits && mergedPRs.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground font-mono px-1">merged_pull_requests</p>
+                      {mergedPRs.slice(0, 3).map((pr) => (
+                        <button
+                          key={pr.id}
+                          type="button"
+                          onClick={() => setSelectedContent(`pr:${pr.number}:${pr.title}`)}
+                          className={`w-full p-2 rounded text-left terminal-border transition-all ${
+                            selectedContent === `pr:${pr.number}:${pr.title}`
+                              ? 'bg-primary/20 border-primary'
+                              : 'bg-card/30 hover:bg-card/50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-primary font-mono">#{pr.number}</span>
+                            <span className="text-sm truncate">{pr.title}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">by {pr.author}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Recent Commits */}
+                  {!loadingCommits && commits.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground font-mono px-1">recent_commits</p>
+                      {commits.slice(0, 3).map((commit) => (
+                        <button
+                          key={commit.sha}
+                          type="button"
+                          onClick={() => setSelectedContent(`commit:${commit.sha}:${commit.message}`)}
+                          className={`w-full p-2 rounded text-left terminal-border transition-all ${
+                            selectedContent === `commit:${commit.sha}:${commit.message}`
+                              ? 'bg-primary/20 border-primary'
+                              : 'bg-card/30 hover:bg-card/50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-primary font-mono">{commit.sha}</span>
+                            <span className="text-sm truncate">{commit.message}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">by {commit.author}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {engine === 'remotion' ? (
             <>
@@ -612,13 +953,62 @@ Only return the JSON object, no other text.`
               </Card>
             </>
           ) : (
-            /* Grok Imagine Form */
+            <>
+            {/* Template Selection for Grok */}
             <Card className="terminal-border bg-card/50">
               <CardHeader>
+                <CardTitle className="font-mono text-sm flex items-center gap-2">
+                  <Video className="h-4 w-4 text-primary" />
+                  select_template
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  {templates.map((template) => (
+                    <button
+                      key={template.value}
+                      type="button"
+                      onClick={() => handleGrokFieldUpdate('template', template.value)}
+                      className={`p-4 rounded text-left terminal-border transition-all ${
+                        grokFormData.template === template.value
+                          ? 'bg-primary/20 border-primary'
+                          : 'bg-card/30 hover:bg-card/50'
+                      }`}
+                    >
+                      <p className="font-semibold">{template.label}</p>
+                      <p className="text-sm text-muted-foreground">{template.description}</p>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Grok Imagine Form */}
+            <Card className="terminal-border bg-card/50">
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="font-mono text-sm flex items-center gap-2">
                   <Bot className="h-4 w-4 text-primary" />
                   grok_imagine_config
                 </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateGrokWithAI}
+                  disabled={isGeneratingGrokAI || !grokFormData.template}
+                  className="h-8"
+                >
+                  {isGeneratingGrokAI ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-3 w-3 mr-1" />
+                      Generate Prompt with AI
+                    </>
+                  )}
+                </Button>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Prompt */}
@@ -634,7 +1024,7 @@ Only return the JSON object, no other text.`
                     className="font-mono min-h-[120px]"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Be descriptive! Include details about style, mood, motion, and visual elements.
+                    Select a template and click &quot;Generate Prompt with AI&quot; or write your own prompt.
                   </p>
                 </div>
 
@@ -710,20 +1100,80 @@ Only return the JSON object, no other text.`
                   </div>
                 </div>
 
-                {/* Optional: Image URL */}
+                {/* Source Image - Upload or URL */}
                 <div className="space-y-2">
-                  <Label htmlFor="grok-image" className="font-mono text-sm">
+                  <Label className="font-mono text-sm">
                     source_image <span className="text-muted-foreground">(optional)</span>
                   </Label>
+
+                  {/* Image Preview */}
+                  {(uploadedImagePreview || grokFormData.imageUrl) && (
+                    <div className="relative w-full aspect-video bg-muted/30 rounded-lg overflow-hidden">
+                      <img
+                        src={uploadedImagePreview || grokFormData.imageUrl}
+                        alt="Source image"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={clearUploadedImage}
+                        className="absolute top-2 right-2 p-1 bg-background/80 rounded-full hover:bg-background"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                      {isUploadingImage && (
+                        <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Upload Area */}
+                  {!uploadedImagePreview && !grokFormData.imageUrl && (
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:border-primary/50 transition-colors bg-card/30">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        {isUploadingImage ? (
+                          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-2" />
+                        ) : (
+                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-semibold">Click to upload</span> or drag and drop
+                        </p>
+                        <p className="text-xs text-muted-foreground">PNG, JPG, WebP, GIF (max 10MB)</p>
+                      </div>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleImageUpload(file)
+                        }}
+                        disabled={isUploadingImage}
+                      />
+                    </label>
+                  )}
+
+                  {/* Or enter URL */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-px bg-border/50" />
+                    <span className="text-xs text-muted-foreground">or enter URL</span>
+                    <div className="flex-1 h-px bg-border/50" />
+                  </div>
                   <Input
                     id="grok-image"
                     value={grokFormData.imageUrl}
-                    onChange={(e) => handleGrokFieldUpdate('imageUrl', e.target.value)}
+                    onChange={(e) => {
+                      handleGrokFieldUpdate('imageUrl', e.target.value)
+                      setUploadedImagePreview(null)
+                    }}
                     placeholder="https://example.com/image.jpg"
                     className="font-mono"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Provide an image URL to generate a video based on that image
+                    Upload an image or provide a URL to animate it into a video
                   </p>
                 </div>
 
@@ -750,6 +1200,7 @@ Only return the JSON object, no other text.`
                 </div>
               </CardContent>
             </Card>
+            </>
           )}
 
           {/* Status and Generate Button - shared between both engines */}

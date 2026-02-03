@@ -207,10 +207,23 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch all assets from public folder
-    const publicAssets = await findAssetsInDirectory('public')
+    // Fetch all assets from common asset directories
+    const assetDirectories = ['public', 'assets', 'static', 'images', 'fonts', 'src/assets', 'src/images', 'src/fonts']
+    const allAssetResults = await Promise.all(
+      assetDirectories.map(dir => findAssetsInDirectory(dir))
+    )
+    const publicAssets = allAssetResults.flat()
+
+    // Deduplicate by path
+    const uniqueAssets = publicAssets.filter((asset, index, self) =>
+      index === self.findIndex(a => a.path === asset.path)
+    )
+
     // Filter just images for logo selection (backwards compatible)
-    const logosFound = publicAssets.filter(a => a.type === 'image')
+    const logosFound = uniqueAssets.filter(a => a.type === 'image')
+
+    // Extract fonts separately for easy access
+    const fontsFound = uniqueAssets.filter(a => a.type === 'font')
 
     // Dynamically find all style files in the repo
     const discoveredStylePaths = await findStyleFilesInDirectory('')
@@ -263,7 +276,8 @@ export async function GET(request: Request) {
       } : null,
       styleFiles,
       logos: logosFound,
-      publicAssets, // All files from public folder
+      fonts: fontsFound, // Font files found in asset directories
+      publicAssets: uniqueAssets, // All files from asset directories
     })
   } catch (error) {
     console.error('Error fetching repo info:', error)

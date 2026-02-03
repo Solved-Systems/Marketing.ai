@@ -109,16 +109,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<GrokVideo
       brand_id: brandId,
       title: prompt.slice(0, 100), // Use prompt as title
       description: prompt,
-      template: 'grok-imagine', // Special template identifier
-      duration: `${duration} seconds`,
-      style: 'AI Generated',
+      prompt, // Store the full prompt
+      engine: 'grok-imagine', // Track which engine was used
       status: 'processing' as const,
       quality,
-      engine: 'grok-imagine', // Track which engine was used
       aspect_ratio: aspectRatio,
       resolution,
       brand_name: brand.name,
-      created_at: new Date().toISOString(),
+      ...(imageUrl && { source_image_url: imageUrl }),
     }
 
     const { data: video, error: insertError } = await supabase
@@ -130,12 +128,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<GrokVideo
     let videoId: string
 
     if (insertError) {
-      console.error('Error creating video record:', insertError)
+      console.error('Error creating video record:', insertError, JSON.stringify(insertError))
       if (insertError.code === '42P01') {
+        // Table doesn't exist
         videoId = `temp-${Date.now()}`
       } else {
         return NextResponse.json(
-          { success: false, error: 'Failed to create video record' },
+          { success: false, error: `Failed to create video record: ${insertError.message}` },
           { status: 500 }
         )
       }
