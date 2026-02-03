@@ -207,10 +207,63 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch all assets from common asset directories
-    const assetDirectories = ['public', 'assets', 'static', 'images', 'fonts', 'src/assets', 'src/images', 'src/fonts']
+    // Recursively find all asset directories (public, assets, static, images, fonts) anywhere in repo
+    const assetDirNames = ['public', 'assets', 'static', 'images', 'fonts', 'media', 'img']
+    const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '__tests__', 'test', '.cache', 'vendor']
+
+    async function findAssetDirectories(dirPath: string, maxDepth: number = 4): Promise<string[]> {
+      if (maxDepth <= 0) return []
+      try {
+        const url = `https://api.github.com/repos/${repo}/contents/${dirPath}`
+        const response = await fetch(url, { headers })
+        if (!response.ok) return []
+        const contents = await response.json()
+        if (!Array.isArray(contents)) return []
+
+        const foundAssetDirs: string[] = []
+        const dirsToSearch: string[] = []
+
+        for (const item of contents) {
+          if (item.type === 'dir') {
+            const dirName = item.name.toLowerCase()
+            // Skip known non-asset directories
+            if (skipDirs.includes(dirName)) continue
+
+            // Check if this is an asset directory
+            if (assetDirNames.includes(dirName)) {
+              foundAssetDirs.push(item.path)
+            } else {
+              // Continue searching in other directories
+              dirsToSearch.push(item.path)
+            }
+          }
+        }
+
+        // Recursively search non-asset directories for nested asset dirs
+        if (dirsToSearch.length > 0 && maxDepth > 1) {
+          const nestedResults = await Promise.all(
+            dirsToSearch.map(dir => findAssetDirectories(dir, maxDepth - 1))
+          )
+          foundAssetDirs.push(...nestedResults.flat())
+        }
+
+        return foundAssetDirs
+      } catch {
+        return []
+      }
+    }
+
+    // Find all asset directories in the repo
+    const assetDirectories = await findAssetDirectories('')
+    console.log('Found asset directories:', assetDirectories)
+
+    // Also check common fixed paths in case findAssetDirectories missed them
+    const commonPaths = ['public', 'assets', 'static', 'images', 'fonts', 'src/assets', 'src/images', 'src/fonts', 'src/public']
+    const allAssetDirs = [...new Set([...assetDirectories, ...commonPaths])]
+
+    // Fetch all assets from discovered directories
     const allAssetResults = await Promise.all(
-      assetDirectories.map(dir => findAssetsInDirectory(dir))
+      allAssetDirs.map(dir => findAssetsInDirectory(dir))
     )
     const publicAssets = allAssetResults.flat()
 
@@ -224,6 +277,8 @@ export async function GET(request: Request) {
 
     // Extract fonts separately for easy access
     const fontsFound = uniqueAssets.filter(a => a.type === 'font')
+
+    console.log(`Found ${logosFound.length} images, ${fontsFound.length} fonts in ${allAssetDirs.length} asset directories`)
 
     // Dynamically find all style files in the repo
     const discoveredStylePaths = await findStyleFilesInDirectory('')
