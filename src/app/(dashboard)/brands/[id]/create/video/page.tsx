@@ -147,6 +147,9 @@ export default function CreateVideoPage({
   const [isGeneratingGrokAI, setIsGeneratingGrokAI] = useState(false)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
   const [uploadedImagePreview, setUploadedImagePreview] = useState<string | null>(null)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
+  const [generatedImages, setGeneratedImages] = useState<string[]>([])
+  const [imagePrompt, setImagePrompt] = useState('')
   const [commits, setCommits] = useState<GitHubCommit[]>([])
   const [mergedPRs, setMergedPRs] = useState<GitHubPR[]>([])
   const [selectedContent, setSelectedContent] = useState<'random' | 'latest' | string>('random')
@@ -280,6 +283,51 @@ export default function CreateVideoPage({
   const clearUploadedImage = () => {
     setUploadedImagePreview(null)
     handleGrokFieldUpdate('imageUrl', '')
+    setGeneratedImages([])
+  }
+
+  const handleGenerateImage = async () => {
+    if (!imagePrompt.trim()) {
+      setErrorMessage('Please enter a prompt for image generation')
+      setGenerationStatus('error')
+      return
+    }
+
+    setIsGeneratingImage(true)
+    setErrorMessage('')
+
+    try {
+      const response = await fetch('/api/images/generate-grok', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: imagePrompt,
+          n: 2, // Generate 2 options
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate image')
+      }
+
+      if (data.images && data.images.length > 0) {
+        setGeneratedImages(data.images.map((img: { url: string }) => img.url))
+      }
+    } catch (error) {
+      console.error('Image generation error:', error)
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to generate image')
+      setGenerationStatus('error')
+    } finally {
+      setIsGeneratingImage(false)
+    }
+  }
+
+  const selectGeneratedImage = (url: string) => {
+    handleGrokFieldUpdate('imageUrl', url)
+    setUploadedImagePreview(url)
+    setGeneratedImages([])
   }
 
   const handleGenerateWithAI = async () => {
@@ -1100,13 +1148,13 @@ Return ONLY the prompt text, no JSON or extra formatting. The prompt should be 2
                   </div>
                 </div>
 
-                {/* Source Image - Upload or URL */}
-                <div className="space-y-2">
+                {/* Source Image - Generate, Upload, or URL */}
+                <div className="space-y-3">
                   <Label className="font-mono text-sm">
-                    source_image <span className="text-muted-foreground">(optional)</span>
+                    source_image <span className="text-muted-foreground">(optional - for image-to-video)</span>
                   </Label>
 
-                  {/* Image Preview */}
+                  {/* Selected Image Preview */}
                   {(uploadedImagePreview || grokFormData.imageUrl) && (
                     <div className="relative w-full aspect-video bg-muted/30 rounded-lg overflow-hidden">
                       <img
@@ -1129,51 +1177,119 @@ Return ONLY the prompt text, no JSON or extra formatting. The prompt should be 2
                     </div>
                   )}
 
+                  {/* Generate Image with AI */}
+                  {!uploadedImagePreview && !grokFormData.imageUrl && (
+                    <div className="p-3 rounded-lg terminal-border bg-card/30 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Wand2 className="h-4 w-4 text-primary" />
+                        Generate Image with AI
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={imagePrompt}
+                          onChange={(e) => setImagePrompt(e.target.value)}
+                          placeholder="Describe the image to generate..."
+                          className="font-mono text-sm"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleGenerateImage}
+                          disabled={isGeneratingImage || !imagePrompt.trim()}
+                        >
+                          {isGeneratingImage ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+
+                      {/* Generated Images */}
+                      {generatedImages.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">Click to select:</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {generatedImages.map((url, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => selectGeneratedImage(url)}
+                                className="relative aspect-video rounded-lg overflow-hidden terminal-border hover:border-primary transition-colors"
+                              >
+                                <img src={url} alt={`Generated ${idx + 1}`} className="w-full h-full object-cover" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {isGeneratingImage && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Generating images...
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Upload Area */}
                   {!uploadedImagePreview && !grokFormData.imageUrl && (
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:border-primary/50 transition-colors bg-card/30">
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        {isUploadingImage ? (
-                          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-2" />
-                        ) : (
-                          <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                        )}
-                        <p className="text-sm text-muted-foreground">
-                          <span className="font-semibold">Click to upload</span> or drag and drop
-                        </p>
-                        <p className="text-xs text-muted-foreground">PNG, JPG, WebP, GIF (max 10MB)</p>
+                    <>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-px bg-border/50" />
+                        <span className="text-xs text-muted-foreground">or upload</span>
+                        <div className="flex-1 h-px bg-border/50" />
                       </div>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleImageUpload(file)
-                        }}
-                        disabled={isUploadingImage}
-                      />
-                    </label>
+                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border/50 rounded-lg cursor-pointer hover:border-primary/50 transition-colors bg-card/30">
+                        <div className="flex flex-col items-center justify-center py-3">
+                          {isUploadingImage ? (
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mb-1" />
+                          ) : (
+                            <Upload className="h-6 w-6 text-muted-foreground mb-1" />
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-semibold">Click to upload</span> (max 10MB)
+                          </p>
+                        </div>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleImageUpload(file)
+                          }}
+                          disabled={isUploadingImage}
+                        />
+                      </label>
+                    </>
                   )}
 
                   {/* Or enter URL */}
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-px bg-border/50" />
-                    <span className="text-xs text-muted-foreground">or enter URL</span>
-                    <div className="flex-1 h-px bg-border/50" />
-                  </div>
-                  <Input
-                    id="grok-image"
-                    value={grokFormData.imageUrl}
-                    onChange={(e) => {
-                      handleGrokFieldUpdate('imageUrl', e.target.value)
-                      setUploadedImagePreview(null)
-                    }}
-                    placeholder="https://example.com/image.jpg"
-                    className="font-mono"
-                  />
+                  {!uploadedImagePreview && !grokFormData.imageUrl && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-px bg-border/50" />
+                        <span className="text-xs text-muted-foreground">or enter URL</span>
+                        <div className="flex-1 h-px bg-border/50" />
+                      </div>
+                      <Input
+                        id="grok-image"
+                        value={grokFormData.imageUrl}
+                        onChange={(e) => {
+                          handleGrokFieldUpdate('imageUrl', e.target.value)
+                          setUploadedImagePreview(null)
+                        }}
+                        placeholder="https://example.com/image.jpg"
+                        className="font-mono text-sm"
+                      />
+                    </>
+                  )}
+
                   <p className="text-xs text-muted-foreground">
-                    Upload an image or provide a URL to animate it into a video
+                    Generate, upload, or paste an image URL to animate it into a video
                   </p>
                 </div>
 
