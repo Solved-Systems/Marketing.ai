@@ -29,7 +29,7 @@ interface ChatVideoCreatorProps {
   brandId: string
   brand: Brand | null
   state: VideoCreationState
-  onStateChange: (state: VideoCreationState) => void
+  onStateChange: (state: VideoCreationState | ((prev: VideoCreationState) => VideoCreationState)) => void
 }
 
 export function ChatVideoCreator({
@@ -91,12 +91,12 @@ export function ChatVideoCreator({
       }
 
       // Update state with existing brand assets
-      onStateChange({
-        ...state,
+      onStateChange((prev: VideoCreationState) => ({
+        ...prev,
         logoUrl: brand.logo_url,
         logoAnalysis,
         phase: 'background',
-      })
+      }))
 
       const logoCount = metadataLogos.length
       const logoNote = logoCount > 1 ? `\n\nYou have **${logoCount} logos** available - you can select a different one from the preview panel.` : ''
@@ -147,19 +147,19 @@ export function ChatVideoCreator({
         if (response.ok) {
           const data = await response.json()
           if (data.status === 'completed' && data.output_url) {
-            onStateChange({
-              ...state,
+            onStateChange((prev: VideoCreationState) => ({
+              ...prev,
               videoUrl: data.output_url,
               videoStatus: 'complete',
-            })
+            }))
             clearInterval(pollInterval)
             handleGenerateCopy(data.output_url)
           } else if (data.status === 'failed') {
-            onStateChange({
-              ...state,
+            onStateChange((prev: VideoCreationState) => ({
+              ...prev,
               videoStatus: 'failed',
               videoError: data.error_message || 'Video generation failed',
-            })
+            }))
             clearInterval(pollInterval)
             addMessage({
               role: 'assistant',
@@ -259,7 +259,7 @@ export function ChatVideoCreator({
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Upload failed')
 
-      onStateChange({ ...state, logoUrl: data.url })
+      onStateChange((prev: VideoCreationState) => ({ ...prev, logoUrl: data.url }))
       addMessage({
         role: 'assistant',
         content: 'Logo uploaded! Analyzing colors and style...',
@@ -282,7 +282,7 @@ export function ChatVideoCreator({
     if (!brand?.logo_url) return
 
     addMessage({ role: 'user', content: 'Use brand logo' })
-    onStateChange({ ...state, logoUrl: brand.logo_url })
+    onStateChange((prev: VideoCreationState) => ({ ...prev, logoUrl: brand.logo_url }))
 
     // If we have brand colors, skip analysis
     if (brand.primary_color && brand.secondary_color) {
@@ -298,12 +298,12 @@ export function ChatVideoCreator({
         suggestions: ['Use brand colors for consistency'],
       }
 
-      onStateChange({
-        ...state,
+      onStateChange((prev: VideoCreationState) => ({
+        ...prev,
         logoUrl: brand.logo_url,
         logoAnalysis,
         phase: 'background',
-      })
+      }))
 
       addMessage({
         role: 'assistant',
@@ -367,12 +367,12 @@ Respond with ONLY a JSON block:
       const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[1]) as LogoAnalysis
-        onStateChange({
-          ...state,
+        onStateChange((prev: VideoCreationState) => ({
+          ...prev,
           logoUrl,
           logoAnalysis: parsed,
           phase: 'background',
-        })
+        }))
 
         setMessages(prev => prev.filter(m => m.action !== 'analyzing_logo'))
         addMessage({
@@ -441,7 +441,7 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
       const promptData = await promptResponse.json()
       const backgroundPrompt = promptData.content?.trim() || 'Abstract gradient background with subtle geometric patterns'
 
-      onStateChange({ ...state, backgroundPrompt })
+      onStateChange((prev: VideoCreationState) => ({ ...prev, backgroundPrompt }))
 
       const imageResponse = await fetch('/api/images/generate-grok', {
         method: 'POST',
@@ -458,11 +458,11 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
       const backgroundImages = imageData.images?.map((img: { url: string }) => img.url) || []
 
       setMessages(prev => prev.filter(m => m.action !== 'generating_backgrounds'))
-      onStateChange({
-        ...state,
+      onStateChange((prev: VideoCreationState) => ({
+        ...prev,
         backgroundImages,
         phase: 'background',
-      })
+      }))
 
       addMessage({
         role: 'assistant',
@@ -522,7 +522,7 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
       action: 'generating_video',
     })
 
-    onStateChange({ ...state, videoStatus: 'generating' })
+    onStateChange((prev: VideoCreationState) => ({ ...prev, videoStatus: 'generating' }))
 
     try {
       const promptResponse = await fetch('/api/ai/chat', {
@@ -568,12 +568,12 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Video generation failed')
 
-      onStateChange({
-        ...state,
+      onStateChange((prev: VideoCreationState) => ({
+        ...prev,
         videoId: data.videoId,
         videoPrompt,
         videoStatus: 'generating',
-      })
+      }))
       refreshCredits()
 
       setMessages(prev => prev.filter(m => m.action !== 'generating_video'))
@@ -585,7 +585,7 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
     } catch (error) {
       console.error('Video generation error:', error)
       setMessages(prev => prev.filter(m => m.action !== 'generating_video'))
-      onStateChange({ ...state, videoStatus: 'failed', videoError: String(error) })
+      onStateChange((prev: VideoCreationState) => ({ ...prev, videoStatus: 'failed', videoError: String(error) }))
       addMessage({
         role: 'assistant',
         content: `Video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Would you like to try again?`,
@@ -604,7 +604,7 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
       action: 'generating_copy',
     })
 
-    onStateChange({ ...state, phase: 'copy' })
+    onStateChange((prev: VideoCreationState) => ({ ...prev, phase: 'copy' }))
 
     try {
       const response = await fetch('/api/ai/chat', {
@@ -644,12 +644,12 @@ Respond with ONLY a JSON block:
         const parsed = JSON.parse(jsonMatch[1]) as MarketingCopy
 
         setMessages(prev => prev.filter(m => m.action !== 'generating_copy'))
-        onStateChange({
-          ...state,
+        onStateChange((prev: VideoCreationState) => ({
+          ...prev,
           marketingCopy: parsed,
-          videoUrl: videoUrl || state.videoUrl,
+          videoUrl: videoUrl || prev.videoUrl,
           phase: 'complete',
-        })
+        }))
 
         addMessage({
           role: 'assistant',
@@ -693,7 +693,7 @@ Respond with ONLY a JSON block:
       setIsUploading(true)
       try {
         const uploadedUrl = await uploadImage(userImages[0])
-        onStateChange({ ...state, logoUrl: uploadedUrl })
+        onStateChange((prev: VideoCreationState) => ({ ...prev, logoUrl: uploadedUrl }))
         addMessage({
           role: 'assistant',
           content: 'Logo received! Analyzing colors and style...',
@@ -769,10 +769,10 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
 
   // Update video settings
   const updateSettings = (key: string, value: number | string) => {
-    onStateChange({
-      ...state,
-      videoSettings: { ...state.videoSettings, [key]: value },
-    })
+    onStateChange((prev: VideoCreationState) => ({
+      ...prev,
+      videoSettings: { ...prev.videoSettings, [key]: value },
+    }))
   }
 
   const creditCost = getCreditCost(getVideoGenerationType('default'))
