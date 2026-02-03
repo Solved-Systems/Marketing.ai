@@ -41,6 +41,7 @@ export default function CreateVideoPage({
   const [brand, setBrand] = useState<Brand | null>(null)
   const [state, setState] = useState<VideoCreationState>(initialState)
   const [mobileTab, setMobileTab] = useState<'chat' | 'preview'>('chat')
+  const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
 
   // Fetch brand data
   useEffect(() => {
@@ -50,6 +51,10 @@ export default function CreateVideoPage({
         if (response.ok) {
           const data = await response.json()
           setBrand(data)
+          // Load available logos from metadata
+          if (data.metadata?.availableLogos) {
+            setAvailableLogos(data.metadata.availableLogos)
+          }
         }
       } catch (error) {
         console.error('Failed to fetch brand:', error)
@@ -57,6 +62,14 @@ export default function CreateVideoPage({
     }
     fetchBrand()
   }, [id])
+
+  // Handle logo selection
+  const handleSelectLogo = (url: string) => {
+    setState(prev => ({
+      ...prev,
+      logoUrl: url,
+    }))
+  }
 
   // Handle background selection
   const handleSelectBackground = (url: string) => {
@@ -230,6 +243,8 @@ export default function CreateVideoPage({
             <VideoCreationPreview
               state={state}
               brand={brand}
+              availableLogos={availableLogos}
+              onSelectLogo={handleSelectLogo}
               onSelectBackground={handleSelectBackground}
               onRegenerateBackgrounds={handleRegenerateBackgrounds}
               onRegenerateCopy={handleRegenerateCopy}

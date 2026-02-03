@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       secondary_color,
       accent_color,
       github_repo,
+      metadata,
     } = body
 
     if (!name) {
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
         secondary_color: secondary_color || '#1a1a1a',
         accent_color: accent_color || '#ffa500',
         github_repo: github_repo || null,
+        metadata: metadata || {},
       })
       .select()
       .single()

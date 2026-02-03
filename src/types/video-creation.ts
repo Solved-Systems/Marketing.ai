@@ -64,6 +64,19 @@ export type ChatAction =
   | 'copy_ready'
   | 'complete'
 
+export interface BrandMetadata {
+  availableLogos?: { path: string; downloadUrl: string }[]
+  fontFiles?: { path: string; downloadUrl: string; name: string }[]
+  detectedFonts?: string[]
+  aiAnalysis?: {
+    fonts?: { primary?: string; secondary?: string; mono?: string; sources?: string[] }
+    allColors?: Record<string, string>
+    sources?: Record<string, string>
+    summary?: string
+  } | null
+  extractedAt?: string
+}
+
 export interface Brand {
   id: string
   name: string
@@ -75,6 +88,7 @@ export interface Brand {
   accent_color: string | null
   website_url: string | null
   github_repo: string | null
+  metadata?: BrandMetadata | null
 }
 
 export const ASPECT_RATIOS = [

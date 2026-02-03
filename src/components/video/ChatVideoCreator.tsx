@@ -45,6 +45,7 @@ export function ChatVideoCreator({
   const [pendingImages, setPendingImages] = useState<string[]>([]) // Images to send with next message
   const [isDragOver, setIsDragOver] = useState(false)
   const [initialized, setInitialized] = useState(false)
+  const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
@@ -69,6 +70,12 @@ export function ChatVideoCreator({
     const hasLogo = brand.logo_url
     const hasColors = brand.primary_color && brand.secondary_color
 
+    // Load available logos from metadata if present
+    const metadataLogos = brand.metadata?.availableLogos || []
+    if (metadataLogos.length > 0) {
+      setAvailableLogos(metadataLogos)
+    }
+
     if (hasLogo && hasColors) {
       // Brand has logo and colors - skip logo phase and use them
       const logoAnalysis: LogoAnalysis = {
@@ -78,7 +85,7 @@ export function ChatVideoCreator({
           accent: brand.accent_color || brand.primary_color!,
           dominant: [brand.primary_color!, brand.secondary_color!, brand.accent_color || brand.primary_color!],
         },
-        style: 'Brand colors from repository',
+        style: brand.metadata?.aiAnalysis?.sources?.colors || 'Brand colors from repository',
         composition: 'Pre-configured brand identity',
         suggestions: ['Use brand colors for consistency'],
       }
@@ -91,9 +98,12 @@ export function ChatVideoCreator({
         phase: 'background',
       })
 
+      const logoCount = metadataLogos.length
+      const logoNote = logoCount > 1 ? `\n\nYou have **${logoCount} logos** available - you can select a different one from the preview panel.` : ''
+
       addMessage({
         role: 'assistant',
-        content: `Let's create a video for **${brand.name}**!\n\nI found your brand logo and colors. Let me generate some background options.`,
+        content: `Let's create a video for **${brand.name}**!\n\nI found your brand logo and colors. Let me generate some background options.${logoNote}`,
         action: 'suggest_background',
       })
 
@@ -101,9 +111,12 @@ export function ChatVideoCreator({
       setTimeout(() => generateBackgrounds(logoAnalysis), 500)
     } else if (hasLogo) {
       // Has logo but no colors - analyze it
+      const logoCount = metadataLogos.length
+      const logoNote = logoCount > 1 ? `\n\nI found **${logoCount} logos** in your brand - you can select a different one from the preview panel.` : ''
+
       addMessage({
         role: 'assistant',
-        content: `Let's create a video for **${brand.name}**!\n\nI found your brand logo. Would you like me to analyze it for colors, or upload a different one?`,
+        content: `Let's create a video for **${brand.name}**!\n\nI found your brand logo. Would you like me to analyze it for colors, or upload a different one?${logoNote}`,
         action: 'use_brand_logo',
       })
     } else {

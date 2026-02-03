@@ -18,7 +18,9 @@ import { useState } from 'react'
 interface VideoCreationPreviewProps {
   state: VideoCreationState
   brand: Brand | null
+  availableLogos?: { path: string; downloadUrl: string }[]
   onSelectBackground?: (url: string) => void
+  onSelectLogo?: (url: string) => void
   onRegenerateBackgrounds?: () => void
   onRegenerateCopy?: () => void
   onDownloadVideo?: () => void
@@ -28,7 +30,9 @@ interface VideoCreationPreviewProps {
 export function VideoCreationPreview({
   state,
   brand,
+  availableLogos = [],
   onSelectBackground,
+  onSelectLogo,
   onRegenerateBackgrounds,
   onRegenerateCopy,
   onDownloadVideo,
@@ -81,18 +85,50 @@ export function VideoCreationPreview({
   if (state.phase === 'background') {
     return (
       <div className="space-y-6">
-        {/* Mini logo preview */}
+        {/* Logo section with selector if multiple logos available */}
         {state.logoUrl && (
-          <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-            <img
-              src={state.logoUrl}
-              alt="Logo"
-              className="w-10 h-10 rounded object-contain bg-white/10"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{brand?.name || 'Brand'}</p>
-              <p className="text-xs text-muted-foreground">Logo ready</p>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+              <img
+                src={state.logoUrl}
+                alt="Logo"
+                className="w-10 h-10 rounded object-contain bg-white/10"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{brand?.name || 'Brand'}</p>
+                <p className="text-xs text-muted-foreground">Logo ready</p>
+              </div>
             </div>
+
+            {/* Available logos selector */}
+            {availableLogos.length > 1 && onSelectLogo && (
+              <div className="p-3 bg-muted/20 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-2">
+                  {availableLogos.length} logos available - click to select
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {availableLogos.map((logo, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => onSelectLogo(logo.downloadUrl)}
+                      className={`w-10 h-10 rounded border-2 overflow-hidden transition-all ${
+                        state.logoUrl === logo.downloadUrl
+                          ? 'border-primary ring-2 ring-primary/20'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                      title={logo.path}
+                    >
+                      <img
+                        src={logo.downloadUrl}
+                        alt={logo.path}
+                        className="w-full h-full object-contain bg-white/10"
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

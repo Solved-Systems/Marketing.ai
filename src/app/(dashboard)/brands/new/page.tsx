@@ -124,6 +124,13 @@ export default function NewBrandPage() {
   const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
   const [availableFonts, setAvailableFonts] = useState<{ path: string; downloadUrl: string; name: string }[]>([])
   const [detectedFontNames, setDetectedFontNames] = useState<string[]>([])
+  // Store AI analysis data for persistence
+  const [aiAnalysisData, setAiAnalysisData] = useState<{
+    fonts?: { primary?: string; secondary?: string; mono?: string; sources?: string[] }
+    allColors?: Record<string, string>
+    sources?: Record<string, string>
+    summary?: string
+  } | null>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -367,6 +374,14 @@ CRITICAL RULES:
           }))
         }
 
+        // Store AI analysis data for saving later
+        setAiAnalysisData({
+          fonts: parsed.fonts,
+          allColors: parsed.allColors,
+          sources: parsed.sources,
+          summary: parsed.summary,
+        })
+
         // Build sources annotation
         let sourcesText = ''
         if (parsed.sources) {
@@ -505,6 +520,32 @@ If the brand looks complete and they seem satisfied, let them know they can save
   const handleSaveBrand = async () => {
     setIsSaving(true)
     try {
+      // Build metadata with all media and AI analysis
+      const metadata = {
+        // All logos found in repo (not just the selected one)
+        availableLogos: availableLogos.map(logo => ({
+          path: logo.path,
+          downloadUrl: logo.downloadUrl,
+        })),
+        // Font files found in repo
+        fontFiles: availableFonts.map(font => ({
+          path: font.path,
+          downloadUrl: font.downloadUrl,
+          name: font.name,
+        })),
+        // Font names detected by AI from styles
+        detectedFonts: detectedFontNames,
+        // AI analysis data
+        aiAnalysis: aiAnalysisData ? {
+          fonts: aiAnalysisData.fonts,
+          allColors: aiAnalysisData.allColors,
+          sources: aiAnalysisData.sources,
+          summary: aiAnalysisData.summary,
+        } : null,
+        // Timestamp of extraction
+        extractedAt: new Date().toISOString(),
+      }
+
       const response = await fetch('/api/brands', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -518,6 +559,7 @@ If the brand looks complete and they seem satisfied, let them know they can save
           secondary_color: formData.secondaryColor,
           accent_color: formData.accentColor,
           github_repo: formData.githubRepo,
+          metadata,
         }),
       })
 
