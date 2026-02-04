@@ -22,9 +22,11 @@ import {
   ExternalLink,
   Wand2,
   Film,
+  Play,
+  Zap,
 } from 'lucide-react'
 
-type GenerationMode = 'grok-imagine' | 'remotion'
+type GenerationMode = 'grok-imagine' | 'openai'
 
 interface Brand {
   id: string
@@ -53,6 +55,8 @@ interface Message {
   generatedImages?: string[]
   generatedVideo?: string
   isGenerating?: boolean
+  isAnimating?: boolean
+  animationRequestId?: string
 }
 
 export default function CreateContentPage({
@@ -156,81 +160,158 @@ export default function CreateContentPage({
     setUploadedImages([])
     setIsLoading(true)
 
-    const engineName = generationMode === 'grok-imagine' ? 'Grok Imagine' : 'Remotion'
+    const engineName = generationMode === 'grok-imagine' ? 'Grok Imagine' : 'OpenAI'
     const assistantMessageId = (Date.now() + 1).toString()
 
-    if (generationMode === 'grok-imagine') {
-      // Add generating message with loading state
-      setMessages(prev => [...prev, {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: `🎨 **Generating with Grok Imagine...**\n\n"${userPrompt}"`,
-        isGenerating: true,
-      }])
+    // Add generating message with loading state
+    setMessages(prev => [...prev, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: `🎨 **Generating with ${engineName}...**\n\n"${userPrompt}"`,
+      isGenerating: true,
+    }])
 
-      try {
-        // Build the prompt with brand context
-        const brandContext = brand ? `Brand: ${brand.name}. ${brand.tagline || ''} ${brand.description || ''}. Colors: ${brand.primary_color}, ${brand.secondary_color}, ${brand.accent_color}.` : ''
-        const fullPrompt = `${brandContext}\n\nCreate: ${userPrompt}`
+    try {
+      // Build the prompt with brand context
+      const brandContext = brand ? `Brand: ${brand.name}. ${brand.tagline || ''} ${brand.description || ''}. Colors: ${brand.primary_color}, ${brand.secondary_color}, ${brand.accent_color}.` : ''
+      const fullPrompt = `${brandContext}\n\nCreate: ${userPrompt}`
 
-        const response = await fetch('/api/images/generate-grok', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: fullPrompt,
-            n: 1,
-            response_format: 'url',
-          }),
-        })
+      // Choose API endpoint based on engine
+      const endpoint = generationMode === 'grok-imagine'
+        ? '/api/images/generate-grok'
+        : '/api/images/generate-openai'
 
-        const data = await response.json()
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: fullPrompt,
+          n: 1,
+          ...(generationMode === 'grok-imagine'
+            ? { response_format: 'url' }
+            : { model: 'gpt-image-1', size: '1024x1024' }
+          ),
+        }),
+      })
 
-        if (data.success && data.images?.length > 0) {
-          // Update message with generated image
-          setMessages(prev => prev.map(msg =>
-            msg.id === assistantMessageId
-              ? {
-                  ...msg,
-                  content: `✨ **Generated with Grok Imagine**\n\n"${userPrompt}"`,
-                  generatedImages: data.images.map((img: { url: string }) => img.url),
-                  isGenerating: false,
-                }
-              : msg
-          ))
-        } else {
-          // Error state
-          setMessages(prev => prev.map(msg =>
-            msg.id === assistantMessageId
-              ? {
-                  ...msg,
-                  content: `❌ **Generation failed**\n\n${data.error || 'Unknown error occurred'}`,
-                  isGenerating: false,
-                }
-              : msg
-          ))
-        }
-      } catch (error) {
-        console.error('Generation error:', error)
+      const data = await response.json()
+
+      if (data.success && data.images?.length > 0) {
+        // Update message with generated image
         setMessages(prev => prev.map(msg =>
           msg.id === assistantMessageId
             ? {
                 ...msg,
-                content: `❌ **Generation failed**\n\n${error instanceof Error ? error.message : 'Network error'}`,
+                content: `✨ **Generated with ${engineName}**\n\n"${userPrompt}"`,
+                generatedImages: data.images.map((img: { url: string }) => img.url),
+                isGenerating: false,
+              }
+            : msg
+        ))
+      } else {
+        // Error state
+        setMessages(prev => prev.map(msg =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                content: `❌ **Generation failed**\n\n${data.error || 'Unknown error occurred'}`,
                 isGenerating: false,
               }
             : msg
         ))
       }
-    } else {
-      // Remotion - placeholder for now
-      setMessages(prev => [...prev, {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: `🎬 **Remotion Video**\n\n"${userPrompt}"\n\n_Remotion video generation coming soon._`,
-      }])
+    } catch (error) {
+      console.error('Generation error:', error)
+      setMessages(prev => prev.map(msg =>
+        msg.id === assistantMessageId
+          ? {
+              ...msg,
+              content: `❌ **Generation failed**\n\n${error instanceof Error ? error.message : 'Network error'}`,
+              isGenerating: false,
+            }
+          : msg
+      ))
     }
 
     setIsLoading(false)
+  }
+
+  // Handle animating an image to video
+  const handleAnimate = async (messageId: string, imageUrl: string) => {
+    // Update message to show animating state
+    setMessages(prev => prev.map(msg =>
+      msg.id === messageId
+        ? { ...msg, isAnimating: true }
+        : msg
+    ))
+
+    try {
+      // Start animation
+      const response = await fetch('/api/videos/animate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl,
+          prompt: 'Animate this image with smooth, cinematic motion. Add subtle movement and life to the scene.',
+          duration: 5,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to start animation')
+      }
+
+      // Poll for completion
+      const requestId = data.requestId
+      let attempts = 0
+      const maxAttempts = 60 // 5 minutes max
+
+      const pollInterval = setInterval(async () => {
+        attempts++
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval)
+          setMessages(prev => prev.map(msg =>
+            msg.id === messageId
+              ? { ...msg, isAnimating: false, content: msg.content + '\n\n❌ Animation timed out' }
+              : msg
+          ))
+          return
+        }
+
+        try {
+          const statusRes = await fetch(`/api/videos/animate?requestId=${requestId}`)
+          const statusData = await statusRes.json()
+
+          if (statusData.videoUrl) {
+            clearInterval(pollInterval)
+            setMessages(prev => prev.map(msg =>
+              msg.id === messageId
+                ? { ...msg, isAnimating: false, generatedVideo: statusData.videoUrl }
+                : msg
+            ))
+          } else if (statusData.status === 'failed') {
+            clearInterval(pollInterval)
+            setMessages(prev => prev.map(msg =>
+              msg.id === messageId
+                ? { ...msg, isAnimating: false, content: msg.content + `\n\n❌ Animation failed: ${statusData.error}` }
+                : msg
+            ))
+          }
+        } catch (pollError) {
+          console.error('Poll error:', pollError)
+        }
+      }, 5000) // Poll every 5 seconds
+
+    } catch (error) {
+      console.error('Animation error:', error)
+      setMessages(prev => prev.map(msg =>
+        msg.id === messageId
+          ? { ...msg, isAnimating: false, content: msg.content + `\n\n❌ Animation failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
+          : msg
+      ))
+    }
   }
 
   // Quick action handlers
@@ -366,30 +447,58 @@ export default function CreateContentPage({
                   )}
 
                   {/* Generated images */}
-                  {msg.generatedImages && msg.generatedImages.length > 0 && (
+                  {msg.generatedImages && msg.generatedImages.length > 0 && !msg.generatedVideo && (
                     <div className="mt-4 grid grid-cols-1 gap-2">
                       {msg.generatedImages.map((img, idx) => (
                         <div key={idx} className="relative group">
-                          <img
-                            src={img}
-                            alt={`Generated ${idx + 1}`}
-                            className="w-full max-w-md rounded-lg border border-border animate-fade-in"
-                            style={{ animationDelay: `${idx * 150}ms` }}
-                          />
-                          <div className="absolute bottom-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                const link = document.createElement('a')
-                                link.href = img
-                                link.download = `generated-${Date.now()}.png`
-                                link.click()
-                              }}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          {msg.isAnimating ? (
+                            <div className="relative">
+                              <img
+                                src={img}
+                                alt={`Generated ${idx + 1}`}
+                                className="w-full max-w-md rounded-lg border border-border opacity-50"
+                              />
+                              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 max-w-md">
+                                <div className="relative">
+                                  <Film className="h-8 w-8 text-primary animate-pulse" />
+                                  <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping" />
+                                </div>
+                                <p className="text-xs text-primary font-mono">animating to video...</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <img
+                                src={img}
+                                alt={`Generated ${idx + 1}`}
+                                className="w-full max-w-md rounded-lg border border-border animate-fade-in"
+                                style={{ animationDelay: `${idx * 150}ms` }}
+                              />
+                              <div className="absolute bottom-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => handleAnimate(msg.id, img)}
+                                  className="gap-1"
+                                >
+                                  <Play className="h-4 w-4" />
+                                  Animate
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => {
+                                    const link = document.createElement('a')
+                                    link.href = img
+                                    link.download = `generated-${Date.now()}.png`
+                                    link.click()
+                                  }}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -508,15 +617,15 @@ export default function CreateContentPage({
             </button>
             <button
               type="button"
-              onClick={() => setGenerationMode('remotion')}
+              onClick={() => setGenerationMode('openai')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                generationMode === 'remotion'
+                generationMode === 'openai'
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
             >
-              <Film className="h-3.5 w-3.5" />
-              Remotion
+              <Zap className="h-3.5 w-3.5" />
+              OpenAI
             </button>
           </div>
 
