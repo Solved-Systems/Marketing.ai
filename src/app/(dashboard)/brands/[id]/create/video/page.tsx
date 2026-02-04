@@ -79,14 +79,6 @@ export default function CreateContentPage({
         if (response.ok) {
           const data = await response.json()
           setBrand(data)
-
-          // Set initial welcome message
-          const logoCount = data.metadata?.availableLogos?.length || 0
-          setMessages([{
-            id: '1',
-            role: 'assistant',
-            content: `Let's create content for **${data.name}**!\n\n${logoCount > 0 ? `I found **${logoCount} logo(s)** from your brand assets.\n\n` : ''}**How it works:**\n1. Upload logos or reference images\n2. Describe what you want to create\n3. I'll generate a composite image\n4. You can iterate until it's perfect\n5. Then we'll animate and create copy\n\nDrag & drop images or describe what you'd like to create!`,
-          }])
         }
       } catch (error) {
         console.error('Failed to fetch brand:', error)
@@ -263,7 +255,7 @@ export default function CreateContentPage({
 
   return (
     <div
-      className="h-[calc(100vh-1rem)] md:h-[calc(100vh-2rem)] flex flex-col"
+      className="h-[calc(100vh-3.5rem)] lg:h-screen flex flex-col"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -319,9 +311,9 @@ export default function CreateContentPage({
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <ScrollArea className="flex-1 px-4 md:px-8" ref={scrollRef}>
-          <div className="max-w-3xl mx-auto space-y-6 py-4">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden mx-4 md:mx-8 my-4 border border-border/50 rounded-lg bg-card/30">
+        <ScrollArea className="flex-1" ref={scrollRef}>
+          <div className="max-w-3xl mx-auto space-y-6 p-4">
             {messages.map((msg) => (
               <div key={msg.id} className={msg.role === 'user' ? 'flex justify-end' : ''}>
                 <div
@@ -427,9 +419,9 @@ export default function CreateContentPage({
               </div>
             )}
 
-            {/* Quick Actions - Show only when no user messages yet */}
-            {messages.length === 1 && !isLoading && (
-              <div className="flex flex-col items-center py-8">
+            {/* Quick Actions - Show when no messages */}
+            {messages.length === 0 && !isLoading && (
+              <div className="flex flex-col items-center justify-center h-full py-8">
                 <p className="text-sm text-muted-foreground mb-4">Quick start:</p>
                 <div className="flex flex-wrap justify-center gap-3">
                   <Button
@@ -497,8 +489,8 @@ export default function CreateContentPage({
         </ScrollArea>
 
         {/* Input Area */}
-        <div className="flex-shrink-0 px-4 md:px-8 pb-4">
-          <div className="max-w-3xl mx-auto w-full pt-4 border-t border-border/50">
+        <div className="flex-shrink-0 p-4 border-t border-border/50">
+          <div className="max-w-3xl mx-auto w-full">
           {/* Generation Mode Toggle */}
           <div className="flex items-center justify-center gap-2 mb-3">
             <span className="text-xs text-muted-foreground font-mono mr-2">engine:</span>
