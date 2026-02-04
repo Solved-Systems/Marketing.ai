@@ -213,7 +213,7 @@ export function VideoCreationPreview({
 
         {/* Video Settings */}
         <div className="p-4 bg-muted/30 rounded-lg space-y-2">
-          <p className="text-xs font-mono text-muted-foreground">video_settings</p>
+          <p className="text-xs font-mono text-muted-foreground">content_settings</p>
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
               <p className="text-muted-foreground text-xs">Duration</p>
@@ -234,7 +234,7 @@ export function VideoCreationPreview({
         {state.videoStatus === 'generating' && (
           <div className="flex flex-col items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <p className="text-sm font-medium">Generating video...</p>
+            <p className="text-sm font-medium">Generating content...</p>
             <p className="text-xs text-muted-foreground mt-1">This may take 1-3 minutes</p>
           </div>
         )}
@@ -252,7 +252,7 @@ export function VideoCreationPreview({
             {onDownloadVideo && (
               <Button onClick={onDownloadVideo} className="w-full" variant="terminal">
                 <Download className="h-4 w-4 mr-2" />
-                Download Video
+                Download Content
               </Button>
             )}
           </div>
@@ -261,7 +261,7 @@ export function VideoCreationPreview({
         {state.videoStatus === 'failed' && (
           <div className="p-4 bg-destructive/10 rounded-lg text-center">
             <p className="text-sm text-destructive">
-              {state.videoError || 'Video generation failed'}
+              {state.videoError || 'Content generation failed'}
             </p>
           </div>
         )}
@@ -298,7 +298,7 @@ export function VideoCreationPreview({
           <EmptyState
             icon={<Copy className="h-12 w-12" />}
             title="Generating copy..."
-            description="AI is crafting marketing copy for your video"
+            description="AI is crafting marketing copy for your content"
             loading
           />
         )}
@@ -321,7 +321,7 @@ export function VideoCreationPreview({
             {onDownloadVideo && (
               <Button onClick={onDownloadVideo} className="w-full" variant="terminal">
                 <Download className="h-4 w-4 mr-2" />
-                Download Video
+                Download Content
               </Button>
             )}
           </div>
@@ -340,9 +340,9 @@ export function VideoCreationPreview({
         {/* Success Message */}
         <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg text-center">
           <Check className="h-6 w-6 text-green-500 mx-auto mb-2" />
-          <p className="text-sm font-medium text-green-500">Video ready!</p>
+          <p className="text-sm font-medium text-green-500">Content ready!</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Download your video and copy to share
+            Download your content and copy to share
           </p>
         </div>
       </div>
@@ -352,8 +352,8 @@ export function VideoCreationPreview({
   return (
     <EmptyState
       icon={<Video className="h-12 w-12" />}
-      title="Video preview"
-      description="Your video will appear here as you progress"
+      title="Content preview"
+      description="Your content will appear here as you progress"
     />
   )
 }

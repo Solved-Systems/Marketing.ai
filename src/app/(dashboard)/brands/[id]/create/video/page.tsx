@@ -130,7 +130,7 @@ export default function CreateVideoPage({
   const phases = [
     { key: 'logo', label: 'Logo', icon: '1' },
     { key: 'background', label: 'Background', icon: '2' },
-    { key: 'video', label: 'Video', icon: '3' },
+    { key: 'video', label: 'Content', icon: '3' },
     { key: 'copy', label: 'Copy', icon: '4' },
     { key: 'complete', label: 'Done', icon: '5' },
   ]
@@ -153,7 +153,7 @@ export default function CreateVideoPage({
           <span className="text-primary">./brands/{id}/create/video</span>
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-xl md:text-2xl font-bold">Create AI Video</h1>
+          <h1 className="text-xl md:text-2xl font-bold">Create AI Content</h1>
           {/* Phase Progress */}
           <div className="hidden md:flex items-center gap-1">
             {phases.map((phase, idx) => (
@@ -222,7 +222,7 @@ export default function CreateVideoPage({
           <CardHeader className="py-3 border-b border-border/50 flex-shrink-0">
             <CardTitle className="text-sm font-mono flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              video_assistant
+              content_assistant
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
@@ -248,7 +248,7 @@ export default function CreateVideoPage({
               <span className="ml-auto text-xs text-muted-foreground font-normal">
                 {state.phase === 'logo' && 'Logo'}
                 {state.phase === 'background' && 'Backgrounds'}
-                {state.phase === 'video' && 'Video'}
+                {state.phase === 'video' && 'Content'}
                 {state.phase === 'copy' && 'Copy'}
                 {state.phase === 'complete' && 'Complete'}
               </span>

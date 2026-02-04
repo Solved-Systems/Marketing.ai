@@ -105,7 +105,7 @@ export function ChatVideoCreator({
 
       addMessage({
         role: 'assistant',
-        content: `Let's create a video for **${brand.name}**!\n\nI found your brand logo and colors. Let me generate some background options.${logoNote}`,
+        content: `Let's create content for **${brand.name}**!\n\nI found your brand logo and colors. Let me generate some background options.${logoNote}`,
         action: 'suggest_background',
       })
 
@@ -118,14 +118,14 @@ export function ChatVideoCreator({
 
       addMessage({
         role: 'assistant',
-        content: `Let's create a video for **${brand.name}**!\n\nI found your brand logo. Would you like me to analyze it for colors, or upload a different one?${logoNote}`,
+        content: `Let's create content for **${brand.name}**!\n\nI found your brand logo. Would you like me to analyze it for colors, or upload a different one?${logoNote}`,
         action: 'use_brand_logo',
       })
     } else {
       // No logo - ask for upload
       addMessage({
         role: 'assistant',
-        content: `Let's create a video for **${brand.name}**!\n\nFirst, upload a logo to get started. I'll analyze it to suggest colors and style.\n\nYou can drag & drop an image here or click the button below.`,
+        content: `Let's create content for **${brand.name}**!\n\nFirst, upload a logo to get started. I'll analyze it to suggest colors and style.\n\nYou can drag & drop an image here or click the button below.`,
         action: 'upload_logo',
       })
     }
@@ -489,7 +489,7 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
       addMessage({ role: 'user', content: 'Selected background' })
       addMessage({
         role: 'assistant',
-        content: `Great choice! Now let's configure your video settings.\n\n**Duration:** ${state.videoSettings.duration} seconds\n**Aspect Ratio:** ${state.videoSettings.aspectRatio}\n**Resolution:** ${state.videoSettings.resolution}\n\nYou can adjust these settings or click "Generate Video" when ready.`,
+        content: `Great choice! Now let's configure your content settings.\n\n**Duration:** ${state.videoSettings.duration} seconds\n**Aspect Ratio:** ${state.videoSettings.aspectRatio}\n**Resolution:** ${state.videoSettings.resolution}\n\nYou can adjust these settings or click "Generate Content" when ready.`,
         action: 'configure_video',
       })
     }
@@ -511,16 +511,16 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
     if (!canAfford(generationType)) {
       addMessage({
         role: 'assistant',
-        content: 'Insufficient credits. Please upgrade your plan to generate videos.',
+        content: 'Insufficient credits. Please upgrade your plan to generate content.',
       })
       return
     }
 
     setIsLoading(true)
-    addMessage({ role: 'user', content: 'Generate video' })
+    addMessage({ role: 'user', content: 'Generate content' })
     addMessage({
       role: 'assistant',
-      content: 'Generating your video with Grok Imagine AI...',
+      content: 'Generating your content with Grok Imagine AI...',
       action: 'generating_video',
     })
 
@@ -581,7 +581,7 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
       setMessages(prev => prev.filter(m => m.action !== 'generating_video'))
       addMessage({
         role: 'assistant',
-        content: 'Video generation started! This typically takes 1-3 minutes. I\'ll notify you when it\'s ready.',
+        content: 'Content generation started! This typically takes 1-3 minutes. I\'ll notify you when it\'s ready.',
         action: 'generating_video',
       })
     } catch (error) {
@@ -590,7 +590,7 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
       onStateChange((prev: VideoCreationState) => ({ ...prev, videoStatus: 'failed', videoError: String(error) }))
       addMessage({
         role: 'assistant',
-        content: `Video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Would you like to try again?`,
+        content: `Content generation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Would you like to try again?`,
       })
     } finally {
       setIsLoading(false)
@@ -602,7 +602,7 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
     setIsLoading(true)
     addMessage({
       role: 'assistant',
-      content: 'Video is ready! Now generating marketing copy...',
+      content: 'Content is ready! Now generating marketing copy...',
       action: 'generating_copy',
     })
 
@@ -947,7 +947,7 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
                     ) : (
                       <>
                         <Play className="h-4 w-4" />
-                        Generate Video ({creditCost} credits)
+                        Generate Content ({creditCost} credits)
                       </>
                     )}
                   </Button>
