@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback, DragEvent } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Send,
@@ -14,7 +13,7 @@ import {
   Image as ImageIcon,
   MessageSquare,
   Download,
-  RefreshCw,
+  Sparkles,
 } from 'lucide-react'
 import type { Brand, BrandMetadata } from '@/types/video-creation'
 import type {
@@ -32,9 +31,9 @@ interface ContentChatProps {
 
 // Helper prompt suggestions
 const CONTENT_PROMPTS = [
-  { icon: Video, label: 'Create a video', type: 'video' as ContentType },
-  { icon: ImageIcon, label: 'Generate an image', type: 'image' as ContentType },
-  { icon: MessageSquare, label: 'Write a post', type: 'post' as ContentType },
+  { icon: Video, label: 'Create a video', type: 'video' as ContentType, color: 'text-blue-400' },
+  { icon: ImageIcon, label: 'Generate an image', type: 'image' as ContentType, color: 'text-green-400' },
+  { icon: MessageSquare, label: 'Write a post', type: 'post' as ContentType, color: 'text-purple-400' },
 ]
 
 export function ContentChat({ brand }: ContentChatProps) {
@@ -47,13 +46,11 @@ export function ContentChat({ brand }: ContentChatProps) {
   })
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
-  const [initialized, setInitialized] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const { remaining: credits, canAfford, refetch: refreshCredits } = useCredits()
-
-  const metadata = brand.metadata as BrandMetadata | null
 
   // Add message helper
   const addMessage = useCallback((msg: Omit<ContentChatMessage, 'id' | 'timestamp'>) => {
@@ -77,17 +74,6 @@ export function ContentChat({ brand }: ContentChatProps) {
       return newMessages
     })
   }, [])
-
-  // Initialize with welcome message
-  useEffect(() => {
-    if (initialized) return
-    setInitialized(true)
-
-    addMessage({
-      role: 'assistant',
-      content: `Welcome to **${brand.name}** content studio!\n\nWhat would you like to create today? Choose an option below or just describe what you need.`,
-    })
-  }, [brand.name, initialized, addMessage])
 
   // Scroll to bottom
   useEffect(() => {
@@ -130,7 +116,6 @@ export function ContentChat({ brand }: ContentChatProps) {
 
             clearInterval(pollInterval)
 
-            // Suggest follow-up
             setTimeout(() => {
               addMessage({
                 role: 'assistant',
@@ -162,16 +147,19 @@ export function ContentChat({ brand }: ContentChatProps) {
   // Drag and drop handlers
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsDragOver(true)
   }
 
   const handleDragLeave = (e: DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsDragOver(false)
   }
 
   const handleDrop = async (e: DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsDragOver(false)
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
     if (files.length > 0) {
@@ -266,7 +254,6 @@ export function ContentChat({ brand }: ContentChatProps) {
 
       refreshCredits()
 
-      // Suggest follow-up
       setTimeout(() => {
         addMessage({
           role: 'assistant',
@@ -302,7 +289,6 @@ export function ContentChat({ brand }: ContentChatProps) {
     })
 
     try {
-      // If no image provided, generate one first
       let backgroundUrl = imageUrl
       if (!backgroundUrl) {
         const bgPrompt = `Abstract professional background for ${brand.name}. ${prompt}. Colors: ${brand.primary_color}, ${brand.secondary_color}. Subtle, not distracting.`
@@ -420,7 +406,6 @@ Respond with ONLY a JSON block:
           createdAt: new Date(),
         }
 
-        // If this was for existing content, add caption to it
         if (forContent) {
           setState(prev => ({
             ...prev,
@@ -449,7 +434,6 @@ Respond with ONLY a JSON block:
           action: 'complete',
         })
 
-        // Suggest follow-up
         setTimeout(() => {
           if (forContent) {
             addMessage({
@@ -475,47 +459,60 @@ Respond with ONLY a JSON block:
     }
   }
 
-  // Handle prompt button click
-  const handlePromptClick = (type: ContentType) => {
+  // Handle quick action button click - directly trigger generation
+  const handleQuickAction = async (type: ContentType) => {
     const prompts: Record<ContentType, string> = {
-      video: `Create a promotional video for ${brand.name}`,
+      video: `Create a professional promotional video showcasing ${brand.name}`,
       image: `Create a professional marketing image for ${brand.name}`,
-      post: `Write an engaging social post for ${brand.name}`,
+      post: `Write an engaging social media post about ${brand.name}`,
     }
-    setInput(prompts[type])
+
+    // Add user message
+    addMessage({
+      role: 'user',
+      content: prompts[type],
+    })
+
+    // Trigger generation
+    switch (type) {
+      case 'video':
+        await generateVideo(prompts[type])
+        break
+      case 'image':
+        await generateImage(prompts[type])
+        break
+      case 'post':
+        await generatePost(prompts[type])
+        break
+    }
   }
 
   // Parse user intent
   const parseIntent = (text: string): { type: ContentType | 'caption' | 'chat'; topic: string } => {
     const lower = text.toLowerCase()
 
-    // Check for caption request (referencing last content)
     if ((lower.includes('caption') || lower.includes('write a caption')) && state.lastGeneratedType) {
       return { type: 'caption', topic: text }
     }
 
-    // Check for video
     if (lower.includes('video') || lower.includes('animate') || lower.includes('motion')) {
       return { type: 'video', topic: text }
     }
 
-    // Check for image
     if (lower.includes('image') || lower.includes('picture') || lower.includes('photo') || lower.includes('graphic') || lower.includes('generate an')) {
       return { type: 'image', topic: text }
     }
 
-    // Check for post
     if (lower.includes('post') || lower.includes('caption') || lower.includes('write') || lower.includes('copy') || lower.includes('text')) {
       return { type: 'post', topic: text }
     }
 
-    // Default to chat
     return { type: 'chat', topic: text }
   }
 
   // Handle submit
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     if ((!input.trim() && pendingImages.length === 0) || state.isGenerating) return
 
     const userMessage = input.trim()
@@ -523,14 +520,12 @@ Respond with ONLY a JSON block:
     setInput('')
     setPendingImages([])
 
-    // Add user message
     addMessage({
       role: 'user',
       content: userMessage || `Attached ${userImages.length} image(s)`,
       images: userImages.length > 0 ? userImages : undefined,
     })
 
-    // If user attached an image, ask what to do with it
     if (userImages.length > 0 && !userMessage) {
       addMessage({
         role: 'assistant',
@@ -539,7 +534,6 @@ Respond with ONLY a JSON block:
       return
     }
 
-    // If user attached image with message, use it for video/context
     if (userImages.length > 0 && userMessage) {
       const intent = parseIntent(userMessage)
       if (intent.type === 'video') {
@@ -556,7 +550,6 @@ Respond with ONLY a JSON block:
       }
     }
 
-    // Parse intent
     const intent = parseIntent(userMessage)
 
     switch (intent.type) {
@@ -570,7 +563,6 @@ Respond with ONLY a JSON block:
         await generatePost(intent.topic)
         break
       case 'caption':
-        // Find last generated content to add caption to
         const lastContent = state.generatedItems[state.generatedItems.length - 1]
         if (lastContent && (lastContent.type === 'video' || lastContent.type === 'image')) {
           await generatePost(intent.topic, lastContent)
@@ -579,7 +571,6 @@ Respond with ONLY a JSON block:
         }
         break
       default:
-        // General chat
         setState(prev => ({ ...prev, isGenerating: true }))
         try {
           const response = await fetch('/api/ai/chat', {
@@ -608,7 +599,24 @@ Keep responses brief and helpful.`,
     }
   }
 
+  // Handle textarea key press
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px'
+    }
+  }, [input])
+
   const videoCost = getCreditCost(getVideoGenerationType('default'))
+  const hasMessages = messages.length > 0
 
   return (
     <div
@@ -627,121 +635,141 @@ Keep responses brief and helpful.`,
         </div>
       )}
 
-      {/* Messages */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-        <div className="space-y-4 max-w-2xl mx-auto">
-          {messages.map((msg) => (
-            <div key={msg.id}>
-              <div
-                className={`text-sm p-3 rounded-lg ${
-                  msg.role === 'user'
-                    ? 'bg-primary/20 ml-8'
-                    : 'bg-muted mr-8'
-                }`}
-              >
-                {/* Image attachments */}
-                {msg.images && msg.images.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {msg.images.map((img, idx) => (
-                      <img
-                        key={idx}
-                        src={img}
-                        alt={`Attachment ${idx + 1}`}
-                        className="w-24 h-24 object-cover rounded border border-border"
-                      />
-                    ))}
-                  </div>
-                )}
-
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-
-                {/* Generated content display */}
-                {msg.generatedContent && (
-                  <div className="mt-3 p-3 bg-card rounded-lg border border-border">
-                    {msg.generatedContent.type === 'image' && msg.generatedContent.url && (
-                      <div className="space-y-2">
-                        <img
-                          src={msg.generatedContent.url}
-                          alt="Generated"
-                          className="w-full max-w-md rounded-lg"
-                        />
-                        <div className="flex gap-2">
-                          <a
-                            href={msg.generatedContent.url}
-                            download
-                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                          >
-                            <Download className="h-3 w-3" />
-                            Download
-                          </a>
-                        </div>
-                      </div>
-                    )}
-
-                    {msg.generatedContent.type === 'video' && msg.generatedContent.url && (
-                      <div className="space-y-2">
-                        <video
-                          src={msg.generatedContent.url}
-                          controls
-                          className="w-full max-w-md rounded-lg"
-                        />
-                        <div className="flex gap-2">
-                          <a
-                            href={msg.generatedContent.url}
-                            download
-                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-                          >
-                            <Download className="h-3 w-3" />
-                            Download
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Loading indicator */}
-                {(msg.action === 'generating_image' ||
-                  msg.action === 'generating_video' ||
-                  msg.action === 'generating_post' ||
-                  msg.action === 'generating_caption') && (
-                  <div className="flex items-center gap-2 mt-2 text-sm text-primary">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </div>
-                )}
-              </div>
-
-              {/* Show prompt buttons after welcome message */}
-              {msg.role === 'assistant' && messages.length === 1 && (
-                <div className="flex flex-wrap gap-2 mt-3 mr-8">
-                  {CONTENT_PROMPTS.map((prompt) => (
-                    <Button
-                      key={prompt.type}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePromptClick(prompt.type)}
-                      className="gap-2"
-                    >
-                      <prompt.icon className="h-4 w-4" />
-                      {prompt.label}
-                    </Button>
-                  ))}
-                </div>
-              )}
+      {/* Main content area */}
+      {!hasMessages ? (
+        /* Welcome state - centered content */
+        <div className="flex-1 flex flex-col items-center justify-center p-6">
+          <div className="text-center max-w-md">
+            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+              <Sparkles className="h-8 w-8 text-primary" />
             </div>
-          ))}
+            <h2 className="text-xl font-semibold mb-2">What would you like to create?</h2>
+            <p className="text-muted-foreground text-sm mb-8">
+              Choose an option below or describe what you need
+            </p>
 
-          {state.isGenerating && messages[messages.length - 1]?.action === undefined && (
-            <div className="bg-muted text-sm p-3 rounded-lg mr-8">
-              <Loader2 className="h-4 w-4 animate-spin" />
+            {/* Quick action buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
+              {CONTENT_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt.type}
+                  type="button"
+                  onClick={() => handleQuickAction(prompt.type)}
+                  disabled={state.isGenerating}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <prompt.icon className={`h-5 w-5 ${prompt.color}`} />
+                  <span className="font-medium">{prompt.label}</span>
+                </button>
+              ))}
             </div>
-          )}
+
+            <p className="text-xs text-muted-foreground">
+              Powered by AI • Credits: {credits ?? '...'} • Video: {videoCost} credits
+            </p>
+          </div>
         </div>
-      </ScrollArea>
+      ) : (
+        /* Messages */
+        <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+          <div className="space-y-4 max-w-2xl mx-auto pb-4">
+            {messages.map((msg) => (
+              <div key={msg.id}>
+                <div
+                  className={`text-sm p-4 rounded-lg ${
+                    msg.role === 'user'
+                      ? 'bg-primary/20 ml-8'
+                      : 'bg-muted mr-8'
+                  }`}
+                >
+                  {/* Image attachments */}
+                  {msg.images && msg.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {msg.images.map((img, idx) => (
+                        <img
+                          key={idx}
+                          src={img}
+                          alt={`Attachment ${idx + 1}`}
+                          className="w-24 h-24 object-cover rounded border border-border"
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+
+                  {/* Generated content display */}
+                  {msg.generatedContent && (
+                    <div className="mt-4 p-3 bg-card rounded-lg border border-border">
+                      {msg.generatedContent.type === 'image' && msg.generatedContent.url && (
+                        <div className="space-y-3">
+                          <img
+                            src={msg.generatedContent.url}
+                            alt="Generated"
+                            className="w-full max-w-md rounded-lg"
+                          />
+                          <a
+                            href={msg.generatedContent.url}
+                            download
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-xs text-primary hover:underline"
+                          >
+                            <Download className="h-3 w-3" />
+                            Download Image
+                          </a>
+                        </div>
+                      )}
+
+                      {msg.generatedContent.type === 'video' && msg.generatedContent.url && (
+                        <div className="space-y-3">
+                          <video
+                            src={msg.generatedContent.url}
+                            controls
+                            className="w-full max-w-md rounded-lg"
+                          />
+                          <a
+                            href={msg.generatedContent.url}
+                            download
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-xs text-primary hover:underline"
+                          >
+                            <Download className="h-3 w-3" />
+                            Download Video
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Loading indicator */}
+                  {(msg.action === 'generating_image' ||
+                    msg.action === 'generating_video' ||
+                    msg.action === 'generating_post' ||
+                    msg.action === 'generating_caption') && (
+                    <div className="flex items-center gap-2 mt-3 text-sm text-primary">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Working on it...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {state.isGenerating && messages[messages.length - 1]?.action === undefined && (
+              <div className="bg-muted text-sm p-4 rounded-lg mr-8 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Thinking...</span>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      )}
 
       {/* Pending Images */}
       {pendingImages.length > 0 && (
-        <div className="px-3 py-2 border-t border-border/50 bg-muted/30">
+        <div className="px-4 py-3 border-t border-border bg-muted/30">
           <div className="flex gap-2 flex-wrap max-w-2xl mx-auto">
             {pendingImages.map((img, idx) => (
               <div key={idx} className="relative group">
@@ -753,7 +781,7 @@ Keep responses brief and helpful.`,
                 <button
                   type="button"
                   onClick={() => removePendingImage(idx)}
-                  className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-sm"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -763,38 +791,50 @@ Keep responses brief and helpful.`,
         </div>
       )}
 
-      {/* Input */}
-      <div className="p-3 border-t border-border/50">
+      {/* Input area - always visible */}
+      <div className="border-t border-border bg-background p-4">
         <form onSubmit={handleSubmit} className="max-w-2xl mx-auto">
-          <div className="flex gap-2">
-            <Button
+          <div className="flex gap-3 items-end">
+            <button
               type="button"
-              variant="ghost"
-              size="icon"
               onClick={() => fileInputRef.current?.click()}
               disabled={state.isGenerating}
-              className="flex-shrink-0"
+              className="flex-shrink-0 p-2 rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-50"
             >
-              <Paperclip className="h-4 w-4" />
-            </Button>
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Describe what you want to create..."
-              disabled={state.isGenerating}
-              className="font-mono text-sm"
-            />
+              <Paperclip className="h-5 w-5 text-muted-foreground" />
+            </button>
+
+            <div className="flex-1 relative">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Describe what you want to create..."
+                disabled={state.isGenerating}
+                rows={1}
+                className="w-full resize-none rounded-lg border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 placeholder:text-muted-foreground"
+                style={{ minHeight: '48px', maxHeight: '120px' }}
+              />
+            </div>
+
             <Button
               type="submit"
               size="icon"
               disabled={state.isGenerating || (!input.trim() && pendingImages.length === 0)}
               variant="terminal"
+              className="flex-shrink-0 h-12 w-12"
             >
-              <Send className="h-4 w-4" />
+              {state.isGenerating ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2 text-center">
-            Credits: {credits ?? '...'} • Video: {videoCost} credits • Drag & drop images
+
+          <p className="text-xs text-muted-foreground mt-3 text-center">
+            Press Enter to send • Shift+Enter for new line • Drag & drop images
           </p>
         </form>
       </div>
