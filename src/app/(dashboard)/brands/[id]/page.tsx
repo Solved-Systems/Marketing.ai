@@ -469,6 +469,22 @@ export default function BrandDetailPage({
                 </div>
               )}
 
+              {/* AI Analysis Summary */}
+              {aiAnalysis?.summary && (
+                <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{aiAnalysis.summary}</p>
+                  {aiAnalysis.sources && (
+                    <div className="mt-3 pt-3 border-t border-border/30 text-xs text-muted-foreground/80 space-y-1">
+                      <p className="font-mono font-medium text-muted-foreground">sources:</p>
+                      {aiAnalysis.sources.name && <p>• Name: {aiAnalysis.sources.name}</p>}
+                      {aiAnalysis.sources.description && <p>• Description: {aiAnalysis.sources.description}</p>}
+                      {aiAnalysis.sources.colors && <p>• Colors: {aiAnalysis.sources.colors}</p>}
+                      {aiAnalysis.sources.fonts && <p>• Fonts: {aiAnalysis.sources.fonts}</p>}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Brand Card Preview - Editable */}
               <div
                 className="p-4 md:p-6 rounded-lg border"
