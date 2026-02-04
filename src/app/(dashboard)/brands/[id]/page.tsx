@@ -10,27 +10,24 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import {
   ArrowLeft,
-  Palette,
   Video,
   Image,
   MessageSquare,
-  Package,
   Plus,
   ExternalLink,
   Github,
   GitMerge,
   GitCommit,
-  Tag,
   Loader2,
   X,
+  Save,
+  Check,
 } from 'lucide-react'
 
 interface BrandMetadata {
@@ -43,6 +40,7 @@ interface BrandMetadata {
     sources?: Record<string, string>
     summary?: string
   } | null
+  extractedAt?: string
 }
 
 interface Brand {
@@ -105,7 +103,20 @@ export default function BrandDetailPage({
   const [brand, setBrand] = useState<Brand | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [hasChanges, setHasChanges] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Editable form state
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    tagline: '',
+    website_url: '',
+    logo_url: null as string | null,
+    primary_color: '#ff8c00',
+    secondary_color: '#1a1a1a',
+    accent_color: '#ffa500',
+  })
 
   // GitHub state
   const [githubActivity, setGithubActivity] = useState<GitHubActivity | null>(null)
@@ -114,11 +125,6 @@ export default function BrandDetailPage({
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [isLoadingRepos, setIsLoadingRepos] = useState(false)
   const [repoSearch, setRepoSearch] = useState('')
-
-  // Logo state
-  const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
-  const [isLoadingLogos, setIsLoadingLogos] = useState(false)
-
 
   // Fetch brand data
   useEffect(() => {
@@ -135,6 +141,17 @@ export default function BrandDetailPage({
         }
         const data = await response.json()
         setBrand(data)
+        // Initialize form with brand data
+        setFormData({
+          name: data.name || '',
+          description: data.description || '',
+          tagline: data.tagline || '',
+          website_url: data.website_url || '',
+          logo_url: data.logo_url,
+          primary_color: data.primary_color || '#ff8c00',
+          secondary_color: data.secondary_color || '#1a1a1a',
+          accent_color: data.accent_color || '#ffa500',
+        })
       } catch (err) {
         console.error('Error fetching brand:', err)
         setError('Failed to load brand')
@@ -144,6 +161,21 @@ export default function BrandDetailPage({
     }
     fetchBrand()
   }, [id])
+
+  // Track changes
+  useEffect(() => {
+    if (!brand) return
+    const changed =
+      formData.name !== brand.name ||
+      formData.description !== (brand.description || '') ||
+      formData.tagline !== (brand.tagline || '') ||
+      formData.website_url !== (brand.website_url || '') ||
+      formData.logo_url !== brand.logo_url ||
+      formData.primary_color !== brand.primary_color ||
+      formData.secondary_color !== brand.secondary_color ||
+      formData.accent_color !== brand.accent_color
+    setHasChanges(changed)
+  }, [formData, brand])
 
   // Fetch GitHub activity when brand has a connected repo
   useEffect(() => {
@@ -181,21 +213,32 @@ export default function BrandDetailPage({
     }
   }
 
-  const fetchLogosFromRepo = async () => {
-    if (!brand?.github_repo) return
-    setIsLoadingLogos(true)
+  const handleSave = async () => {
+    setIsSaving(true)
     try {
-      const response = await fetch(`/api/github/repo-info?repo=${encodeURIComponent(brand.github_repo)}`)
+      const response = await fetch(`/api/brands/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          tagline: formData.tagline,
+          website_url: formData.website_url,
+          logo_url: formData.logo_url,
+          primary_color: formData.primary_color,
+          secondary_color: formData.secondary_color,
+          accent_color: formData.accent_color,
+        }),
+      })
       if (response.ok) {
-        const data = await response.json()
-        if (data.logos && data.logos.length > 0) {
-          setAvailableLogos(data.logos)
-        }
+        const updated = await response.json()
+        setBrand(updated)
+        setHasChanges(false)
       }
     } catch (err) {
-      console.error('Error fetching logos:', err)
+      console.error('Error saving brand:', err)
     } finally {
-      setIsLoadingLogos(false)
+      setIsSaving(false)
     }
   }
 
@@ -243,11 +286,6 @@ export default function BrandDetailPage({
     repo.fullName.toLowerCase().includes(repoSearch.toLowerCase())
   )
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  }
-
   const formatTimeAgo = (dateStr: string) => {
     const date = new Date(dateStr)
     const now = new Date()
@@ -257,8 +295,14 @@ export default function BrandDetailPage({
     if (diffDays === 1) return 'yesterday'
     if (diffDays < 7) return `${diffDays} days ago`
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-    return formatDate(dateStr)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
+
+  // Get available logos from metadata
+  const availableLogos = brand?.metadata?.availableLogos || []
+  const detectedFonts = brand?.metadata?.detectedFonts || []
+  const fontFiles = brand?.metadata?.fontFiles || []
+  const aiAnalysis = brand?.metadata?.aiAnalysis
 
   if (isLoading) {
     return (
@@ -301,25 +345,27 @@ export default function BrandDetailPage({
 
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex items-center gap-3 md:gap-4">
-            {brand.logo_url ? (
+            {formData.logo_url ? (
               <img
-                src={brand.logo_url}
-                alt={brand.name}
+                src={formData.logo_url}
+                alt={formData.name}
                 className="w-12 h-12 md:w-16 md:h-16 rounded-lg object-contain bg-muted flex-shrink-0"
               />
             ) : (
               <div
                 className="w-12 h-12 md:w-16 md:h-16 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: brand.primary_color }}
+                style={{ backgroundColor: formData.primary_color }}
               >
                 <span className="text-white font-bold text-xl md:text-2xl">
-                  {brand.name[0].toUpperCase()}
+                  {formData.name[0]?.toUpperCase()}
                 </span>
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-xl md:text-3xl font-bold truncate">{brand.name}</h1>
-              <p className="text-muted-foreground text-sm md:text-base truncate">{brand.tagline}</p>
+              <h1 className="text-xl md:text-3xl font-bold truncate" style={{ color: formData.primary_color }}>
+                {formData.name}
+              </h1>
+              <p className="text-muted-foreground text-sm md:text-base truncate">{formData.tagline}</p>
             </div>
           </div>
 
@@ -358,267 +404,338 @@ export default function BrandDetailPage({
         </TabsList>
 
         <TabsContent value="overview">
-          <div className="space-y-6">
-            {/* Brand Info & Logo Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-              {/* Brand Info */}
-              <Card className="terminal-border bg-card/50 lg:col-span-2">
-                <CardHeader>
-                  <CardTitle className="font-mono text-sm flex items-center gap-2">
-                    <Palette className="h-4 w-4 text-primary" />
-                    brand_info
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-mono">description</p>
-                    <p className="mt-1">{brand.description || 'No description'}</p>
-                  </div>
-                  {brand.website_url && (
-                    <div>
-                      <p className="text-xs text-muted-foreground font-mono">website</p>
-                      <a
-                        href={brand.website_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
-                      >
-                        {brand.website_url}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
+          {/* Brand Preview Card - Matching creation flow */}
+          <Card className="terminal-border bg-card/50 mb-6">
+            <CardHeader className="py-3 border-b border-border/50 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-mono">brand_preview</CardTitle>
+              {hasChanges && (
+                <Button
+                  variant="terminal"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Save Brand
+                    </>
                   )}
-                  {brand.github_repo && (
-                    <div>
-                      <p className="text-xs text-muted-foreground font-mono">github</p>
-                      <a
-                        href={`https://github.com/${brand.github_repo}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
-                      >
-                        <Github className="h-3 w-3" />
-                        {brand.github_repo}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs text-muted-foreground font-mono mb-2">colors</p>
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col items-center gap-1">
-                        <div
-                          className="w-10 h-10 rounded-lg border border-border"
-                          style={{ backgroundColor: brand.primary_color }}
-                        />
-                        <span className="text-xs font-mono text-muted-foreground">{brand.primary_color}</span>
-                      </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <div
-                          className="w-10 h-10 rounded-lg border border-border"
-                          style={{ backgroundColor: brand.secondary_color }}
-                        />
-                        <span className="text-xs font-mono text-muted-foreground">{brand.secondary_color}</span>
-                      </div>
-                      <div className="flex flex-col items-center gap-1">
-                        <div
-                          className="w-10 h-10 rounded-lg border border-border"
-                          style={{ backgroundColor: brand.accent_color }}
-                        />
-                        <span className="text-xs font-mono text-muted-foreground">{brand.accent_color}</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="p-4 md:p-6 space-y-6">
+              {/* Connected Repo */}
+              {brand.github_repo && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Github className="h-4 w-4" />
+                  <span className="font-mono">{brand.github_repo}</span>
+                  <Check className="h-4 w-4 text-green-500" />
+                </div>
+              )}
 
-              {/* Logo Selector */}
-              <Card className="terminal-border bg-card/50">
-                <CardHeader>
-                  <CardTitle className="font-mono text-sm flex items-center gap-2">
-                    <Image className="h-4 w-4 text-primary" />
-                    logo
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Current Logo */}
-                  <div className="flex justify-center">
+              {/* Brand Card Preview - Editable */}
+              <div
+                className="p-4 md:p-6 rounded-lg border"
+                style={{ backgroundColor: formData.secondary_color, borderColor: formData.primary_color + '30' }}
+              >
+                <div className="flex items-center gap-3 md:gap-4 mb-3 md:mb-4">
+                  {formData.logo_url ? (
+                    <img
+                      src={formData.logo_url}
+                      alt="Logo"
+                      className="w-12 h-12 md:w-14 md:h-14 rounded-lg object-contain bg-white/10 flex-shrink-0"
+                    />
+                  ) : (
                     <div
-                      className="w-24 h-24 rounded-xl border-2 border-primary/30 flex items-center justify-center overflow-hidden"
-                      style={{ backgroundColor: brand.secondary_color || '#1a1a1a' }}
+                      className="w-12 h-12 md:w-14 md:h-14 rounded-lg flex items-center justify-center text-white font-bold text-xl md:text-2xl flex-shrink-0"
+                      style={{ backgroundColor: formData.primary_color }}
                     >
-                      {brand.logo_url ? (
-                        <img
-                          src={brand.logo_url}
-                          alt={brand.name}
-                          className="w-full h-full object-contain p-2"
-                        />
-                      ) : (
-                        <span
-                          className="text-3xl font-bold"
-                          style={{ color: brand.primary_color }}
-                        >
-                          {brand.name[0].toUpperCase()}
-                        </span>
-                      )}
+                      {formData.name[0]?.toUpperCase()}
                     </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      className="text-lg md:text-xl font-bold bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1"
+                      style={{ color: formData.primary_color }}
+                      placeholder="Brand Name"
+                    />
+                    <input
+                      type="text"
+                      value={formData.tagline}
+                      onChange={(e) => setFormData(prev => ({ ...prev, tagline: e.target.value }))}
+                      className="text-xs md:text-sm text-gray-400 bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1"
+                      placeholder="Tagline"
+                    />
+                  </div>
+                </div>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  className="text-xs md:text-sm text-gray-300 bg-transparent border-none outline-none w-full resize-none focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1 mb-3 md:mb-4"
+                  placeholder="Brand description..."
+                  rows={3}
+                />
+                <input
+                  type="url"
+                  value={formData.website_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, website_url: e.target.value }))}
+                  className="text-xs bg-transparent border-none outline-none w-full focus:ring-1 focus:ring-primary/50 rounded px-1 -ml-1"
+                  style={{ color: formData.accent_color }}
+                  placeholder="https://website.com"
+                />
+              </div>
+
+              {/* Logo Section */}
+              <div>
+                <p className="font-mono text-xs text-muted-foreground mb-2">logo</p>
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4">
+                  {/* Current Logo Preview */}
+                  <div
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center overflow-hidden flex-shrink-0"
+                    style={{ backgroundColor: formData.secondary_color }}
+                  >
+                    {formData.logo_url ? (
+                      <img
+                        src={formData.logo_url}
+                        alt="Logo"
+                        className="w-full h-full object-contain p-1"
+                      />
+                    ) : (
+                      <div
+                        className="w-full h-full flex items-center justify-center text-white font-bold text-xl sm:text-2xl"
+                        style={{ backgroundColor: formData.primary_color }}
+                      >
+                        {formData.name?.[0]?.toUpperCase() || '?'}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Available Logos */}
-                  {availableLogos.length > 0 ? (
-                    <div>
-                      <p className="text-xs text-muted-foreground font-mono mb-2">available ({availableLogos.length})</p>
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        {availableLogos.map((logo) => (
-                          <button
-                            key={logo.path}
-                            type="button"
-                            onClick={async () => {
-                              // Auto-save logo selection
-                              try {
-                                const response = await fetch(`/api/brands/${id}`, {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ logo_url: logo.downloadUrl }),
-                                })
-                                if (response.ok) {
-                                  const updated = await response.json()
-                                  setBrand(updated)
-                                }
-                              } catch (err) {
-                                console.error('Error saving logo:', err)
+                  {/* Logo Options */}
+                  <div className="flex-1 w-full sm:w-auto">
+                    <div className="flex gap-2 flex-wrap justify-center sm:justify-start mb-2">
+                      {/* Found logos from metadata */}
+                      {availableLogos.map((logo) => (
+                        <button
+                          key={logo.path}
+                          onClick={() => setFormData(prev => ({ ...prev, logo_url: logo.downloadUrl }))}
+                          className={`p-1 rounded border-2 transition-colors ${
+                            formData.logo_url === logo.downloadUrl
+                              ? 'border-primary'
+                              : 'border-border hover:border-primary/50'
+                          }`}
+                          title={logo.path}
+                        >
+                          <img
+                            src={logo.downloadUrl}
+                            alt={logo.path}
+                            className="w-8 h-8 object-contain bg-white/10 rounded"
+                          />
+                        </button>
+                      ))}
+
+                      {/* Upload button */}
+                      <label
+                        className="w-10 h-10 rounded border-2 border-dashed border-border hover:border-primary/50 flex items-center justify-center cursor-pointer transition-colors"
+                        title="Upload logo"
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = (ev) => {
+                                setFormData(prev => ({ ...prev, logo_url: ev.target?.result as string }))
                               }
-                            }}
-                            className={`p-1 rounded border-2 transition-all ${
-                              brand.logo_url === logo.downloadUrl
-                                ? 'border-primary ring-2 ring-primary/20'
-                                : 'border-border hover:border-primary/50'
-                            }`}
-                            title={logo.path}
-                          >
-                            <img
-                              src={logo.downloadUrl}
-                              alt={logo.path}
-                              className="w-12 h-12 object-contain bg-white/10 rounded"
-                            />
-                          </button>
-                        ))}
-                      </div>
+                              reader.readAsDataURL(file)
+                            }
+                          }}
+                        />
+                        <Plus className="h-4 w-4 text-muted-foreground" />
+                      </label>
+
+                      {/* Use letter fallback */}
+                      <button
+                        onClick={() => setFormData(prev => ({ ...prev, logo_url: null }))}
+                        className={`w-10 h-10 rounded border-2 flex items-center justify-center text-xs font-mono transition-colors ${
+                          !formData.logo_url
+                            ? 'border-primary text-primary'
+                            : 'border-border text-muted-foreground hover:border-primary/50'
+                        }`}
+                        title="Use letter"
+                      >
+                        Aa
+                      </button>
                     </div>
-                  ) : brand.github_repo ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={fetchLogosFromRepo}
-                      disabled={isLoadingLogos}
-                    >
-                      {isLoadingLogos ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Github className="h-4 w-4" />
-                      )}
-                      Load from GitHub
-                    </Button>
-                  ) : (
-                    <p className="text-xs text-muted-foreground text-center">
-                      Connect GitHub to load logos
+                    <p className="text-xs text-muted-foreground text-center sm:text-left">
+                      {availableLogos.length > 0
+                        ? `Found ${availableLogos.length} logo(s) in repo`
+                        : 'Upload a logo or use letter'}
                     </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                  </div>
+                </div>
+              </div>
 
-            {/* Fonts & Assets Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-              {/* Fonts */}
-              <Card className="terminal-border bg-card/50">
-                <CardHeader>
-                  <CardTitle className="font-mono text-sm flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-primary" />
-                    fonts
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {brand.metadata?.aiAnalysis?.fonts ? (
-                    <div className="space-y-3">
-                      {brand.metadata.aiAnalysis.fonts.primary && (
-                        <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
-                          <span className="text-xs text-muted-foreground font-mono">primary</span>
-                          <span className="text-sm font-medium">{brand.metadata.aiAnalysis.fonts.primary}</span>
-                        </div>
-                      )}
-                      {brand.metadata.aiAnalysis.fonts.secondary && (
-                        <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
-                          <span className="text-xs text-muted-foreground font-mono">secondary</span>
-                          <span className="text-sm font-medium">{brand.metadata.aiAnalysis.fonts.secondary}</span>
-                        </div>
-                      )}
-                      {brand.metadata.aiAnalysis.fonts.mono && (
-                        <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
-                          <span className="text-xs text-muted-foreground font-mono">mono</span>
-                          <span className="text-sm font-medium">{brand.metadata.aiAnalysis.fonts.mono}</span>
-                        </div>
-                      )}
-                      {brand.metadata.detectedFonts && brand.metadata.detectedFonts.length > 0 && (
-                        <div className="pt-2 border-t border-border/50">
-                          <p className="text-xs text-muted-foreground font-mono mb-2">detected</p>
-                          <div className="flex flex-wrap gap-1">
-                            {brand.metadata.detectedFonts.map((font: string, idx: number) => (
-                              <Badge key={idx} variant="outline" className="text-xs">{font}</Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="py-6 text-center">
-                      <Tag className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">No fonts detected</p>
-                      <p className="text-xs text-muted-foreground/70">Connect GitHub to analyze fonts</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Assets */}
-              <Card className="terminal-border bg-card/50">
-                <CardHeader>
-                  <CardTitle className="font-mono text-sm flex items-center gap-2">
-                    <Package className="h-4 w-4 text-primary" />
-                    assets
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {brand.metadata?.fontFiles && brand.metadata.fontFiles.length > 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground font-mono mb-2">font_files ({brand.metadata.fontFiles.length})</p>
-                      <div className="max-h-32 overflow-y-auto space-y-1">
-                        {brand.metadata.fontFiles.map((file: { path: string; name: string; downloadUrl: string }, idx: number) => (
-                          <a
-                            key={idx}
-                            href={file.downloadUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between p-2 bg-muted/30 rounded hover:bg-muted/50 transition-colors"
+              {/* Fonts Section */}
+              {(detectedFonts.length > 0 || fontFiles.length > 0 || aiAnalysis?.fonts) && (
+                <div>
+                  <p className="font-mono text-xs text-muted-foreground mb-2">fonts</p>
+                  <div className="space-y-3">
+                    {/* Detected font names as badges */}
+                    {detectedFonts.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {detectedFonts.map((font, index) => (
+                          <div
+                            key={index}
+                            className="px-3 py-1.5 bg-muted rounded-md border border-border"
+                            style={{ fontFamily: font }}
                           >
-                            <span className="text-xs truncate flex-1">{file.name}</span>
-                            <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
-                          </a>
+                            <span className="text-sm">{font}</span>
+                          </div>
                         ))}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="py-6 text-center">
-                      <Package className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">No assets found</p>
-                      <p className="text-xs text-muted-foreground/70">Connect GitHub to load assets</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                    )}
+
+                    {/* AI-detected fonts with roles */}
+                    {aiAnalysis?.fonts && !detectedFonts.length && (
+                      <div className="flex flex-wrap gap-2">
+                        {aiAnalysis.fonts.primary && (
+                          <div className="px-3 py-1.5 bg-muted rounded-md border border-border">
+                            <span className="text-sm">{aiAnalysis.fonts.primary}</span>
+                          </div>
+                        )}
+                        {aiAnalysis.fonts.secondary && aiAnalysis.fonts.secondary !== aiAnalysis.fonts.primary && (
+                          <div className="px-3 py-1.5 bg-muted rounded-md border border-border">
+                            <span className="text-sm">{aiAnalysis.fonts.secondary}</span>
+                          </div>
+                        )}
+                        {aiAnalysis.fonts.mono && (
+                          <div className="px-3 py-1.5 bg-muted rounded-md border border-border font-mono">
+                            <span className="text-sm">{aiAnalysis.fonts.mono}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Font files found */}
+                    {fontFiles.length > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-mono">files:</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {fontFiles.map((font, index) => (
+                            <a
+                              key={index}
+                              href={font.downloadUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-0.5 bg-background rounded border border-border/50 font-mono hover:border-primary/50 transition-colors"
+                              title={font.path}
+                            >
+                              {font.name}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Colors - Editable */}
+              <div>
+                <p className="font-mono text-xs text-muted-foreground mb-2">colors (tap to edit)</p>
+                <div className="grid grid-cols-3 gap-2 md:gap-3">
+                  <div className="text-center">
+                    <label className="cursor-pointer block">
+                      <input
+                        type="color"
+                        value={formData.primary_color}
+                        onChange={(e) => setFormData(prev => ({ ...prev, primary_color: e.target.value }))}
+                        className="sr-only"
+                      />
+                      <div
+                        className="w-full h-10 md:h-12 rounded border border-border hover:border-primary/50 transition-colors"
+                        style={{ backgroundColor: formData.primary_color }}
+                      />
+                    </label>
+                    <Input
+                      value={formData.primary_color}
+                      onChange={(e) => setFormData(prev => ({ ...prev, primary_color: e.target.value }))}
+                      className="font-mono text-xs h-7 mt-1 text-center"
+                      placeholder="#000000"
+                    />
+                    <span className="text-xs font-mono text-muted-foreground">primary</span>
+                  </div>
+                  <div className="text-center">
+                    <label className="cursor-pointer block">
+                      <input
+                        type="color"
+                        value={formData.secondary_color}
+                        onChange={(e) => setFormData(prev => ({ ...prev, secondary_color: e.target.value }))}
+                        className="sr-only"
+                      />
+                      <div
+                        className="w-full h-10 md:h-12 rounded border border-border hover:border-primary/50 transition-colors"
+                        style={{ backgroundColor: formData.secondary_color }}
+                      />
+                    </label>
+                    <Input
+                      value={formData.secondary_color}
+                      onChange={(e) => setFormData(prev => ({ ...prev, secondary_color: e.target.value }))}
+                      className="font-mono text-xs h-7 mt-1 text-center"
+                      placeholder="#000000"
+                    />
+                    <span className="text-xs font-mono text-muted-foreground">secondary</span>
+                  </div>
+                  <div className="text-center">
+                    <label className="cursor-pointer block">
+                      <input
+                        type="color"
+                        value={formData.accent_color}
+                        onChange={(e) => setFormData(prev => ({ ...prev, accent_color: e.target.value }))}
+                        className="sr-only"
+                      />
+                      <div
+                        className="w-full h-10 md:h-12 rounded border border-border hover:border-primary/50 transition-colors"
+                        style={{ backgroundColor: formData.accent_color }}
+                      />
+                    </label>
+                    <Input
+                      value={formData.accent_color}
+                      onChange={(e) => setFormData(prev => ({ ...prev, accent_color: e.target.value }))}
+                      className="font-mono text-xs h-7 mt-1 text-center"
+                      placeholder="#000000"
+                    />
+                    <span className="text-xs font-mono text-muted-foreground">accent</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sample Button */}
+              <div>
+                <p className="font-mono text-xs text-muted-foreground mb-2">sample_button</p>
+                <Button
+                  style={{
+                    backgroundColor: formData.accent_color,
+                    color: formData.secondary_color,
+                  }}
+                >
+                  Get Started
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* GitHub Integration Tab */}
@@ -804,50 +921,6 @@ export default function BrandDetailPage({
               )}
             </CardContent>
           </Card>
-
-          {/* How it works */}
-          <Card className="terminal-border bg-card/50 mt-6">
-            <CardHeader>
-              <CardTitle className="font-mono text-sm">how_it_works</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">
-                    1
-                  </div>
-                  <div>
-                    <p className="font-semibold">Connect your repository</p>
-                    <p className="text-muted-foreground text-xs">
-                      Link your GitHub repo to this brand
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">
-                    2
-                  </div>
-                  <div>
-                    <p className="font-semibold">Track activity</p>
-                    <p className="text-muted-foreground text-xs">
-                      See merged PRs and recent commits
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center text-xs text-primary font-bold">
-                    3
-                  </div>
-                  <div>
-                    <p className="font-semibold">Generate content</p>
-                    <p className="text-muted-foreground text-xs">
-                      Create videos, posts, and images about your releases
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="content">
@@ -872,7 +945,6 @@ export default function BrandDetailPage({
             </CardContent>
           </Card>
         </TabsContent>
-
       </Tabs>
     </div>
   )
