@@ -115,7 +115,8 @@ export async function GET(request: Request) {
           if (item.type === 'dir') {
             subdirs.push(item.path)
           } else if (item.type === 'file') {
-            const downloadUrl = item.download_url || `/api/github/file?repo=${encodeURIComponent(repo!)}&path=${encodeURIComponent(item.path)}`
+            // Always use our proxy endpoint to avoid token expiration issues
+            const downloadUrl = `/api/github/file?repo=${encodeURIComponent(repo!)}&path=${encodeURIComponent(item.path)}`
             assets.push({
               path: item.path,
               downloadUrl,

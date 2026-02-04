@@ -141,13 +141,24 @@ export default function BrandDetailPage({
         }
         const data = await response.json()
         setBrand(data)
+
+        // Convert logo URL to proxy if it's a GitHub raw URL
+        let logoUrl = data.logo_url
+        if (logoUrl && data.github_repo && (logoUrl.includes('raw.githubusercontent.com') || logoUrl.includes('github.com'))) {
+          // Try to find the path from metadata
+          const logoMeta = data.metadata?.availableLogos?.find((l: { downloadUrl: string }) => l.downloadUrl === logoUrl)
+          if (logoMeta) {
+            logoUrl = `/api/github/file?repo=${encodeURIComponent(data.github_repo)}&path=${encodeURIComponent(logoMeta.path)}`
+          }
+        }
+
         // Initialize form with brand data
         setFormData({
           name: data.name || '',
           description: data.description || '',
           tagline: data.tagline || '',
           website_url: data.website_url || '',
-          logo_url: data.logo_url,
+          logo_url: logoUrl,
           primary_color: data.primary_color || '#ff8c00',
           secondary_color: data.secondary_color || '#1a1a1a',
           accent_color: data.accent_color || '#ffa500',
@@ -298,10 +309,29 @@ export default function BrandDetailPage({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  // Get available logos from metadata
-  const availableLogos = brand?.metadata?.availableLogos || []
+  // Convert GitHub raw URLs to proxy URLs to avoid token expiration
+  const convertToProxyUrl = (url: string, path: string) => {
+    // If already using our proxy, keep it
+    if (url.startsWith('/api/github/file')) return url
+    // If it's a data URL (uploaded file), keep it
+    if (url.startsWith('data:')) return url
+    // Convert GitHub raw URLs to our proxy
+    if (url.includes('raw.githubusercontent.com') || url.includes('github.com')) {
+      return `/api/github/file?repo=${encodeURIComponent(brand?.github_repo || '')}&path=${encodeURIComponent(path)}`
+    }
+    return url
+  }
+
+  // Get available logos from metadata and convert URLs
+  const availableLogos = (brand?.metadata?.availableLogos || []).map(logo => ({
+    ...logo,
+    downloadUrl: convertToProxyUrl(logo.downloadUrl, logo.path)
+  }))
   const detectedFonts = brand?.metadata?.detectedFonts || []
-  const fontFiles = brand?.metadata?.fontFiles || []
+  const fontFiles = (brand?.metadata?.fontFiles || []).map(font => ({
+    ...font,
+    downloadUrl: convertToProxyUrl(font.downloadUrl, font.path)
+  }))
   const aiAnalysis = brand?.metadata?.aiAnalysis
 
   if (isLoading) {
