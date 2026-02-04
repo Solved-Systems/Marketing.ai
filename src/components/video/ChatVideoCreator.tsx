@@ -20,7 +20,9 @@ import type {
   Brand,
   LogoAnalysis,
   MarketingCopy,
+  VideoModel,
 } from '@/types/video-creation'
+import { VIDEO_MODELS } from '@/types/video-creation'
 import { useCredits } from '@/hooks/use-credits'
 import { getVideoGenerationType, getCreditCost } from '@/lib/billing/models'
 import type { ModelQuality } from '@/lib/billing/models'
@@ -775,6 +777,14 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
     }))
   }
 
+  // Update video model
+  const updateModel = (model: VideoModel) => {
+    onStateChange((prev: VideoCreationState) => ({
+      ...prev,
+      videoModel: model,
+    }))
+  }
+
   const creditCost = getCreditCost(getVideoGenerationType('default'))
 
   return (
@@ -866,6 +876,28 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
 
               {msg.action === 'configure_video' && state.phase === 'video' && (
                 <div className="mt-3 mr-8 space-y-4 p-3 bg-card/50 rounded-lg terminal-border">
+                  {/* Video Model */}
+                  <div className="space-y-2">
+                    <Label className="text-xs font-mono">model</Label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {VIDEO_MODELS.map((model) => (
+                        <button
+                          key={model.value}
+                          type="button"
+                          onClick={() => updateModel(model.value)}
+                          className={`p-2 text-xs rounded terminal-border transition-all text-left ${
+                            state.videoModel === model.value
+                              ? 'bg-primary/20 border-primary'
+                              : 'bg-card/30 hover:bg-card/50'
+                          }`}
+                        >
+                          <span className="font-medium">{model.label}</span>
+                          <span className="block text-[10px] text-muted-foreground">{model.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Duration */}
                   <div className="space-y-2">
                     <Label className="text-xs font-mono">duration: {state.videoSettings.duration}s</Label>
@@ -966,7 +998,7 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
         </div>
       )}
 
-      {/* Input */}
+      {/* Input with terminal cursor */}
       <form onSubmit={handleSubmit} className="p-3 border-t border-border/50">
         <div className="flex gap-2">
           <Button
@@ -994,7 +1026,7 @@ Keep responses brief and helpful. If they want to change settings or regenerate 
                       : 'Ask me anything...'
             }
             disabled={isLoading}
-            className="font-mono text-sm"
+            className="font-mono text-sm terminal-cursor"
           />
           <Button
             type="submit"

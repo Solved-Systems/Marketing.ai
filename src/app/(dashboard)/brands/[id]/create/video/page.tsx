@@ -20,6 +20,7 @@ const initialState: VideoCreationState = {
   backgroundImages: [],
   selectedBackground: null,
   videoPrompt: null,
+  videoModel: 'grok',
   videoSettings: {
     duration: 5,
     aspectRatio: '16:9',
@@ -63,12 +64,26 @@ export default function CreateVideoPage({
     fetchBrand()
   }, [id])
 
-  // Handle logo selection
-  const handleSelectLogo = (url: string) => {
+  // Handle logo selection with auto-save to brand
+  const handleSelectLogo = async (url: string) => {
+    // Update local state immediately
     setState(prev => ({
       ...prev,
       logoUrl: url,
     }))
+
+    // Auto-save to brand
+    try {
+      await fetch(`/api/brands/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logo_url: url }),
+      })
+      // Update local brand state
+      setBrand(prev => prev ? { ...prev, logo_url: url } : prev)
+    } catch (error) {
+      console.error('Failed to save logo:', error)
+    }
   }
 
   // Handle background selection

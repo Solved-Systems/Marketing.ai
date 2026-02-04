@@ -21,6 +21,8 @@ export interface MarketingCopy {
   hashtags: string[]
 }
 
+export type VideoModel = 'grok' | 'remotion'
+
 export interface VideoCreationState {
   phase: VideoPhase
   logoUrl: string | null
@@ -29,6 +31,7 @@ export interface VideoCreationState {
   backgroundImages: string[]
   selectedBackground: string | null
   videoPrompt: string | null
+  videoModel: VideoModel
   videoSettings: {
     duration: number
     aspectRatio: '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3'
@@ -104,3 +107,10 @@ export const DEFAULT_VIDEO_SETTINGS: VideoCreationState['videoSettings'] = {
   aspectRatio: '16:9',
   resolution: '720p',
 }
+
+export const VIDEO_MODELS = [
+  { value: 'grok' as const, label: 'Grok Imagine', description: 'AI-powered video from image' },
+  { value: 'remotion' as const, label: 'Remotion', description: 'Template-based animated video' },
+]
+
+export const DEFAULT_VIDEO_MODEL: VideoModel = 'grok'

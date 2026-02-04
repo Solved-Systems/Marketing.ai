@@ -255,3 +255,17 @@
 .terminal-text-bright {
   color: oklch(0.85 0.2 55);
 }
+
+/* Terminal cursor for inputs */
+.terminal-cursor {
+  caret-color: oklch(0.75 0.18 55);
+}
+
+.terminal-cursor:focus {
+  animation: cursor-blink 1s step-end infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { caret-color: oklch(0.75 0.18 55); }
+  50% { caret-color: transparent; }
+}
