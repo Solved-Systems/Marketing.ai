@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { experimental_generateImage as generateImage } from 'ai'
+import { gateway } from '@ai-sdk/gateway'
 
 export interface OpenAIImageRequest {
   prompt: string
@@ -61,9 +62,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
     }
 
     // Generate image using Vercel AI Gateway
-    // Pass model ID as string - gateway auto-routes based on AI_GATEWAY_API_KEY or OIDC token
     const result = await generateImage({
-      model: model as any, // Model string like 'bfl/flux-pro-1.1'
+      model: gateway.imageModel(model as any),
       prompt,
       n,
       aspectRatio,
