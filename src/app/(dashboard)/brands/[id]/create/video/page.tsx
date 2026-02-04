@@ -20,7 +20,11 @@ import {
   Download,
   RefreshCw,
   ExternalLink,
+  Wand2,
+  Film,
 } from 'lucide-react'
+
+type GenerationMode = 'grok-imagine' | 'remotion'
 
 interface Brand {
   id: string
@@ -62,6 +66,7 @@ export default function CreateContentPage({
   const [isLoading, setIsLoading] = useState(false)
   const [uploadedImages, setUploadedImages] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [generationMode, setGenerationMode] = useState<GenerationMode>('grok-imagine')
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -159,11 +164,12 @@ export default function CreateContentPage({
 
     // TODO: Implement actual AI generation
     // For now, simulate a response
+    const engineName = generationMode === 'grok-imagine' ? 'Grok Imagine' : 'Remotion'
     setTimeout(() => {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `I received your request${userMessage.images ? ` with ${userMessage.images.length} image(s)` : ''}. ${userMessage.content ? `You want to "${userMessage.content}".` : ''}\n\nThis is where I would generate content based on your request. The AI generation endpoint needs to be connected.`,
+        content: `**Engine:** ${engineName}\n\nI received your request${userMessage.images ? ` with ${userMessage.images.length} image(s)` : ''}. ${userMessage.content ? `You want to "${userMessage.content}".` : ''}\n\n${generationMode === 'grok-imagine' ? '🎨 Generating image with Grok Imagine...' : '🎬 Creating video with Remotion...'}\n\n_The ${engineName} API endpoint needs to be connected._`,
       }])
       setIsLoading(false)
     }, 1500)
@@ -391,6 +397,35 @@ export default function CreateContentPage({
 
         {/* Input Area */}
         <div className="max-w-3xl mx-auto w-full pt-4 border-t border-border/50">
+          {/* Generation Mode Toggle */}
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <span className="text-xs text-muted-foreground font-mono mr-2">engine:</span>
+            <button
+              type="button"
+              onClick={() => setGenerationMode('grok-imagine')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                generationMode === 'grok-imagine'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              Grok Imagine
+            </button>
+            <button
+              type="button"
+              onClick={() => setGenerationMode('remotion')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                generationMode === 'remotion'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <Film className="h-3.5 w-3.5" />
+              Remotion
+            </button>
+          </div>
+
           {/* Uploaded Images Preview */}
           {uploadedImages.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-3">
