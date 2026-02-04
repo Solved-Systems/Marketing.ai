@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { experimental_generateImage as generateImage } from 'ai'
-import { gateway } from '@ai-sdk/gateway'
 
 export interface OpenAIImageRequest {
   prompt: string
   model?: string
-  size?: '1024x1024' | '1792x1024' | '1024x1792' | '512x512' | '256x256'
+  aspectRatio?: '1:1' | '16:9' | '4:3' | '3:2' | '9:16'
   n?: number
 }
 
@@ -39,8 +38,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
     const body = await request.json() as OpenAIImageRequest
     const {
       prompt,
-      model = 'openai/gpt-image-1',
-      size = '1024x1024',
+      model = 'bfl/flux-pro-1.1', // Black Forest Labs Flux - high quality image model
+      aspectRatio = '1:1',
       n = 1
     } = body
 
@@ -62,17 +61,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
     }
 
     // Generate image using Vercel AI Gateway
-    // The gateway provider auto-authenticates with AI_GATEWAY_API_KEY or OIDC token
+    // Pass model ID as string - gateway auto-routes based on AI_GATEWAY_API_KEY or OIDC token
     const result = await generateImage({
-      model: gateway.image(model),
+      model: model as any, // Model string like 'bfl/flux-pro-1.1'
       prompt,
       n,
-      size,
+      aspectRatio,
     })
 
     // Extract image URLs from result
     const images = result.images.map(img => ({
-      url: img.base64 ? `data:image/png;base64,${img.base64}` : (img as unknown as { url?: string }).url || '',
+      url: img.base64 ? `data:image/png;base64,${img.base64}` : '',
     })).filter(img => img.url)
 
     return NextResponse.json({
@@ -80,7 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
       images,
     })
   } catch (error) {
-    console.error('OpenAI image generation error:', error)
+    console.error('Image generation error:', error)
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Failed to generate image' },
       { status: 500 }
