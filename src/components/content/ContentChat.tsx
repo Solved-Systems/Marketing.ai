@@ -620,7 +620,7 @@ Keep responses brief and helpful.`,
 
   return (
     <div
-      className={`flex flex-col h-full relative ${isDragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
+      className={`flex flex-col h-full min-h-0 relative ${isDragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -638,25 +638,25 @@ Keep responses brief and helpful.`,
       {/* Main content area */}
       {!hasMessages ? (
         /* Welcome state - centered content */
-        <div className="flex-1 flex flex-col items-center justify-center p-6">
-          <div className="text-center max-w-md">
-            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="h-8 w-8 text-primary" />
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-4 sm:p-6 overflow-auto">
+          <div className="text-center max-w-md w-full">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-3 sm:mb-4">
+              <Sparkles className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
             </div>
-            <h2 className="text-xl font-semibold mb-2">What would you like to create?</h2>
-            <p className="text-muted-foreground text-sm mb-8">
+            <h2 className="text-lg sm:text-xl font-semibold mb-2">What would you like to create?</h2>
+            <p className="text-muted-foreground text-sm mb-6 sm:mb-8">
               Choose an option below or describe what you need
             </p>
 
             {/* Quick action buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
+            <div className="flex flex-col gap-2 sm:gap-3 justify-center mb-6 sm:mb-8">
               {CONTENT_PROMPTS.map((prompt) => (
                 <button
                   key={prompt.type}
                   type="button"
                   onClick={() => handleQuickAction(prompt.type)}
                   disabled={state.isGenerating}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border bg-card hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center gap-3 px-4 py-3 rounded-lg border border-border bg-card hover:bg-muted active:bg-muted/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                 >
                   <prompt.icon className={`h-5 w-5 ${prompt.color}`} />
                   <span className="font-medium">{prompt.label}</span>
@@ -665,7 +665,7 @@ Keep responses brief and helpful.`,
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Powered by AI • Credits: {credits ?? '...'} • Video: {videoCost} credits
+              Credits: {credits ?? '...'} • Video: {videoCost} credits
             </p>
           </div>
         </div>
@@ -791,20 +791,20 @@ Keep responses brief and helpful.`,
         </div>
       )}
 
-      {/* Input area - always visible */}
-      <div className="border-t border-border bg-background p-4">
+      {/* Input area - always visible, safe for mobile */}
+      <div className="flex-shrink-0 border-t border-border bg-background p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <form onSubmit={handleSubmit} className="max-w-2xl mx-auto">
-          <div className="flex gap-3 items-end">
+          <div className="flex gap-2 items-end">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={state.isGenerating}
-              className="flex-shrink-0 p-2 rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-50"
+              className="flex-shrink-0 p-2.5 rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-50"
             >
               <Paperclip className="h-5 w-5 text-muted-foreground" />
             </button>
 
-            <div className="flex-1 relative">
+            <div className="flex-1 min-w-0">
               <textarea
                 ref={inputRef}
                 value={input}
@@ -813,8 +813,8 @@ Keep responses brief and helpful.`,
                 placeholder="Describe what you want to create..."
                 disabled={state.isGenerating}
                 rows={1}
-                className="w-full resize-none rounded-lg border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 placeholder:text-muted-foreground"
-                style={{ minHeight: '48px', maxHeight: '120px' }}
+                className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-base leading-normal focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 placeholder:text-muted-foreground"
+                style={{ minHeight: '44px', maxHeight: '120px', fontSize: '16px' }}
               />
             </div>
 
@@ -823,7 +823,7 @@ Keep responses brief and helpful.`,
               size="icon"
               disabled={state.isGenerating || (!input.trim() && pendingImages.length === 0)}
               variant="terminal"
-              className="flex-shrink-0 h-12 w-12"
+              className="flex-shrink-0 h-11 w-11"
             >
               {state.isGenerating ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -833,7 +833,7 @@ Keep responses brief and helpful.`,
             </Button>
           </div>
 
-          <p className="text-xs text-muted-foreground mt-3 text-center">
+          <p className="text-xs text-muted-foreground mt-2 text-center hidden sm:block">
             Press Enter to send • Shift+Enter for new line • Drag & drop images
           </p>
         </form>

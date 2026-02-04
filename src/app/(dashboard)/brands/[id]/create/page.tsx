@@ -3,10 +3,36 @@
 import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react'
 import { ContentChat } from '@/components/content/ContentChat'
 import type { Brand } from '@/types/video-creation'
+
+function BrandLogo({ brand }: { brand: Brand }) {
+  const [imgError, setImgError] = useState(false)
+
+  if (brand.logo_url && !imgError) {
+    return (
+      <img
+        src={brand.logo_url}
+        alt={brand.name}
+        className="w-8 h-8 rounded object-contain bg-muted"
+        onError={() => setImgError(true)}
+      />
+    )
+  }
+
+  return (
+    <div
+      className="w-8 h-8 rounded flex items-center justify-center"
+      style={{ backgroundColor: brand.primary_color || '#ff8c00' }}
+    >
+      <span className="text-white font-bold text-sm">
+        {brand.name[0].toUpperCase()}
+      </span>
+    </div>
+  )
+}
 
 export default function CreateContentPage({
   params,
@@ -83,24 +109,9 @@ export default function CreateContentPage({
               <span className="hidden sm:inline">Back</span>
             </Link>
             <div className="flex items-center gap-3">
-              {brand.logo_url ? (
-                <img
-                  src={brand.logo_url}
-                  alt={brand.name}
-                  className="w-8 h-8 rounded object-contain bg-muted"
-                />
-              ) : (
-                <div
-                  className="w-8 h-8 rounded flex items-center justify-center"
-                  style={{ backgroundColor: brand.primary_color || '#ff8c00' }}
-                >
-                  <span className="text-white font-bold text-sm">
-                    {brand.name[0].toUpperCase()}
-                  </span>
-                </div>
-              )}
-              <div>
-                <h1 className="text-lg font-semibold">{brand.name}</h1>
+              <BrandLogo brand={brand} />
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-semibold truncate">{brand.name}</h1>
                 <p className="text-xs text-muted-foreground">Content Studio</p>
               </div>
             </div>
@@ -114,7 +125,7 @@ export default function CreateContentPage({
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <ContentChat brand={brand} />
       </div>
     </div>
