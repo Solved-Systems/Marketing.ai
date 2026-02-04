@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { experimental_generateImage as generateImage } from 'ai'
-import { gateway } from '@ai-sdk/gateway'
+import { createGateway } from '@ai-sdk/gateway'
 
 export interface OpenAIImageRequest {
   prompt: string
@@ -62,6 +62,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
     }
 
     // Generate image using Vercel AI Gateway
+    const gateway = createGateway({
+      apiKey: gatewayKey,
+    })
+
     const result = await generateImage({
       model: gateway.imageModel(model as any),
       prompt,
