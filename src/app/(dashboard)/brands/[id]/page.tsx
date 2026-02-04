@@ -2,7 +2,6 @@
 
 import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,20 +23,27 @@ import {
   Image,
   MessageSquare,
   Package,
-  Settings,
   Plus,
   ExternalLink,
   Github,
-  GitBranch,
   GitMerge,
   GitCommit,
   Tag,
-  Trash2,
-  Check,
   Loader2,
-  Save,
   X,
 } from 'lucide-react'
+
+interface BrandMetadata {
+  availableLogos?: { path: string; downloadUrl: string }[]
+  fontFiles?: { path: string; downloadUrl: string; name: string }[]
+  detectedFonts?: string[]
+  aiAnalysis?: {
+    fonts?: { primary?: string; secondary?: string; mono?: string }
+    allColors?: Record<string, string>
+    sources?: Record<string, string>
+    summary?: string
+  } | null
+}
 
 interface Brand {
   id: string
@@ -50,7 +56,7 @@ interface Brand {
   secondary_color: string
   accent_color: string
   github_repo: string | null
-  metadata: Record<string, unknown> | null
+  metadata: BrandMetadata | null
   created_at: string
   updated_at: string
 }
@@ -95,16 +101,11 @@ export default function BrandDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const router = useRouter()
   const { id } = use(params)
   const [brand, setBrand] = useState<Brand | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Editing state
-  const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState<Partial<Brand>>({})
 
   // GitHub state
   const [githubActivity, setGithubActivity] = useState<GitHubActivity | null>(null)
@@ -118,10 +119,6 @@ export default function BrandDetailPage({
   const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
   const [isLoadingLogos, setIsLoadingLogos] = useState(false)
 
-  // Delete state
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Fetch brand data
   useEffect(() => {
@@ -138,7 +135,6 @@ export default function BrandDetailPage({
         }
         const data = await response.json()
         setBrand(data)
-        setEditForm(data)
       } catch (err) {
         console.error('Error fetching brand:', err)
         setError('Failed to load brand')
@@ -215,7 +211,6 @@ export default function BrandDetailPage({
       if (response.ok) {
         const updated = await response.json()
         setBrand(updated)
-        setEditForm(updated)
       }
     } catch (err) {
       console.error('Error connecting repo:', err)
@@ -235,52 +230,12 @@ export default function BrandDetailPage({
       if (response.ok) {
         const updated = await response.json()
         setBrand(updated)
-        setEditForm(updated)
         setGithubActivity(null)
       }
     } catch (err) {
       console.error('Error disconnecting repo:', err)
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleSave = async () => {
-    setIsSaving(true)
-    try {
-      const response = await fetch(`/api/brands/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm),
-      })
-      if (response.ok) {
-        const updated = await response.json()
-        setBrand(updated)
-        setIsEditing(false)
-      }
-    } catch (err) {
-      console.error('Error saving brand:', err)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    setIsDeleting(true)
-    setDeleteError(null)
-    try {
-      const response = await fetch(`/api/brands/${id}`, { method: 'DELETE' })
-      if (response.ok) {
-        router.push('/brands')
-      } else {
-        const data = await response.json()
-        setDeleteError(data.error || 'Failed to delete brand')
-        setIsDeleting(false)
-      }
-    } catch (err) {
-      console.error('Error deleting brand:', err)
-      setDeleteError('Failed to delete brand. Please try again.')
-      setIsDeleting(false)
     }
   }
 
@@ -395,139 +350,275 @@ export default function BrandDetailPage({
       <Tabs defaultValue="overview" className="space-y-4 md:space-y-6">
         <TabsList className="bg-muted/50 w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
-          <TabsTrigger value="products" className="text-xs sm:text-sm">Products</TabsTrigger>
           <TabsTrigger value="github" className="text-xs sm:text-sm">
             <Github className="h-4 w-4 sm:mr-1" />
             <span className="hidden sm:inline">GitHub</span>
           </TabsTrigger>
           <TabsTrigger value="content" className="text-xs sm:text-sm">Content</TabsTrigger>
-          <TabsTrigger value="settings" className="text-xs sm:text-sm">Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            {/* Brand Info */}
-            <Card className="terminal-border bg-card/50">
-              <CardHeader>
-                <CardTitle className="font-mono text-sm flex items-center gap-2">
-                  <Palette className="h-4 w-4 text-primary" />
-                  brand_info
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-xs text-muted-foreground font-mono">description</p>
-                  <p className="mt-1">{brand.description || 'No description'}</p>
-                </div>
-                {brand.website_url && (
+          <div className="space-y-6">
+            {/* Brand Info & Logo Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+              {/* Brand Info */}
+              <Card className="terminal-border bg-card/50 lg:col-span-2">
+                <CardHeader>
+                  <CardTitle className="font-mono text-sm flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-primary" />
+                    brand_info
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div>
-                    <p className="text-xs text-muted-foreground font-mono">website</p>
-                    <a
-                      href={brand.website_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      {brand.website_url}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+                    <p className="text-xs text-muted-foreground font-mono">description</p>
+                    <p className="mt-1">{brand.description || 'No description'}</p>
                   </div>
-                )}
-                {brand.github_repo && (
+                  {brand.website_url && (
+                    <div>
+                      <p className="text-xs text-muted-foreground font-mono">website</p>
+                      <a
+                        href={brand.website_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        {brand.website_url}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+                  {brand.github_repo && (
+                    <div>
+                      <p className="text-xs text-muted-foreground font-mono">github</p>
+                      <a
+                        href={`https://github.com/${brand.github_repo}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        <Github className="h-3 w-3" />
+                        {brand.github_repo}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
                   <div>
-                    <p className="text-xs text-muted-foreground font-mono">github</p>
-                    <a
-                      href={`https://github.com/${brand.github_repo}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      <Github className="h-3 w-3" />
-                      {brand.github_repo}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+                    <p className="text-xs text-muted-foreground font-mono mb-2">colors</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col items-center gap-1">
+                        <div
+                          className="w-10 h-10 rounded-lg border border-border"
+                          style={{ backgroundColor: brand.primary_color }}
+                        />
+                        <span className="text-xs font-mono text-muted-foreground">{brand.primary_color}</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <div
+                          className="w-10 h-10 rounded-lg border border-border"
+                          style={{ backgroundColor: brand.secondary_color }}
+                        />
+                        <span className="text-xs font-mono text-muted-foreground">{brand.secondary_color}</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <div
+                          className="w-10 h-10 rounded-lg border border-border"
+                          style={{ backgroundColor: brand.accent_color }}
+                        />
+                        <span className="text-xs font-mono text-muted-foreground">{brand.accent_color}</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-                <div>
-                  <p className="text-xs text-muted-foreground font-mono mb-2">colors</p>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-8 h-8 rounded"
-                      style={{ backgroundColor: brand.primary_color }}
-                      title={`Primary: ${brand.primary_color}`}
-                    />
-                    <div
-                      className="w-8 h-8 rounded"
-                      style={{ backgroundColor: brand.secondary_color }}
-                      title={`Secondary: ${brand.secondary_color}`}
-                    />
-                    <div
-                      className="w-8 h-8 rounded"
-                      style={{ backgroundColor: brand.accent_color }}
-                      title={`Accent: ${brand.accent_color}`}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Quick Actions */}
-            <Card className="terminal-border bg-card/50">
-              <CardHeader>
-                <CardTitle className="font-mono text-sm flex items-center gap-2">
-                  <Plus className="h-4 w-4 text-primary" />
-                  quick_actions
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Link href={`/brands/${id}/create/video`} className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Video className="h-4 w-4 text-primary" />
-                    Create AI Video
-                    <Badge variant="outline" className="ml-auto text-xs">AI</Badge>
-                  </Button>
-                </Link>
-                <Link href={`/brands/${id}/create/image`} className="block">
-                  <Button variant="outline" className="w-full justify-start">
+              {/* Logo Selector */}
+              <Card className="terminal-border bg-card/50">
+                <CardHeader>
+                  <CardTitle className="font-mono text-sm flex items-center gap-2">
                     <Image className="h-4 w-4 text-primary" />
-                    Generate Image
-                    <Badge variant="outline" className="ml-auto text-xs">AI</Badge>
-                  </Button>
-                </Link>
-                <Link href={`/brands/${id}/create/post`} className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <MessageSquare className="h-4 w-4 text-primary" />
-                    Write Social Post
-                    <Badge variant="outline" className="ml-auto text-xs">AI</Badge>
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+                    logo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Current Logo */}
+                  <div className="flex justify-center">
+                    <div
+                      className="w-24 h-24 rounded-xl border-2 border-primary/30 flex items-center justify-center overflow-hidden"
+                      style={{ backgroundColor: brand.secondary_color || '#1a1a1a' }}
+                    >
+                      {brand.logo_url ? (
+                        <img
+                          src={brand.logo_url}
+                          alt={brand.name}
+                          className="w-full h-full object-contain p-2"
+                        />
+                      ) : (
+                        <span
+                          className="text-3xl font-bold"
+                          style={{ color: brand.primary_color }}
+                        >
+                          {brand.name[0].toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-        <TabsContent value="products">
-          <Card className="terminal-border bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="font-mono text-sm flex items-center gap-2">
-                <Package className="h-4 w-4 text-primary" />
-                products
-              </CardTitle>
-              <Button variant="terminal" size="sm">
-                <Plus className="h-4 w-4" />
-                Add Product
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="py-12 text-center">
-                <Package className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                <p className="text-muted-foreground">No products yet</p>
-                <p className="text-sm text-muted-foreground/70">
-                  Add products to generate targeted content
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+                  {/* Available Logos */}
+                  {availableLogos.length > 0 ? (
+                    <div>
+                      <p className="text-xs text-muted-foreground font-mono mb-2">available ({availableLogos.length})</p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {availableLogos.map((logo) => (
+                          <button
+                            key={logo.path}
+                            type="button"
+                            onClick={async () => {
+                              // Auto-save logo selection
+                              try {
+                                const response = await fetch(`/api/brands/${id}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ logo_url: logo.downloadUrl }),
+                                })
+                                if (response.ok) {
+                                  const updated = await response.json()
+                                  setBrand(updated)
+                                }
+                              } catch (err) {
+                                console.error('Error saving logo:', err)
+                              }
+                            }}
+                            className={`p-1 rounded border-2 transition-all ${
+                              brand.logo_url === logo.downloadUrl
+                                ? 'border-primary ring-2 ring-primary/20'
+                                : 'border-border hover:border-primary/50'
+                            }`}
+                            title={logo.path}
+                          >
+                            <img
+                              src={logo.downloadUrl}
+                              alt={logo.path}
+                              className="w-12 h-12 object-contain bg-white/10 rounded"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : brand.github_repo ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={fetchLogosFromRepo}
+                      disabled={isLoadingLogos}
+                    >
+                      {isLoadingLogos ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Github className="h-4 w-4" />
+                      )}
+                      Load from GitHub
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Connect GitHub to load logos
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Fonts & Assets Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+              {/* Fonts */}
+              <Card className="terminal-border bg-card/50">
+                <CardHeader>
+                  <CardTitle className="font-mono text-sm flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-primary" />
+                    fonts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {brand.metadata?.aiAnalysis?.fonts ? (
+                    <div className="space-y-3">
+                      {brand.metadata.aiAnalysis.fonts.primary && (
+                        <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
+                          <span className="text-xs text-muted-foreground font-mono">primary</span>
+                          <span className="text-sm font-medium">{brand.metadata.aiAnalysis.fonts.primary}</span>
+                        </div>
+                      )}
+                      {brand.metadata.aiAnalysis.fonts.secondary && (
+                        <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
+                          <span className="text-xs text-muted-foreground font-mono">secondary</span>
+                          <span className="text-sm font-medium">{brand.metadata.aiAnalysis.fonts.secondary}</span>
+                        </div>
+                      )}
+                      {brand.metadata.aiAnalysis.fonts.mono && (
+                        <div className="flex items-center justify-between p-2 bg-muted/30 rounded">
+                          <span className="text-xs text-muted-foreground font-mono">mono</span>
+                          <span className="text-sm font-medium">{brand.metadata.aiAnalysis.fonts.mono}</span>
+                        </div>
+                      )}
+                      {brand.metadata.detectedFonts && brand.metadata.detectedFonts.length > 0 && (
+                        <div className="pt-2 border-t border-border/50">
+                          <p className="text-xs text-muted-foreground font-mono mb-2">detected</p>
+                          <div className="flex flex-wrap gap-1">
+                            {brand.metadata.detectedFonts.map((font: string, idx: number) => (
+                              <Badge key={idx} variant="outline" className="text-xs">{font}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center">
+                      <Tag className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No fonts detected</p>
+                      <p className="text-xs text-muted-foreground/70">Connect GitHub to analyze fonts</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Assets */}
+              <Card className="terminal-border bg-card/50">
+                <CardHeader>
+                  <CardTitle className="font-mono text-sm flex items-center gap-2">
+                    <Package className="h-4 w-4 text-primary" />
+                    assets
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {brand.metadata?.fontFiles && brand.metadata.fontFiles.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-mono mb-2">font_files ({brand.metadata.fontFiles.length})</p>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {brand.metadata.fontFiles.map((file: { path: string; name: string; downloadUrl: string }, idx: number) => (
+                          <a
+                            key={idx}
+                            href={file.downloadUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between p-2 bg-muted/30 rounded hover:bg-muted/50 transition-colors"
+                          >
+                            <span className="text-xs truncate flex-1">{file.name}</span>
+                            <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center">
+                      <Package className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No assets found</p>
+                      <p className="text-xs text-muted-foreground/70">Connect GitHub to load assets</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* GitHub Integration Tab */}
@@ -782,314 +873,6 @@ export default function BrandDetailPage({
           </Card>
         </TabsContent>
 
-        <TabsContent value="settings">
-          <Card className="terminal-border bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="font-mono text-sm flex items-center gap-2">
-                <Settings className="h-4 w-4 text-primary" />
-                brand_settings
-              </CardTitle>
-              {!isEditing ? (
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                  Edit
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setIsEditing(false)
-                      setEditForm(brand)
-                    }}
-                    disabled={isSaving}
-                  >
-                    Cancel
-                  </Button>
-                  <Button variant="terminal" size="sm" onClick={handleSave} disabled={isSaving}>
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Save
-                  </Button>
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Basic Info */}
-              <div className="space-y-4">
-                <h3 className="font-mono text-xs text-muted-foreground">basic_info</h3>
-                <div className="grid gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Name</label>
-                    <Input
-                      value={editForm.name || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                      disabled={!isEditing}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Tagline</label>
-                    <Input
-                      value={editForm.tagline || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, tagline: e.target.value }))}
-                      disabled={!isEditing}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Description</label>
-                    <textarea
-                      value={editForm.description || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                      disabled={!isEditing}
-                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Website URL</label>
-                    <Input
-                      value={editForm.website_url || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, website_url: e.target.value }))}
-                      disabled={!isEditing}
-                      className="mt-1"
-                      type="url"
-                    />
-                  </div>
-                  {/* Logo Section */}
-                  <div>
-                    <label className="text-sm font-medium">Logo</label>
-                    <div className="mt-2 flex items-start gap-4">
-                      {/* Current Logo Preview */}
-                      <div
-                        className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center overflow-hidden flex-shrink-0"
-                        style={{ backgroundColor: editForm.secondary_color || '#1a1a1a' }}
-                      >
-                        {editForm.logo_url ? (
-                          <img
-                            src={editForm.logo_url}
-                            alt="Logo"
-                            className="w-full h-full object-contain p-1"
-                          />
-                        ) : (
-                          <div
-                            className="w-full h-full flex items-center justify-center text-white font-bold text-2xl"
-                            style={{ backgroundColor: editForm.primary_color || '#ff8c00' }}
-                          >
-                            {editForm.name?.[0]?.toUpperCase() || '?'}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Logo Options */}
-                      <div className="flex-1 space-y-3">
-                        {/* Fetch from GitHub */}
-                        {brand?.github_repo && isEditing && (
-                          <div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={fetchLogosFromRepo}
-                              disabled={isLoadingLogos}
-                            >
-                              {isLoadingLogos ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Github className="h-4 w-4" />
-                              )}
-                              Fetch from GitHub
-                            </Button>
-                          </div>
-                        )}
-
-                        {/* Available logos from repo */}
-                        {availableLogos.length > 0 && isEditing && (
-                          <div className="flex flex-wrap gap-2">
-                            {availableLogos.map((logo) => (
-                              <button
-                                key={logo.path}
-                                type="button"
-                                onClick={() => setEditForm(prev => ({ ...prev, logo_url: logo.downloadUrl }))}
-                                className={`p-1 rounded border-2 transition-colors ${
-                                  editForm.logo_url === logo.downloadUrl
-                                    ? 'border-primary'
-                                    : 'border-border hover:border-primary/50'
-                                }`}
-                                title={logo.path}
-                              >
-                                <img
-                                  src={logo.downloadUrl}
-                                  alt={logo.path}
-                                  className="w-10 h-10 object-contain bg-white/10 rounded"
-                                />
-                              </button>
-                            ))}
-                            {/* Use letter fallback */}
-                            <button
-                              type="button"
-                              onClick={() => setEditForm(prev => ({ ...prev, logo_url: null }))}
-                              className={`w-12 h-12 rounded border-2 flex items-center justify-center text-xs font-mono transition-colors ${
-                                !editForm.logo_url
-                                  ? 'border-primary text-primary'
-                                  : 'border-border text-muted-foreground hover:border-primary/50'
-                              }`}
-                              title="Use letter"
-                            >
-                              Aa
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Manual URL input */}
-                        {isEditing && (
-                          <Input
-                            value={editForm.logo_url || ''}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, logo_url: e.target.value }))}
-                            placeholder="Or paste a logo URL..."
-                            className="text-xs"
-                          />
-                        )}
-
-                        {!isEditing && editForm.logo_url && (
-                          <p className="text-xs text-muted-foreground truncate">{editForm.logo_url}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Colors */}
-              <div className="space-y-4">
-                <h3 className="font-mono text-xs text-muted-foreground">colors</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Primary</label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <input
-                        type="color"
-                        value={editForm.primary_color || '#ff8c00'}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, primary_color: e.target.value }))}
-                        disabled={!isEditing}
-                        className="w-10 h-10 rounded cursor-pointer disabled:opacity-50"
-                      />
-                      <Input
-                        value={editForm.primary_color || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, primary_color: e.target.value }))}
-                        disabled={!isEditing}
-                        className="font-mono text-xs"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Secondary</label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <input
-                        type="color"
-                        value={editForm.secondary_color || '#1a1a1a'}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, secondary_color: e.target.value }))}
-                        disabled={!isEditing}
-                        className="w-10 h-10 rounded cursor-pointer disabled:opacity-50"
-                      />
-                      <Input
-                        value={editForm.secondary_color || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, secondary_color: e.target.value }))}
-                        disabled={!isEditing}
-                        className="font-mono text-xs"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Accent</label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <input
-                        type="color"
-                        value={editForm.accent_color || '#ffa500'}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, accent_color: e.target.value }))}
-                        disabled={!isEditing}
-                        className="w-10 h-10 rounded cursor-pointer disabled:opacity-50"
-                      />
-                      <Input
-                        value={editForm.accent_color || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, accent_color: e.target.value }))}
-                        disabled={!isEditing}
-                        className="font-mono text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Danger Zone */}
-              <div className="space-y-4 pt-6 border-t border-border">
-                <h3 className="font-mono text-xs text-destructive">danger_zone</h3>
-                <div className="p-4 rounded-lg border border-destructive/20 bg-destructive/5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <p className="font-medium text-sm">Delete this brand</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Once deleted, all brand data will be permanently removed. This action cannot be undone.
-                      </p>
-                    </div>
-                    <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="destructive" size="sm" className="shrink-0">
-                          <Trash2 className="h-4 w-4" />
-                          Delete Brand
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="terminal-border bg-card">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2 text-destructive">
-                            <Trash2 className="h-5 w-5" />
-                            Delete Brand
-                          </DialogTitle>
-                          <DialogDescription>
-                            Are you sure you want to delete <span className="font-semibold text-foreground">{brand.name}</span>? This will permanently remove the brand and all associated content. This action cannot be undone.
-                          </DialogDescription>
-                        </DialogHeader>
-                        {deleteError && (
-                          <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
-                            {deleteError}
-                          </div>
-                        )}
-                        <DialogFooter className="gap-2 sm:gap-0">
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setDeleteDialogOpen(false)
-                              setDeleteError(null)
-                            }}
-                            disabled={isDeleting}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={handleDelete}
-                            disabled={isDeleting}
-                          >
-                            {isDeleting ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Deleting...
-                              </>
-                            ) : (
-                              <>
-                                <Trash2 className="h-4 w-4" />
-                                Delete Brand
-                              </>
-                            )}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   )
