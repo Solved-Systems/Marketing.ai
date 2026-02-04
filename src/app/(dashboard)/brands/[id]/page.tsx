@@ -17,8 +17,6 @@ import {
 import {
   ArrowLeft,
   Video,
-  Image,
-  MessageSquare,
   Plus,
   ExternalLink,
   Github,
@@ -28,6 +26,7 @@ import {
   X,
   Save,
   Check,
+  Sparkles,
 } from 'lucide-react'
 
 interface BrandMetadata {
@@ -392,32 +391,19 @@ export default function BrandDetailPage({
               </div>
             )}
             <div className="min-w-0">
-              <h1 className="text-xl md:text-3xl font-bold truncate" style={{ color: formData.primary_color }}>
-                {formData.name}
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl md:text-3xl font-bold truncate" style={{ color: formData.primary_color }}>
+                  {formData.name}
+                </h1>
+                <Link href={`/brands/${id}/create/video`}>
+                  <Button variant="terminal" size="sm" className="shrink-0">
+                    <Sparkles className="h-4 w-4" />
+                    Create Content
+                  </Button>
+                </Link>
+              </div>
               <p className="text-muted-foreground text-sm md:text-base truncate">{formData.tagline}</p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <Link href={`/brands/${id}/create/video`}>
-              <Button variant="outline" size="sm">
-                <Video className="h-4 w-4" />
-                <span className="hidden sm:inline">Video</span>
-              </Button>
-            </Link>
-            <Link href={`/brands/${id}/create/image`}>
-              <Button variant="outline" size="sm">
-                <Image className="h-4 w-4" />
-                <span className="hidden sm:inline">Image</span>
-              </Button>
-            </Link>
-            <Link href={`/brands/${id}/create/post`}>
-              <Button variant="outline" size="sm">
-                <MessageSquare className="h-4 w-4" />
-                <span className="hidden sm:inline">Post</span>
-              </Button>
-            </Link>
           </div>
         </div>
       </div>
