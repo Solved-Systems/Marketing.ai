@@ -4,7 +4,6 @@ import { use, useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   ArrowLeft,
   Sparkles,
@@ -336,7 +335,7 @@ export default function CreateContentPage({
 
   return (
     <div
-      className="h-[calc(100vh-3.5rem)] lg:h-screen flex flex-col"
+      className="h-[calc(100vh-3.5rem)] lg:h-screen flex flex-col overflow-hidden"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -392,8 +391,8 @@ export default function CreateContentPage({
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden mx-4 md:mx-8 my-4 border border-border/50 rounded-lg bg-card/30">
-        <ScrollArea className="flex-1" ref={scrollRef}>
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden mx-4 md:mx-8 mt-4 border border-border/50 rounded-t-lg bg-card/30">
+        <div className="flex-1 overflow-y-auto" ref={scrollRef}>
           <div className="max-w-3xl mx-auto space-y-6 p-4">
             {messages.map((msg) => (
               <div key={msg.id} className={msg.role === 'user' ? 'flex justify-end' : ''}>
@@ -595,11 +594,12 @@ export default function CreateContentPage({
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
+      </div>
 
-        {/* Input Area */}
-        <div className="flex-shrink-0 p-4 border-t border-border/50">
-          <div className="max-w-3xl mx-auto w-full">
+      {/* Input Area - Fixed at bottom */}
+      <div className="flex-shrink-0 mx-4 md:mx-8 mb-4 p-4 border border-t-0 border-border/50 rounded-b-lg bg-card/50">
+        <div className="max-w-3xl mx-auto w-full">
           {/* Generation Mode Toggle */}
           <div className="flex items-center justify-center gap-2 mb-3">
             <span className="text-xs text-muted-foreground font-mono mr-2">engine:</span>
@@ -693,7 +693,6 @@ export default function CreateContentPage({
           <p className="text-xs text-muted-foreground text-center mt-2">
             Drag & drop images anywhere
           </p>
-          </div>
         </div>
       </div>
     </div>
