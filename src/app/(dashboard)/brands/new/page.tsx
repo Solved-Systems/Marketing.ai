@@ -520,29 +520,87 @@ If the brand looks complete and they seem satisfied, let them know they can save
   const handleSaveBrand = async () => {
     setIsSaving(true)
     try {
-      // Build metadata with all media and AI analysis
+      // Upload logos to Supabase first
+      addMessage({
+        role: 'assistant',
+        content: 'Uploading brand assets to storage...',
+        action: 'generating',
+      })
+
+      let uploadedLogoUrl = formData.logoUrl
+      const uploadedLogos: { path: string; downloadUrl: string }[] = []
+
+      // Upload all available logos to Supabase
+      for (const logo of availableLogos) {
+        try {
+          const response = await fetch('/api/upload/from-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: logo.downloadUrl }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            uploadedLogos.push({
+              path: logo.path,
+              downloadUrl: data.url, // Supabase URL
+            })
+
+            // If this was the selected logo, update the main logo URL
+            if (logo.downloadUrl === formData.logoUrl) {
+              uploadedLogoUrl = data.url
+            }
+          } else {
+            // Keep original URL if upload fails
+            uploadedLogos.push(logo)
+          }
+        } catch (error) {
+          console.error('Failed to upload logo:', logo.path, error)
+          // Keep original URL if upload fails
+          uploadedLogos.push(logo)
+        }
+      }
+
+      // Upload font files to Supabase
+      const uploadedFonts: { path: string; downloadUrl: string; name: string }[] = []
+      for (const font of availableFonts) {
+        try {
+          const response = await fetch('/api/upload/from-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: font.downloadUrl }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            uploadedFonts.push({
+              path: font.path,
+              downloadUrl: data.url,
+              name: font.name,
+            })
+          } else {
+            uploadedFonts.push(font)
+          }
+        } catch (error) {
+          console.error('Failed to upload font:', font.path, error)
+          uploadedFonts.push(font)
+        }
+      }
+
+      // Remove generating message
+      setMessages(prev => prev.filter(m => m.action !== 'generating'))
+
+      // Build metadata with uploaded Supabase URLs
       const metadata = {
-        // All logos found in repo (not just the selected one)
-        availableLogos: availableLogos.map(logo => ({
-          path: logo.path,
-          downloadUrl: logo.downloadUrl,
-        })),
-        // Font files found in repo
-        fontFiles: availableFonts.map(font => ({
-          path: font.path,
-          downloadUrl: font.downloadUrl,
-          name: font.name,
-        })),
-        // Font names detected by AI from styles
+        availableLogos: uploadedLogos,
+        fontFiles: uploadedFonts,
         detectedFonts: detectedFontNames,
-        // AI analysis data
         aiAnalysis: aiAnalysisData ? {
           fonts: aiAnalysisData.fonts,
           allColors: aiAnalysisData.allColors,
           sources: aiAnalysisData.sources,
           summary: aiAnalysisData.summary,
         } : null,
-        // Timestamp of extraction
         extractedAt: new Date().toISOString(),
       }
 
@@ -554,7 +612,7 @@ If the brand looks complete and they seem satisfied, let them know they can save
           description: formData.description,
           tagline: formData.tagline,
           website_url: formData.website_url,
-          logo_url: formData.logoUrl,
+          logo_url: uploadedLogoUrl,
           primary_color: formData.primaryColor,
           secondary_color: formData.secondaryColor,
           accent_color: formData.accentColor,
@@ -571,6 +629,7 @@ If the brand looks complete and they seem satisfied, let them know they can save
       router.push('/brands')
     } catch (error) {
       console.error('Error saving brand:', error)
+      setMessages(prev => prev.filter(m => m.action !== 'generating'))
       addMessage({
         role: 'assistant',
         content: `Failed to save brand: ${error instanceof Error ? error.message : 'Unknown error'}`,
