@@ -5,7 +5,18 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Palette, Video, Image, MessageSquare, ArrowRight, Loader2 } from 'lucide-react'
+import { Plus, Palette, Video, Image, MessageSquare, ArrowRight, Loader2, Trash2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 interface Brand {
   id: string
@@ -88,7 +99,11 @@ export default function BrandsPage() {
         /* Brands Grid */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {brands.map((brand) => (
-            <BrandCard key={brand.id} brand={brand} />
+            <BrandCard
+              key={brand.id}
+              brand={brand}
+              onDelete={(id) => setBrands(prev => prev.filter(b => b.id !== id))}
+            />
           ))}
         </div>
       )}
@@ -96,10 +111,28 @@ export default function BrandsPage() {
   )
 }
 
-function BrandCard({ brand }: { brand: Brand }) {
+function BrandCard({ brand, onDelete }: { brand: Brand; onDelete: (id: string) => void }) {
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/brands/${brand.id}`, { method: 'DELETE' })
+      if (response.ok) {
+        onDelete(brand.id)
+      }
+    } catch (error) {
+      console.error('Error deleting brand:', error)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <Link href={`/brands/${brand.id}`}>
-      <Card className="terminal-border bg-card/50 hover:bg-card/70 transition-all cursor-pointer group h-full">
+      <Card className="terminal-border bg-card/50 hover:bg-card/70 transition-all cursor-pointer group h-full relative">
         <CardContent className="p-6">
           <div className="flex items-start justify-between mb-4">
             <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center">
@@ -113,11 +146,53 @@ function BrandCard({ brand }: { brand: Brand }) {
                 <Palette className="h-6 w-6 text-primary" />
               )}
             </div>
-            {brand.is_default && (
-              <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                Default
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {brand.is_default && (
+                <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                  Default
+                </Badge>
+              )}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="terminal-border bg-card" onClick={(e) => e.stopPropagation()}>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                      <Trash2 className="h-5 w-5" />
+                      Delete Brand
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete <span className="font-semibold text-foreground">{brand.name}</span>? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={(e) => e.stopPropagation()}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isDeleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Deleting...
+                        </>
+                      ) : (
+                        'Delete'
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
 
           <h3 className="font-semibold text-lg mb-1">{brand.name}</h3>
@@ -127,7 +202,7 @@ function BrandCard({ brand }: { brand: Brand }) {
 
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
-              <Video className="h-3 w-3" />0 videos
+              <Video className="h-3 w-3" />0 content
             </span>
             <span className="flex items-center gap-1">
               <Image className="h-3 w-3" />0 images
@@ -138,7 +213,7 @@ function BrandCard({ brand }: { brand: Brand }) {
           </div>
 
           <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">0 products</span>
+            <span className="text-xs text-muted-foreground font-mono">view →</span>
             <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
           </div>
         </CardContent>
