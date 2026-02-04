@@ -15,7 +15,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 
 interface Brand {
@@ -113,15 +112,17 @@ export default function BrandsPage() {
 
 function BrandCard({ brand, onDelete }: { brand: Brand; onDelete: (id: string) => void }) {
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleDelete = async () => {
     setIsDeleting(true)
     try {
       const response = await fetch(`/api/brands/${brand.id}`, { method: 'DELETE' })
       if (response.ok) {
         onDelete(brand.id)
+        setShowDeleteDialog(false)
+      } else {
+        console.error('Delete failed:', await response.text())
       }
     } catch (error) {
       console.error('Error deleting brand:', error)
@@ -131,93 +132,107 @@ function BrandCard({ brand, onDelete }: { brand: Brand; onDelete: (id: string) =
   }
 
   return (
-    <Link href={`/brands/${brand.id}`}>
-      <Card className="terminal-border bg-card/50 hover:bg-card/70 transition-all cursor-pointer group h-full relative">
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center">
-              {brand.logo_url ? (
-                <img
-                  src={brand.logo_url}
-                  alt={brand.name}
-                  className="w-10 h-10 rounded object-cover"
-                />
+    <>
+      <Link href={`/brands/${brand.id}`}>
+        <Card className="terminal-border bg-card/50 hover:bg-card/70 transition-all cursor-pointer group h-full relative">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center">
+                {brand.logo_url ? (
+                  <img
+                    src={brand.logo_url}
+                    alt={brand.name}
+                    className="w-10 h-10 rounded object-cover"
+                  />
+                ) : (
+                  <Palette className="h-6 w-6 text-primary" />
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {brand.is_default && (
+                  <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                    Default
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setShowDeleteDialog(true)
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <h3 className="font-semibold text-lg mb-1">{brand.name}</h3>
+            {brand.tagline && (
+              <p className="text-sm text-muted-foreground mb-4">{brand.tagline}</p>
+            )}
+
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Video className="h-3 w-3" />0 content
+              </span>
+              <span className="flex items-center gap-1">
+                <Image className="h-3 w-3" />0 images
+              </span>
+              <span className="flex items-center gap-1">
+                <MessageSquare className="h-3 w-3" />0 posts
+              </span>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground font-mono">view →</span>
+              <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+
+      {/* Delete Confirmation Dialog - Outside the Link */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent className="terminal-border bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Delete Brand
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                Are you sure you want to delete <span className="font-semibold text-foreground">{brand.name}</span>?
+              </p>
+              <p className="text-destructive/80 text-sm">
+                This will permanently delete this brand and all associated content, videos, and images. This action cannot be undone.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDelete()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Deleting...
+                </>
               ) : (
-                <Palette className="h-6 w-6 text-primary" />
+                'Yes, Delete Brand'
               )}
-            </div>
-            <div className="flex items-center gap-2">
-              {brand.is_default && (
-                <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                  Default
-                </Badge>
-              )}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    onClick={(e) => e.preventDefault()}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent className="terminal-border bg-card" onClick={(e) => e.stopPropagation()}>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-                      <Trash2 className="h-5 w-5" />
-                      Delete Brand
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete <span className="font-semibold text-foreground">{brand.name}</span>? This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel onClick={(e) => e.stopPropagation()}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDelete}
-                      disabled={isDeleting}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      {isDeleting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          Deleting...
-                        </>
-                      ) : (
-                        'Delete'
-                      )}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </div>
-
-          <h3 className="font-semibold text-lg mb-1">{brand.name}</h3>
-          {brand.tagline && (
-            <p className="text-sm text-muted-foreground mb-4">{brand.tagline}</p>
-          )}
-
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Video className="h-3 w-3" />0 content
-            </span>
-            <span className="flex items-center gap-1">
-              <Image className="h-3 w-3" />0 images
-            </span>
-            <span className="flex items-center gap-1">
-              <MessageSquare className="h-3 w-3" />0 posts
-            </span>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground font-mono">view →</span>
-            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
