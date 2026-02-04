@@ -25,10 +25,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Use Vercel AI Gateway with OIDC token
-    const oidcToken = process.env.VERCEL_OIDC_TOKEN
-    if (!oidcToken) {
-      return NextResponse.json({ success: false, error: 'Vercel OIDC token not configured' }, { status: 500 })
+    // Try multiple API key sources
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ success: false, error: 'OpenAI API key not configured. Add OPENAI_API_KEY to environment variables.' }, { status: 500 })
     }
 
     const body = await request.json() as OpenAIImageRequest
@@ -56,12 +56,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    // Create OpenAI client via Vercel AI Gateway
+    // Create OpenAI client
     const openai = createOpenAI({
-      baseURL: 'https://gateway.ai.vercel.app/v1',
-      headers: {
-        Authorization: `Bearer ${oidcToken}`,
-      },
+      apiKey,
     })
 
     // Generate image using Vercel AI SDK
