@@ -319,9 +319,9 @@ export default function CreateContentPage({
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col min-h-0 p-4 md:px-8">
-        <ScrollArea className="flex-1" ref={scrollRef}>
-          <div className="max-w-3xl mx-auto space-y-6 pb-4">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <ScrollArea className="flex-1 px-4 md:px-8" ref={scrollRef}>
+          <div className="max-w-3xl mx-auto space-y-6 py-4">
             {messages.map((msg) => (
               <div key={msg.id} className={msg.role === 'user' ? 'flex justify-end' : ''}>
                 <div
@@ -497,7 +497,8 @@ export default function CreateContentPage({
         </ScrollArea>
 
         {/* Input Area */}
-        <div className="max-w-3xl mx-auto w-full pt-4 border-t border-border/50">
+        <div className="flex-shrink-0 px-4 md:px-8 pb-4">
+          <div className="max-w-3xl mx-auto w-full pt-4 border-t border-border/50">
           {/* Generation Mode Toggle */}
           <div className="flex items-center justify-center gap-2 mb-3">
             <span className="text-xs text-muted-foreground font-mono mr-2">engine:</span>
@@ -591,6 +592,7 @@ export default function CreateContentPage({
           <p className="text-xs text-muted-foreground text-center mt-2">
             Drag & drop images anywhere
           </p>
+          </div>
         </div>
       </div>
     </div>
