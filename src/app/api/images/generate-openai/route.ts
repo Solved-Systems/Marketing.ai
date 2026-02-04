@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createOpenAI } from '@ai-sdk/openai'
 import { experimental_generateImage as generateImage } from 'ai'
+import { gateway } from '@ai-sdk/gateway'
 
 export interface OpenAIImageRequest {
   prompt: string
-  model?: 'dall-e-3' | 'dall-e-2' | 'gpt-image-1'
+  model?: string
   size?: '1024x1024' | '1792x1024' | '1024x1792' | '512x512' | '256x256'
   n?: number
 }
@@ -25,16 +25,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Try multiple API key sources
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ success: false, error: 'OpenAI API key not configured. Add OPENAI_API_KEY to environment variables.' }, { status: 500 })
+    // Check for Vercel AI Gateway authentication
+    const gatewayKey = process.env.AI_GATEWAY_API_KEY
+    const oidcToken = process.env.VERCEL_OIDC_TOKEN
+
+    if (!gatewayKey && !oidcToken) {
+      return NextResponse.json({
+        success: false,
+        error: 'Vercel AI Gateway not configured. Add AI_GATEWAY_API_KEY or run "vercel env pull" for OIDC token.'
+      }, { status: 500 })
     }
 
     const body = await request.json() as OpenAIImageRequest
     const {
       prompt,
-      model = 'gpt-image-1',
+      model = 'openai/gpt-image-1',
       size = '1024x1024',
       n = 1
     } = body
@@ -56,14 +61,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    // Create OpenAI client
-    const openai = createOpenAI({
-      apiKey,
-    })
-
-    // Generate image using Vercel AI SDK
+    // Generate image using Vercel AI Gateway
+    // The gateway provider auto-authenticates with AI_GATEWAY_API_KEY or OIDC token
     const result = await generateImage({
-      model: openai.image(model),
+      model: gateway.image(model),
       prompt,
       n,
       size,
