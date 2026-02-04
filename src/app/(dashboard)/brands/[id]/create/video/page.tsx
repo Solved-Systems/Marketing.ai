@@ -52,6 +52,7 @@ interface Message {
   images?: string[]
   generatedImages?: string[]
   generatedVideo?: string
+  isGenerating?: boolean
 }
 
 export default function CreateContentPage({
@@ -157,22 +158,87 @@ export default function CreateContentPage({
       images: uploadedImages.length > 0 ? [...uploadedImages] : undefined,
     }
 
+    const userPrompt = input.trim()
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setUploadedImages([])
     setIsLoading(true)
 
-    // TODO: Implement actual AI generation
-    // For now, simulate a response
     const engineName = generationMode === 'grok-imagine' ? 'Grok Imagine' : 'Remotion'
-    setTimeout(() => {
+    const assistantMessageId = (Date.now() + 1).toString()
+
+    if (generationMode === 'grok-imagine') {
+      // Add generating message with loading state
       setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
+        id: assistantMessageId,
         role: 'assistant',
-        content: `**Engine:** ${engineName}\n\nI received your request${userMessage.images ? ` with ${userMessage.images.length} image(s)` : ''}. ${userMessage.content ? `You want to "${userMessage.content}".` : ''}\n\n${generationMode === 'grok-imagine' ? '🎨 Generating image with Grok Imagine...' : '🎬 Creating video with Remotion...'}\n\n_The ${engineName} API endpoint needs to be connected._`,
+        content: `🎨 **Generating with Grok Imagine...**\n\n"${userPrompt}"`,
+        isGenerating: true,
       }])
-      setIsLoading(false)
-    }, 1500)
+
+      try {
+        // Build the prompt with brand context
+        const brandContext = brand ? `Brand: ${brand.name}. ${brand.tagline || ''} ${brand.description || ''}. Colors: ${brand.primary_color}, ${brand.secondary_color}, ${brand.accent_color}.` : ''
+        const fullPrompt = `${brandContext}\n\nCreate: ${userPrompt}`
+
+        const response = await fetch('/api/images/generate-grok', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: fullPrompt,
+            n: 1,
+            response_format: 'url',
+          }),
+        })
+
+        const data = await response.json()
+
+        if (data.success && data.images?.length > 0) {
+          // Update message with generated image
+          setMessages(prev => prev.map(msg =>
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  content: `✨ **Generated with Grok Imagine**\n\n"${userPrompt}"`,
+                  generatedImages: data.images.map((img: { url: string }) => img.url),
+                  isGenerating: false,
+                }
+              : msg
+          ))
+        } else {
+          // Error state
+          setMessages(prev => prev.map(msg =>
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  content: `❌ **Generation failed**\n\n${data.error || 'Unknown error occurred'}`,
+                  isGenerating: false,
+                }
+              : msg
+          ))
+        }
+      } catch (error) {
+        console.error('Generation error:', error)
+        setMessages(prev => prev.map(msg =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                content: `❌ **Generation failed**\n\n${error instanceof Error ? error.message : 'Network error'}`,
+                isGenerating: false,
+              }
+            : msg
+        ))
+      }
+    } else {
+      // Remotion - placeholder for now
+      setMessages(prev => [...prev, {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: `🎬 **Remotion Video**\n\n"${userPrompt}"\n\n_Remotion video generation coming soon._`,
+      }])
+    }
+
+    setIsLoading(false)
   }
 
   // Quick action handlers
@@ -280,23 +346,58 @@ export default function CreateContentPage({
                   )}
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
 
+                  {/* Generation loading skeleton */}
+                  {msg.isGenerating && (
+                    <div className="mt-4">
+                      <div className="relative aspect-square max-w-md rounded-lg border border-border overflow-hidden bg-gradient-to-br from-primary/5 to-primary/10">
+                        {/* Animated gradient overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent animate-shimmer" />
+                        {/* Scan line effect */}
+                        <div className="absolute inset-0 overflow-hidden">
+                          <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent animate-scan" />
+                        </div>
+                        {/* Center content */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                          <div className="relative">
+                            <Wand2 className="h-8 w-8 text-primary animate-pulse" />
+                            <div className="absolute inset-0 h-8 w-8 bg-primary/20 rounded-full animate-ping" />
+                          </div>
+                          <p className="text-xs text-muted-foreground font-mono">generating...</p>
+                        </div>
+                        {/* Corner accents */}
+                        <div className="absolute top-2 left-2 w-4 h-4 border-l-2 border-t-2 border-primary/30" />
+                        <div className="absolute top-2 right-2 w-4 h-4 border-r-2 border-t-2 border-primary/30" />
+                        <div className="absolute bottom-2 left-2 w-4 h-4 border-l-2 border-b-2 border-primary/30" />
+                        <div className="absolute bottom-2 right-2 w-4 h-4 border-r-2 border-b-2 border-primary/30" />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Generated images */}
                   {msg.generatedImages && msg.generatedImages.length > 0 && (
-                    <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="mt-4 grid grid-cols-1 gap-2">
                       {msg.generatedImages.map((img, idx) => (
                         <div key={idx} className="relative group">
                           <img
                             src={img}
                             alt={`Generated ${idx + 1}`}
-                            className="w-full aspect-video object-cover rounded-lg border border-border"
+                            className="w-full max-w-md rounded-lg border border-border animate-fade-in"
+                            style={{ animationDelay: `${idx * 150}ms` }}
                           />
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          <div className="absolute bottom-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => {
+                                const link = document.createElement('a')
+                                link.href = img
+                                link.download = `generated-${Date.now()}.png`
+                                link.click()
+                              }}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
