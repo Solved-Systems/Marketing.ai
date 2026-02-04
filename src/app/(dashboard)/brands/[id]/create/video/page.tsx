@@ -4,45 +4,24 @@ import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Sparkles, Video, Check } from 'lucide-react'
-import { ChatVideoCreator } from '@/components/video/ChatVideoCreator'
-import { VideoCreationPreview } from '@/components/video/VideoCreationPreview'
+import { ArrowLeft, Sparkles, Image as ImageIcon, Check, Download, Copy, Video, RefreshCw } from 'lucide-react'
+import { ChatContentCreator } from '@/components/video/ChatContentCreator'
 import type {
-  VideoCreationState,
+  ContentCreationState,
   Brand,
 } from '@/types/video-creation'
+import { initialContentState } from '@/types/video-creation'
 
-const initialState: VideoCreationState = {
-  phase: 'logo',
-  logoUrl: null,
-  logoAnalysis: null,
-  backgroundPrompt: null,
-  backgroundImages: [],
-  selectedBackground: null,
-  videoPrompt: null,
-  videoModel: 'grok',
-  videoSettings: {
-    duration: 5,
-    aspectRatio: '16:9',
-    resolution: '720p',
-  },
-  videoId: null,
-  videoUrl: null,
-  videoStatus: 'idle',
-  videoError: null,
-  marketingCopy: null,
-}
-
-export default function CreateVideoPage({
+export default function CreateContentPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
   const [brand, setBrand] = useState<Brand | null>(null)
-  const [state, setState] = useState<VideoCreationState>(initialState)
+  const [state, setState] = useState<ContentCreationState>(initialContentState)
   const [mobileTab, setMobileTab] = useState<'chat' | 'preview'>('chat')
-  const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
+  const [copiedField, setCopiedField] = useState<string | null>(null)
 
   // Fetch brand data
   useEffect(() => {
@@ -52,10 +31,6 @@ export default function CreateVideoPage({
         if (response.ok) {
           const data = await response.json()
           setBrand(data)
-          // Load available logos from metadata
-          if (data.metadata?.availableLogos) {
-            setAvailableLogos(data.metadata.availableLogos)
-          }
         }
       } catch (error) {
         console.error('Failed to fetch brand:', error)
@@ -64,73 +39,27 @@ export default function CreateVideoPage({
     fetchBrand()
   }, [id])
 
-  // Handle logo selection with auto-save to brand
-  const handleSelectLogo = async (url: string) => {
-    // Update local state immediately
-    setState(prev => ({
-      ...prev,
-      logoUrl: url,
-    }))
-
-    // Auto-save to brand
-    try {
-      await fetch(`/api/brands/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logo_url: url }),
-      })
-      // Update local brand state
-      setBrand(prev => prev ? { ...prev, logo_url: url } : prev)
-    } catch (error) {
-      console.error('Failed to save logo:', error)
-    }
+  // Handle copy to clipboard
+  const handleCopy = (field: string, text: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedField(field)
+    setTimeout(() => setCopiedField(null), 2000)
   }
 
-  // Handle background selection
-  const handleSelectBackground = (url: string) => {
-    setState(prev => ({
-      ...prev,
-      selectedBackground: url,
-      phase: 'video',
-    }))
-  }
-
-  // Handle background regeneration
-  const handleRegenerateBackgrounds = () => {
-    // This will be triggered via chat
-    setState(prev => ({
-      ...prev,
-      backgroundImages: [],
-    }))
-  }
-
-  // Handle copy regeneration
-  const handleRegenerateCopy = () => {
-    setState(prev => ({
-      ...prev,
-      marketingCopy: null,
-      phase: 'copy',
-    }))
-  }
-
-  // Handle video download
-  const handleDownloadVideo = () => {
-    if (state.videoUrl) {
-      window.open(state.videoUrl, '_blank')
-    }
-  }
-
-  // Handle copy text copy
-  const handleCopyCopy = (text: string) => {
-    // Analytics or feedback could go here
-    console.log('Copied:', text.substring(0, 50))
+  // Handle download
+  const handleDownload = (url: string, filename: string) => {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.target = '_blank'
+    a.click()
   }
 
   // Get phase progress
   const phases = [
-    { key: 'logo', label: 'Logo', icon: '1' },
-    { key: 'background', label: 'Background', icon: '2' },
-    { key: 'video', label: 'Content', icon: '3' },
+    { key: 'compose', label: 'Create', icon: '1' },
+    { key: 'iterate', label: 'Refine', icon: '2' },
+    { key: 'animate', label: 'Animate', icon: '3' },
     { key: 'copy', label: 'Copy', icon: '4' },
     { key: 'complete', label: 'Done', icon: '5' },
   ]
@@ -150,7 +79,7 @@ export default function CreateVideoPage({
         </Link>
         <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-1 md:mb-2">
           <span>$</span>
-          <span className="text-primary">./brands/{id}/create/video</span>
+          <span className="text-primary">./brands/{id}/create/content</span>
         </div>
         <div className="flex items-center justify-between">
           <h1 className="text-xl md:text-2xl font-bold">Create AI Content</h1>
@@ -203,9 +132,9 @@ export default function CreateVideoPage({
           onClick={() => setMobileTab('preview')}
           className="flex-1 font-mono text-xs"
         >
-          <Video className="h-3 w-3 mr-1" />
+          <ImageIcon className="h-3 w-3 mr-1" />
           Preview
-          {(state.logoUrl || state.backgroundImages.length > 0 || state.videoUrl) && (
+          {(state.generatedImages.length > 0 || state.videoUrl) && (
             <span className="ml-1 w-2 h-2 bg-primary rounded-full" />
           )}
         </Button>
@@ -226,7 +155,7 @@ export default function CreateVideoPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
-            <ChatVideoCreator
+            <ChatContentCreator
               brandId={id}
               brand={brand}
               state={state}
@@ -243,29 +172,230 @@ export default function CreateVideoPage({
         >
           <CardHeader className="py-3 border-b border-border/50 flex-shrink-0">
             <CardTitle className="text-sm font-mono flex items-center gap-2">
-              <Video className="h-4 w-4 text-primary" />
+              <ImageIcon className="h-4 w-4 text-primary" />
               preview
               <span className="ml-auto text-xs text-muted-foreground font-normal">
-                {state.phase === 'logo' && 'Logo'}
-                {state.phase === 'background' && 'Backgrounds'}
-                {state.phase === 'video' && 'Content'}
+                {state.phase === 'compose' && 'Compose'}
+                {state.phase === 'iterate' && 'Refine'}
+                {state.phase === 'animate' && 'Animate'}
                 {state.phase === 'copy' && 'Copy'}
                 {state.phase === 'complete' && 'Complete'}
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 p-4 overflow-auto">
-            <VideoCreationPreview
-              state={state}
-              brand={brand}
-              availableLogos={availableLogos}
-              onSelectLogo={handleSelectLogo}
-              onSelectBackground={handleSelectBackground}
-              onRegenerateBackgrounds={handleRegenerateBackgrounds}
-              onRegenerateCopy={handleRegenerateCopy}
-              onDownloadVideo={handleDownloadVideo}
-              onCopyCopy={handleCopyCopy}
-            />
+            {/* Preview Content based on phase */}
+            <div className="space-y-6">
+              {/* Uploaded Images */}
+              {state.uploadedImages.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-mono mb-2">uploaded_images ({state.uploadedImages.length})</p>
+                  <div className="flex flex-wrap gap-2">
+                    {state.uploadedImages.map((url, idx) => (
+                      <img
+                        key={idx}
+                        src={url}
+                        alt={`Uploaded ${idx + 1}`}
+                        className="w-16 h-16 object-contain rounded border border-border bg-white/10"
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Generated Images */}
+              {state.generatedImages.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-mono mb-2">generated_images</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {state.generatedImages.map((url, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setState(prev => ({ ...prev, selectedImage: url }))}
+                        className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
+                          state.selectedImage === url
+                            ? 'border-primary ring-2 ring-primary/20'
+                            : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        <img
+                          src={url}
+                          alt={`Generated ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        {state.selectedImage === url && (
+                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                            <Check className="h-6 w-6 text-primary" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Selected Image Large Preview */}
+              {state.selectedImage && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-mono mb-2">selected_image</p>
+                  <div className="relative aspect-video rounded-lg overflow-hidden border border-primary">
+                    <img
+                      src={state.selectedImage}
+                      alt="Selected"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => handleDownload(state.selectedImage!, `${brand?.name || 'content'}-image.png`)}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Image
+                  </Button>
+                </div>
+              )}
+
+              {/* Video Preview */}
+              {state.videoUrl && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-mono mb-2">animated_content</p>
+                  <video
+                    src={state.videoUrl}
+                    controls
+                    autoPlay
+                    muted
+                    loop
+                    className="w-full rounded-lg"
+                  />
+                  <Button
+                    variant="terminal"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => handleDownload(state.videoUrl!, `${brand?.name || 'content'}-video.mp4`)}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Video
+                  </Button>
+                </div>
+              )}
+
+              {/* Marketing Copy */}
+              {state.marketingCopy && (
+                <div className="space-y-4">
+                  <p className="text-xs text-muted-foreground font-mono">marketing_copy</p>
+
+                  <div className="p-3 bg-muted/30 rounded-lg space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">Headline</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('headline', state.marketingCopy!.headline)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          {copiedField === 'headline' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          {copiedField === 'headline' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-sm font-semibold">{state.marketingCopy.headline}</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">Body</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('body', state.marketingCopy!.body)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          {copiedField === 'body' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          {copiedField === 'body' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-sm">{state.marketingCopy.body}</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">CTA</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('cta', state.marketingCopy!.cta)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          {copiedField === 'cta' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          {copiedField === 'cta' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-sm font-medium text-primary">{state.marketingCopy.cta}</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">Hashtags</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('hashtags', state.marketingCopy!.hashtags.join(' '))}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          {copiedField === 'hashtags' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          {copiedField === 'hashtags' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {state.marketingCopy.hashtags.map((tag, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Copy All Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      const fullCopy = `${state.marketingCopy!.headline}\n\n${state.marketingCopy!.body}\n\n${state.marketingCopy!.cta}\n\n${state.marketingCopy!.hashtags.join(' ')}`
+                      handleCopy('all', fullCopy)
+                    }}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    {copiedField === 'all' ? 'Copied!' : 'Copy All'}
+                  </Button>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {state.generatedImages.length === 0 && !state.videoUrl && !state.marketingCopy && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <ImageIcon className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                  <p className="text-sm font-medium">Content preview</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload images and describe what you want to create
+                  </p>
+                </div>
+              )}
+
+              {/* Complete State */}
+              {state.phase === 'complete' && (
+                <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg text-center">
+                  <Check className="h-6 w-6 text-green-500 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-green-500">Content ready!</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Download and share your content
+                  </p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
