@@ -28,15 +28,15 @@ import {
   Plus,
   ExternalLink,
   Github,
-  GitBranch,
   GitMerge,
   GitCommit,
-  Tag,
   Trash2,
-  Check,
   Loader2,
   Save,
   X,
+  Sparkles,
+  FileImage,
+  Type,
 } from 'lucide-react'
 
 interface Brand {
@@ -368,26 +368,12 @@ export default function BrandDetailPage({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            <Link href={`/brands/${id}/create/video`}>
-              <Button variant="outline" size="sm">
-                <Video className="h-4 w-4" />
-                <span className="hidden sm:inline">Video</span>
-              </Button>
-            </Link>
-            <Link href={`/brands/${id}/create/image`}>
-              <Button variant="outline" size="sm">
-                <Image className="h-4 w-4" />
-                <span className="hidden sm:inline">Image</span>
-              </Button>
-            </Link>
-            <Link href={`/brands/${id}/create/post`}>
-              <Button variant="outline" size="sm">
-                <MessageSquare className="h-4 w-4" />
-                <span className="hidden sm:inline">Post</span>
-              </Button>
-            </Link>
-          </div>
+          <Link href={`/brands/${id}/create`}>
+            <Button variant="terminal" size="sm" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              Create Content
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -405,9 +391,9 @@ export default function BrandDetailPage({
         </TabsList>
 
         <TabsContent value="overview">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
             {/* Brand Info */}
-            <Card className="terminal-border bg-card/50">
+            <Card className="terminal-border bg-card/50 lg:col-span-2">
               <CardHeader>
                 <CardTitle className="font-mono text-sm flex items-center gap-2">
                   <Palette className="h-4 w-4 text-primary" />
@@ -471,36 +457,176 @@ export default function BrandDetailPage({
               </CardContent>
             </Card>
 
-            {/* Quick Actions */}
+            {/* Create Content CTA */}
+            <Card className="terminal-border bg-card/50">
+              <CardContent className="p-6 flex flex-col items-center justify-center text-center h-full">
+                <Sparkles className="h-12 w-12 text-primary mb-4" />
+                <h3 className="font-semibold mb-2">Create Content</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Generate videos, images, and posts with AI
+                </p>
+                <Link href={`/brands/${id}/create`} className="w-full">
+                  <Button variant="terminal" className="w-full">
+                    <Sparkles className="h-4 w-4" />
+                    Open Studio
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Brand Assets */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-6">
+            {/* Logos */}
             <Card className="terminal-border bg-card/50">
               <CardHeader>
                 <CardTitle className="font-mono text-sm flex items-center gap-2">
-                  <Plus className="h-4 w-4 text-primary" />
-                  quick_actions
+                  <FileImage className="h-4 w-4 text-primary" />
+                  logos ({((brand.metadata as Record<string, unknown>)?.availableLogos as Array<unknown>)?.length || (brand.logo_url ? 1 : 0)})
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <Link href={`/brands/${id}/create/video`} className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Video className="h-4 w-4 text-primary" />
-                    Create AI Video
-                    <Badge variant="outline" className="ml-auto text-xs">AI</Badge>
-                  </Button>
-                </Link>
-                <Link href={`/brands/${id}/create/image`} className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Image className="h-4 w-4 text-primary" />
-                    Generate Image
-                    <Badge variant="outline" className="ml-auto text-xs">AI</Badge>
-                  </Button>
-                </Link>
-                <Link href={`/brands/${id}/create/post`} className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <MessageSquare className="h-4 w-4 text-primary" />
-                    Write Social Post
-                    <Badge variant="outline" className="ml-auto text-xs">AI</Badge>
-                  </Button>
-                </Link>
+              <CardContent>
+                {(() => {
+                  const metadata = brand.metadata as Record<string, unknown> | null
+                  const availableLogos = (metadata?.availableLogos || []) as Array<{ path: string; downloadUrl: string }>
+                  const hasLogos = availableLogos.length > 0 || brand.logo_url
+
+                  if (!hasLogos) {
+                    return (
+                      <div className="py-8 text-center">
+                        <FileImage className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">No logos found</p>
+                        <p className="text-xs text-muted-foreground/70">Connect a GitHub repo to import logos</p>
+                      </div>
+                    )
+                  }
+
+                  // Show all available logos
+                  const logosToShow = availableLogos.length > 0
+                    ? availableLogos
+                    : brand.logo_url
+                      ? [{ path: 'logo', downloadUrl: brand.logo_url }]
+                      : []
+
+                  return (
+                    <div className="flex flex-wrap gap-3">
+                      {logosToShow.map((logo, idx) => (
+                        <div
+                          key={idx}
+                          className={`relative group p-2 rounded-lg border-2 transition-colors ${
+                            logo.downloadUrl === brand.logo_url
+                              ? 'border-primary bg-primary/10'
+                              : 'border-border bg-muted/30 hover:border-primary/50'
+                          }`}
+                          title={logo.path}
+                        >
+                          <img
+                            src={logo.downloadUrl}
+                            alt={logo.path}
+                            className="w-16 h-16 object-contain"
+                          />
+                          {logo.downloadUrl === brand.logo_url && (
+                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs">
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Fonts */}
+            <Card className="terminal-border bg-card/50">
+              <CardHeader>
+                <CardTitle className="font-mono text-sm flex items-center gap-2">
+                  <Type className="h-4 w-4 text-primary" />
+                  fonts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const metadata = brand.metadata as Record<string, unknown> | null
+                  const fontFiles = (metadata?.fontFiles || []) as Array<{ path: string; downloadUrl: string; name: string }>
+                  const detectedFonts = (metadata?.detectedFonts || []) as string[]
+                  const aiAnalysis = metadata?.aiAnalysis as { fonts?: { primary?: string; secondary?: string; mono?: string } } | null
+                  const aiFonts = aiAnalysis?.fonts
+
+                  const hasFonts = fontFiles.length > 0 || detectedFonts.length > 0 || aiFonts
+
+                  if (!hasFonts) {
+                    return (
+                      <div className="py-8 text-center">
+                        <Type className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">No fonts detected</p>
+                        <p className="text-xs text-muted-foreground/70">Connect a GitHub repo to detect fonts</p>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {/* AI-detected font recommendations */}
+                      {aiFonts && (
+                        <div className="space-y-2">
+                          {aiFonts.primary && (
+                            <div className="flex items-center justify-between p-2 rounded bg-muted/30">
+                              <span className="text-xs text-muted-foreground">Primary</span>
+                              <span className="font-medium text-sm">{aiFonts.primary}</span>
+                            </div>
+                          )}
+                          {aiFonts.secondary && (
+                            <div className="flex items-center justify-between p-2 rounded bg-muted/30">
+                              <span className="text-xs text-muted-foreground">Secondary</span>
+                              <span className="font-medium text-sm">{aiFonts.secondary}</span>
+                            </div>
+                          )}
+                          {aiFonts.mono && (
+                            <div className="flex items-center justify-between p-2 rounded bg-muted/30">
+                              <span className="text-xs text-muted-foreground">Monospace</span>
+                              <span className="font-mono text-sm">{aiFonts.mono}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Font files */}
+                      {fontFiles.length > 0 && (
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-2">Font Files</p>
+                          <div className="flex flex-wrap gap-2">
+                            {fontFiles.map((font, idx) => (
+                              <a
+                                key={idx}
+                                href={font.downloadUrl}
+                                download
+                                className="px-2 py-1 text-xs bg-muted rounded hover:bg-muted/80 transition-colors"
+                              >
+                                {font.name || font.path.split('/').pop()}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Detected font names */}
+                      {detectedFonts.length > 0 && !aiFonts && (
+                        <div className="flex flex-wrap gap-2">
+                          {detectedFonts.map((font, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-1 text-xs bg-muted rounded"
+                            >
+                              {font}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </div>

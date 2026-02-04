@@ -1,0 +1,819 @@
+'use client'
+
+import { useState, useRef, useEffect, useCallback, DragEvent } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Send,
+  Loader2,
+  Upload,
+  X,
+  Paperclip,
+  Video,
+  Image as ImageIcon,
+  MessageSquare,
+  Download,
+  RefreshCw,
+} from 'lucide-react'
+import type { Brand, BrandMetadata } from '@/types/video-creation'
+import type {
+  ContentChatMessage,
+  ContentCreationState,
+  GeneratedContent,
+  ContentType,
+} from '@/types/content-creation'
+import { useCredits } from '@/hooks/use-credits'
+import { getCreditCost, getVideoGenerationType } from '@/lib/billing/models'
+
+interface ContentChatProps {
+  brand: Brand
+}
+
+// Helper prompt suggestions
+const CONTENT_PROMPTS = [
+  { icon: Video, label: 'Create a video', type: 'video' as ContentType },
+  { icon: ImageIcon, label: 'Generate an image', type: 'image' as ContentType },
+  { icon: MessageSquare, label: 'Write a post', type: 'post' as ContentType },
+]
+
+export function ContentChat({ brand }: ContentChatProps) {
+  const [messages, setMessages] = useState<ContentChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [state, setState] = useState<ContentCreationState>({
+    isGenerating: false,
+    currentAction: 'idle',
+    generatedItems: [],
+  })
+  const [pendingImages, setPendingImages] = useState<string[]>([])
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [initialized, setInitialized] = useState(false)
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { remaining: credits, canAfford, refetch: refreshCredits } = useCredits()
+
+  const metadata = brand.metadata as BrandMetadata | null
+
+  // Add message helper
+  const addMessage = useCallback((msg: Omit<ContentChatMessage, 'id' | 'timestamp'>) => {
+    const newMsg: ContentChatMessage = {
+      ...msg,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, newMsg])
+    return newMsg.id
+  }, [])
+
+  // Update last message
+  const updateLastMessage = useCallback((updates: Partial<ContentChatMessage>) => {
+    setMessages(prev => {
+      const newMessages = [...prev]
+      const lastIdx = newMessages.length - 1
+      if (lastIdx >= 0) {
+        newMessages[lastIdx] = { ...newMessages[lastIdx], ...updates }
+      }
+      return newMessages
+    })
+  }, [])
+
+  // Initialize with welcome message
+  useEffect(() => {
+    if (initialized) return
+    setInitialized(true)
+
+    addMessage({
+      role: 'assistant',
+      content: `Welcome to **${brand.name}** content studio!\n\nWhat would you like to create today? Choose an option below or just describe what you need.`,
+    })
+  }, [brand.name, initialized, addMessage])
+
+  // Scroll to bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
+
+  // Poll for video status
+  useEffect(() => {
+    if (state.videoStatus !== 'generating' || !state.videoId) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/videos/generate-grok?id=${state.videoId}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.status === 'completed' && data.output_url) {
+            const videoContent: GeneratedContent = {
+              id: state.videoId!,
+              type: 'video',
+              url: data.output_url,
+              createdAt: new Date(),
+            }
+
+            setState(prev => ({
+              ...prev,
+              videoStatus: 'complete',
+              isGenerating: false,
+              currentAction: 'idle',
+              generatedItems: [...prev.generatedItems, videoContent],
+              lastGeneratedType: 'video',
+            }))
+
+            updateLastMessage({
+              content: 'Your video is ready!',
+              generatedContent: videoContent,
+              action: 'complete',
+            })
+
+            clearInterval(pollInterval)
+
+            // Suggest follow-up
+            setTimeout(() => {
+              addMessage({
+                role: 'assistant',
+                content: 'Would you like me to write a caption for this video? Or generate another piece of content?',
+              })
+            }, 500)
+          } else if (data.status === 'failed') {
+            setState(prev => ({
+              ...prev,
+              videoStatus: 'failed',
+              isGenerating: false,
+              currentAction: 'idle',
+            }))
+            updateLastMessage({
+              content: `Video generation failed: ${data.error_message || 'Unknown error'}. Would you like to try again?`,
+              action: 'complete',
+            })
+            clearInterval(pollInterval)
+          }
+        }
+      } catch (error) {
+        console.error('Poll error:', error)
+      }
+    }, 3000)
+
+    return () => clearInterval(pollInterval)
+  }, [state.videoStatus, state.videoId, addMessage, updateLastMessage])
+
+  // Drag and drop handlers
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = async (e: DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+    if (files.length > 0) {
+      await handleFilesSelected(files)
+    }
+  }
+
+  const handleFilesSelected = async (files: File[]) => {
+    const newImages: string[] = []
+    for (const file of files) {
+      const reader = new FileReader()
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.readAsDataURL(file)
+      })
+      newImages.push(dataUrl)
+    }
+    setPendingImages(prev => [...prev, ...newImages])
+  }
+
+  const removePendingImage = (index: number) => {
+    setPendingImages(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Upload image
+  const uploadImage = async (dataUrl: string): Promise<string> => {
+    const response = await fetch(dataUrl)
+    const blob = await response.blob()
+    const file = new File([blob], 'image.png', { type: blob.type })
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const uploadResponse = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    })
+
+    const data = await uploadResponse.json()
+    if (!uploadResponse.ok) throw new Error(data.error || 'Upload failed')
+    return data.url
+  }
+
+  // Generate image
+  const generateImage = async (prompt: string) => {
+    setState(prev => ({ ...prev, isGenerating: true, currentAction: 'generating_image' }))
+
+    addMessage({
+      role: 'assistant',
+      content: 'Generating your image...',
+      action: 'generating_image',
+    })
+
+    try {
+      const enhancedPrompt = `${prompt}. Brand: ${brand.name}. Style: professional, modern. Colors: ${brand.primary_color}, ${brand.secondary_color}.`
+
+      const response = await fetch('/api/images/generate-grok', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: enhancedPrompt,
+          n: 1,
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Image generation failed')
+
+      const imageUrl = data.images?.[0]?.url
+      if (!imageUrl) throw new Error('No image returned')
+
+      const imageContent: GeneratedContent = {
+        id: `img-${Date.now()}`,
+        type: 'image',
+        url: imageUrl,
+        createdAt: new Date(),
+      }
+
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+        currentAction: 'idle',
+        generatedItems: [...prev.generatedItems, imageContent],
+        lastGeneratedType: 'image',
+      }))
+
+      updateLastMessage({
+        content: 'Here\'s your generated image!',
+        generatedContent: imageContent,
+        action: 'complete',
+      })
+
+      refreshCredits()
+
+      // Suggest follow-up
+      setTimeout(() => {
+        addMessage({
+          role: 'assistant',
+          content: 'Would you like me to write a caption for this image? Or create a video from it?',
+        })
+      }, 500)
+    } catch (error) {
+      setState(prev => ({ ...prev, isGenerating: false, currentAction: 'idle' }))
+      updateLastMessage({
+        content: `Image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+        action: 'complete',
+      })
+    }
+  }
+
+  // Generate video
+  const generateVideo = async (prompt: string, imageUrl?: string) => {
+    const generationType = getVideoGenerationType('default')
+    if (!canAfford(generationType)) {
+      addMessage({
+        role: 'assistant',
+        content: 'Insufficient credits for video generation. Please upgrade your plan.',
+      })
+      return
+    }
+
+    setState(prev => ({ ...prev, isGenerating: true, currentAction: 'generating_video', videoStatus: 'generating' }))
+
+    addMessage({
+      role: 'assistant',
+      content: 'Starting video generation... This typically takes 1-3 minutes.',
+      action: 'generating_video',
+    })
+
+    try {
+      // If no image provided, generate one first
+      let backgroundUrl = imageUrl
+      if (!backgroundUrl) {
+        const bgPrompt = `Abstract professional background for ${brand.name}. ${prompt}. Colors: ${brand.primary_color}, ${brand.secondary_color}. Subtle, not distracting.`
+
+        const bgResponse = await fetch('/api/images/generate-grok', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: bgPrompt, n: 1 }),
+        })
+
+        const bgData = await bgResponse.json()
+        backgroundUrl = bgData.images?.[0]?.url
+      }
+
+      const videoPrompt = `Smooth, subtle motion for marketing video. ${prompt}. Professional, on-brand feel.`
+
+      const response = await fetch('/api/videos/generate-grok', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brandId: brand.id,
+          prompt: videoPrompt,
+          template: 'social',
+          duration: 5,
+          aspectRatio: '16:9',
+          resolution: '720p',
+          imageUrl: backgroundUrl,
+          quality: 'default',
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Video generation failed')
+
+      setState(prev => ({
+        ...prev,
+        videoId: data.videoId,
+        videoStatus: 'generating',
+      }))
+
+      refreshCredits()
+
+      updateLastMessage({
+        content: 'Video generation started! I\'ll notify you when it\'s ready...',
+        action: 'generating_video',
+      })
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+        currentAction: 'idle',
+        videoStatus: 'failed',
+      }))
+      updateLastMessage({
+        content: `Video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        action: 'complete',
+      })
+    }
+  }
+
+  // Generate post/caption
+  const generatePost = async (topic: string, forContent?: GeneratedContent) => {
+    setState(prev => ({ ...prev, isGenerating: true, currentAction: 'generating_post' }))
+
+    addMessage({
+      role: 'assistant',
+      content: forContent ? 'Writing a caption for your content...' : 'Generating your social post...',
+      action: 'generating_post',
+    })
+
+    try {
+      const context = forContent
+        ? `This is a caption for a ${forContent.type} about: ${topic}`
+        : `This is a standalone social media post about: ${topic}`
+
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: topic }],
+          system: `You are a social media copywriter for ${brand.name}.
+${brand.description ? `Brand description: ${brand.description}` : ''}
+${brand.tagline ? `Tagline: ${brand.tagline}` : ''}
+
+${context}
+
+Write an engaging social media post that:
+1. Captures attention immediately
+2. Reflects the brand voice
+3. Includes a clear call to action
+4. Uses 3-5 relevant hashtags
+
+Respond with ONLY a JSON block:
+\`\`\`json
+{
+  "text": "The post content here...",
+  "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"]
+}
+\`\`\``,
+        }),
+      })
+
+      const data = await response.json()
+      const content = data.content || ''
+
+      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[1])
+
+        const postContent: GeneratedContent = {
+          id: `post-${Date.now()}`,
+          type: 'post',
+          text: parsed.text,
+          hashtags: parsed.hashtags,
+          createdAt: new Date(),
+        }
+
+        // If this was for existing content, add caption to it
+        if (forContent) {
+          setState(prev => ({
+            ...prev,
+            isGenerating: false,
+            currentAction: 'idle',
+            generatedItems: prev.generatedItems.map(item =>
+              item.id === forContent.id
+                ? { ...item, caption: parsed.text, hashtags: parsed.hashtags }
+                : item
+            ),
+            lastGeneratedType: 'post',
+          }))
+        } else {
+          setState(prev => ({
+            ...prev,
+            isGenerating: false,
+            currentAction: 'idle',
+            generatedItems: [...prev.generatedItems, postContent],
+            lastGeneratedType: 'post',
+          }))
+        }
+
+        updateLastMessage({
+          content: `**${parsed.text}**\n\n${parsed.hashtags.join(' ')}`,
+          generatedContent: postContent,
+          action: 'complete',
+        })
+
+        // Suggest follow-up
+        setTimeout(() => {
+          if (forContent) {
+            addMessage({
+              role: 'assistant',
+              content: 'Caption added! Would you like me to create more content, or regenerate this caption?',
+            })
+          } else {
+            addMessage({
+              role: 'assistant',
+              content: 'Would you like me to create an image or video to go with this post?',
+            })
+          }
+        }, 500)
+      } else {
+        throw new Error('Could not parse response')
+      }
+    } catch (error) {
+      setState(prev => ({ ...prev, isGenerating: false, currentAction: 'idle' }))
+      updateLastMessage({
+        content: `Failed to generate post: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        action: 'complete',
+      })
+    }
+  }
+
+  // Handle prompt button click
+  const handlePromptClick = (type: ContentType) => {
+    const prompts: Record<ContentType, string> = {
+      video: `Create a promotional video for ${brand.name}`,
+      image: `Create a professional marketing image for ${brand.name}`,
+      post: `Write an engaging social post for ${brand.name}`,
+    }
+    setInput(prompts[type])
+  }
+
+  // Parse user intent
+  const parseIntent = (text: string): { type: ContentType | 'caption' | 'chat'; topic: string } => {
+    const lower = text.toLowerCase()
+
+    // Check for caption request (referencing last content)
+    if ((lower.includes('caption') || lower.includes('write a caption')) && state.lastGeneratedType) {
+      return { type: 'caption', topic: text }
+    }
+
+    // Check for video
+    if (lower.includes('video') || lower.includes('animate') || lower.includes('motion')) {
+      return { type: 'video', topic: text }
+    }
+
+    // Check for image
+    if (lower.includes('image') || lower.includes('picture') || lower.includes('photo') || lower.includes('graphic') || lower.includes('generate an')) {
+      return { type: 'image', topic: text }
+    }
+
+    // Check for post
+    if (lower.includes('post') || lower.includes('caption') || lower.includes('write') || lower.includes('copy') || lower.includes('text')) {
+      return { type: 'post', topic: text }
+    }
+
+    // Default to chat
+    return { type: 'chat', topic: text }
+  }
+
+  // Handle submit
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if ((!input.trim() && pendingImages.length === 0) || state.isGenerating) return
+
+    const userMessage = input.trim()
+    const userImages = [...pendingImages]
+    setInput('')
+    setPendingImages([])
+
+    // Add user message
+    addMessage({
+      role: 'user',
+      content: userMessage || `Attached ${userImages.length} image(s)`,
+      images: userImages.length > 0 ? userImages : undefined,
+    })
+
+    // If user attached an image, ask what to do with it
+    if (userImages.length > 0 && !userMessage) {
+      addMessage({
+        role: 'assistant',
+        content: 'Nice image! What would you like me to do with it?\n\n- **Create a video** from this image\n- **Write a caption** for it\n- **Generate similar images**',
+      })
+      return
+    }
+
+    // If user attached image with message, use it for video/context
+    if (userImages.length > 0 && userMessage) {
+      const intent = parseIntent(userMessage)
+      if (intent.type === 'video') {
+        try {
+          const uploadedUrl = await uploadImage(userImages[0])
+          await generateVideo(intent.topic, uploadedUrl)
+        } catch (error) {
+          addMessage({
+            role: 'assistant',
+            content: `Failed to process image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          })
+        }
+        return
+      }
+    }
+
+    // Parse intent
+    const intent = parseIntent(userMessage)
+
+    switch (intent.type) {
+      case 'video':
+        await generateVideo(intent.topic)
+        break
+      case 'image':
+        await generateImage(intent.topic)
+        break
+      case 'post':
+        await generatePost(intent.topic)
+        break
+      case 'caption':
+        // Find last generated content to add caption to
+        const lastContent = state.generatedItems[state.generatedItems.length - 1]
+        if (lastContent && (lastContent.type === 'video' || lastContent.type === 'image')) {
+          await generatePost(intent.topic, lastContent)
+        } else {
+          await generatePost(intent.topic)
+        }
+        break
+      default:
+        // General chat
+        setState(prev => ({ ...prev, isGenerating: true }))
+        try {
+          const response = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: messages
+                .filter(m => m.role !== 'system')
+                .slice(-10)
+                .map(m => ({ role: m.role, content: m.content }))
+                .concat([{ role: 'user', content: userMessage }]),
+              system: `You are a helpful content creation assistant for ${brand.name}.
+You can help create videos, images, and social posts.
+If the user wants to create content, ask clarifying questions about what they want.
+Keep responses brief and helpful.`,
+            }),
+          })
+
+          const data = await response.json()
+          addMessage({ role: 'assistant', content: data.content || 'How can I help you create content?' })
+        } catch {
+          addMessage({ role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' })
+        } finally {
+          setState(prev => ({ ...prev, isGenerating: false }))
+        }
+    }
+  }
+
+  const videoCost = getCreditCost(getVideoGenerationType('default'))
+
+  return (
+    <div
+      className={`flex flex-col h-full relative ${isDragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 bg-primary/10 z-10 flex items-center justify-center pointer-events-none">
+          <div className="text-center">
+            <Upload className="h-12 w-12 text-primary mx-auto mb-2" />
+            <p className="text-sm font-medium">Drop images here</p>
+          </div>
+        </div>
+      )}
+
+      {/* Messages */}
+      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+        <div className="space-y-4 max-w-2xl mx-auto">
+          {messages.map((msg) => (
+            <div key={msg.id}>
+              <div
+                className={`text-sm p-3 rounded-lg ${
+                  msg.role === 'user'
+                    ? 'bg-primary/20 ml-8'
+                    : 'bg-muted mr-8'
+                }`}
+              >
+                {/* Image attachments */}
+                {msg.images && msg.images.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {msg.images.map((img, idx) => (
+                      <img
+                        key={idx}
+                        src={img}
+                        alt={`Attachment ${idx + 1}`}
+                        className="w-24 h-24 object-cover rounded border border-border"
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <p className="whitespace-pre-wrap">{msg.content}</p>
+
+                {/* Generated content display */}
+                {msg.generatedContent && (
+                  <div className="mt-3 p-3 bg-card rounded-lg border border-border">
+                    {msg.generatedContent.type === 'image' && msg.generatedContent.url && (
+                      <div className="space-y-2">
+                        <img
+                          src={msg.generatedContent.url}
+                          alt="Generated"
+                          className="w-full max-w-md rounded-lg"
+                        />
+                        <div className="flex gap-2">
+                          <a
+                            href={msg.generatedContent.url}
+                            download
+                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            <Download className="h-3 w-3" />
+                            Download
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    {msg.generatedContent.type === 'video' && msg.generatedContent.url && (
+                      <div className="space-y-2">
+                        <video
+                          src={msg.generatedContent.url}
+                          controls
+                          className="w-full max-w-md rounded-lg"
+                        />
+                        <div className="flex gap-2">
+                          <a
+                            href={msg.generatedContent.url}
+                            download
+                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            <Download className="h-3 w-3" />
+                            Download
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Loading indicator */}
+                {(msg.action === 'generating_image' ||
+                  msg.action === 'generating_video' ||
+                  msg.action === 'generating_post' ||
+                  msg.action === 'generating_caption') && (
+                  <div className="flex items-center gap-2 mt-2 text-sm text-primary">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                )}
+              </div>
+
+              {/* Show prompt buttons after welcome message */}
+              {msg.role === 'assistant' && messages.length === 1 && (
+                <div className="flex flex-wrap gap-2 mt-3 mr-8">
+                  {CONTENT_PROMPTS.map((prompt) => (
+                    <Button
+                      key={prompt.type}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePromptClick(prompt.type)}
+                      className="gap-2"
+                    >
+                      <prompt.icon className="h-4 w-4" />
+                      {prompt.label}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {state.isGenerating && messages[messages.length - 1]?.action === undefined && (
+            <div className="bg-muted text-sm p-3 rounded-lg mr-8">
+              <Loader2 className="h-4 w-4 animate-spin" />
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Pending Images */}
+      {pendingImages.length > 0 && (
+        <div className="px-3 py-2 border-t border-border/50 bg-muted/30">
+          <div className="flex gap-2 flex-wrap max-w-2xl mx-auto">
+            {pendingImages.map((img, idx) => (
+              <div key={idx} className="relative group">
+                <img
+                  src={img}
+                  alt={`Pending ${idx + 1}`}
+                  className="w-16 h-16 object-cover rounded border border-border"
+                />
+                <button
+                  type="button"
+                  onClick={() => removePendingImage(idx)}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="p-3 border-t border-border/50">
+        <form onSubmit={handleSubmit} className="max-w-2xl mx-auto">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={state.isGenerating}
+              className="flex-shrink-0"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Describe what you want to create..."
+              disabled={state.isGenerating}
+              className="font-mono text-sm"
+            />
+            <Button
+              type="submit"
+              size="icon"
+              disabled={state.isGenerating || (!input.trim() && pendingImages.length === 0)}
+              variant="terminal"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2 text-center">
+            Credits: {credits ?? '...'} • Video: {videoCost} credits • Drag & drop images
+          </p>
+        </form>
+      </div>
+
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+        multiple
+        onChange={(e) => {
+          const files = Array.from(e.target.files || [])
+          if (files.length > 0) {
+            handleFilesSelected(files)
+          }
+          e.target.value = ''
+        }}
+      />
+    </div>
+  )
+}
