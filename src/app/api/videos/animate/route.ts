@@ -218,6 +218,8 @@ export async function GET(request: NextRequest) {
     }
 
     const requestId = request.nextUrl.searchParams.get('requestId')
+    const startTime = request.nextUrl.searchParams.get('startTime')
+
     if (!requestId) {
       return NextResponse.json({ error: 'Request ID required' }, { status: 400 })
     }
@@ -225,12 +227,24 @@ export async function GET(request: NextRequest) {
     const xai = getXAIClient()
     const result = await xai.getVideoResult(requestId)
 
+    // Estimate progress based on elapsed time (typical animation takes 60-90 seconds)
+    let estimatedProgress = 0
+    if (startTime && result.status !== 'completed' && result.status !== 'failed') {
+      const elapsedMs = Date.now() - parseInt(startTime)
+      const elapsedSec = elapsedMs / 1000
+      // Estimate: 10% at start, ramps to ~90% by 80 seconds, never quite hits 100%
+      estimatedProgress = Math.min(95, Math.round(10 + (elapsedSec / 80) * 85))
+    }
+
+    const isComplete = result.url || result.status === 'completed'
+
     return NextResponse.json({
       success: true,
-      status: result.status || (result.url ? 'completed' : 'processing'),
+      status: result.status || (isComplete ? 'completed' : 'processing'),
       videoUrl: result.url,
       duration: result.duration,
       error: result.error,
+      progress: isComplete ? 100 : estimatedProgress,
     })
   } catch (error) {
     console.error('Animation status error:', error)

@@ -35,6 +35,9 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  GitPullRequest,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react'
 import {
   Select,
@@ -45,6 +48,7 @@ import {
 } from '@/components/ui/select'
 import { ImageEditModal } from '@/components/content/ImageEditModal'
 import { VideoEditModal } from '@/components/content/VideoEditModal'
+import { GitHubActivityPanel } from '@/components/video/GitHubActivityPanel'
 
 type GenerationMode = 'grok-imagine' | 'openai' | 'remotion'
 
@@ -210,6 +214,9 @@ export default function CreateContentPage({
   const [showHistory, setShowHistory] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  // GitHub activity panel
+  const [showGitHubPanel, setShowGitHubPanel] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -761,6 +768,27 @@ export default function CreateContentPage({
     setInput(action)
   }
 
+  // Handle using a generated post from GitHub activity
+  const handleUsePost = (post: { headline: string; body: string; cta: string; hashtags: string[]; imagePrompt?: string }) => {
+    const fullPost = `${post.headline}\n\n${post.body}\n\n${post.cta}\n\n${post.hashtags.join(' ')}`
+
+    // Add the post as an assistant message
+    const assistantMessage: Message = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: `📝 **Generated Post from GitHub Activity**\n\n**${post.headline}**\n\n${post.body}\n\n*${post.cta}*\n\n${post.hashtags.join(' ')}${post.imagePrompt ? `\n\n---\n💡 **Image suggestion:** "${post.imagePrompt}"` : ''}`,
+      timestamp: new Date().toISOString(),
+    }
+    setMessages(prev => [...prev, assistantMessage])
+    setShowGitHubPanel(false)
+  }
+
+  // Handle generating an image from post suggestion
+  const handleGenerateImageFromPost = (prompt: string) => {
+    setInput(prompt)
+    setShowGitHubPanel(false)
+  }
+
   // Convert GitHub URLs to proxy
   const getProxyUrl = (url: string, path: string) => {
     if (url.startsWith('/api/github/file')) return url
@@ -926,6 +954,22 @@ export default function CreateContentPage({
                 )}
               </span>
             )}
+            {brand?.github_repo && (
+              <Button
+                variant={showGitHubPanel ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setShowGitHubPanel(!showGitHubPanel)}
+                className="gap-1"
+              >
+                <GitPullRequest className="h-4 w-4" />
+                Posts
+                {showGitHubPanel ? (
+                  <PanelRightClose className="h-3.5 w-3.5" />
+                ) : (
+                  <PanelRightOpen className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -1024,7 +1068,7 @@ export default function CreateContentPage({
         )}
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden mx-4 md:mx-8 mt-4 border border-border/50 rounded-t-lg bg-card/30">
+        <div className={`flex-1 flex flex-col min-h-0 overflow-hidden mt-4 border border-border/50 rounded-t-lg bg-card/30 ${showGitHubPanel ? 'ml-4 md:ml-8' : 'mx-4 md:mx-8'}`}>
           <div className="flex-1 overflow-y-auto" ref={scrollRef}>
             <div className="max-w-3xl mx-auto space-y-6 p-4">
               {messages.map((msg) => (
@@ -1272,10 +1316,35 @@ export default function CreateContentPage({
             </div>
           </div>
         </div>
+
+        {/* GitHub Activity Panel - Right sidebar */}
+        {showGitHubPanel && brand?.github_repo && (
+          <div className="w-80 flex-shrink-0 mr-4 md:mr-8 mt-4 border border-border/50 rounded-lg bg-card/30 overflow-hidden flex flex-col">
+            <div className="p-3 border-b border-border/50 flex items-center justify-between">
+              <p className="text-xs font-mono text-muted-foreground">github_posts</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowGitHubPanel(false)}
+                className="h-6 w-6 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <GitHubActivityPanel
+                brand={brand as any}
+                githubRepo={brand.github_repo}
+                onGenerateImage={handleGenerateImageFromPost}
+                onUsePost={handleUsePost}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Input Area - Fixed at bottom */}
-      <div className="flex-shrink-0 mx-4 md:mx-8 mb-4 p-4 border border-t-0 border-border/50 rounded-b-lg bg-card/50">
+      <div className={`flex-shrink-0 mb-4 p-4 border border-t-0 border-border/50 rounded-b-lg bg-card/50 ${showGitHubPanel ? 'ml-4 md:ml-8 mr-[21rem] md:mr-[22rem]' : 'mx-4 md:mx-8'}`}>
         <div className="max-w-3xl mx-auto w-full">
           {/* Generation Mode Toggle */}
           <div className="flex items-center justify-center gap-2 mb-3">

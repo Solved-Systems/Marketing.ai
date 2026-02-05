@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { VideoCreationState, Brand, LogoAnalysis, MarketingCopy } from '@/types/video-creation'
 import { useState } from 'react'
+import { GenerationProgress } from '@/components/ui/generation-progress'
 
 interface VideoCreationPreviewProps {
   state: VideoCreationState
@@ -230,25 +231,39 @@ export function VideoCreationPreview({
           </div>
         </div>
 
-        {/* Video Status */}
+        {/* Video Status with Progress */}
         {state.videoStatus === 'generating' && (
-          <div className="flex flex-col items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <p className="text-sm font-medium">Generating content...</p>
-            <p className="text-xs text-muted-foreground mt-1">This may take 1-3 minutes</p>
-          </div>
+          <GenerationProgress
+            type="animation"
+            progress={state.videoProgress}
+            status="Animating your content..."
+            previewUrl={state.selectedBackground || undefined}
+            startTime={state.videoStartTime}
+            estimatedDuration={90}
+          />
         )}
 
         {state.videoStatus === 'complete' && state.videoUrl && (
           <div className="space-y-4">
-            <video
-              src={state.videoUrl}
-              controls
-              autoPlay
-              muted
-              loop
-              className="w-full rounded-lg"
-            />
+            <div className="relative group">
+              <video
+                src={state.videoUrl}
+                controls
+                autoPlay
+                muted
+                loop
+                className="w-full rounded-lg"
+              />
+              {/* Download button overlay */}
+              <button
+                type="button"
+                onClick={onDownloadVideo}
+                className="absolute bottom-12 right-2 p-2 bg-black/70 hover:bg-black/90 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Download video"
+              >
+                <Download className="h-4 w-4 text-white" />
+              </button>
+            </div>
             {onDownloadVideo && (
               <Button onClick={onDownloadVideo} className="w-full" variant="terminal">
                 <Download className="h-4 w-4 mr-2" />

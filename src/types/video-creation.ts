@@ -56,6 +56,8 @@ export interface ContentCreationState {
   videoUrl: string | null
   videoStatus: 'idle' | 'generating' | 'complete' | 'failed'
   videoError: string | null
+  videoProgress?: number // 0-100
+  videoStartTime?: number // timestamp when generation started
   // Marketing copy
   marketingCopy: MarketingCopy | null
   // Social posting
@@ -85,6 +87,8 @@ export interface VideoCreationState {
   videoUrl: string | null
   videoStatus: 'idle' | 'generating' | 'complete' | 'failed'
   videoError: string | null
+  videoProgress?: number // 0-100
+  videoStartTime?: number // timestamp when generation started
   marketingCopy: MarketingCopy | null
 }
 

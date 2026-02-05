@@ -85,19 +85,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<GrokImage
     }
 
     // Call Grok image generation API
+    const requestBody = {
+      model: 'grok-2-image',
+      prompt,
+      n: Math.min(n, 4), // Max 4 images
+    }
+
+    console.log('Grok API request:', JSON.stringify(requestBody))
+
     const response = await fetch(`${XAI_API_BASE}/images/generations`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: quality === 'hd' ? 'grok-2-image' : 'grok-2-image',
-        prompt,
-        n,
-        response_format,
-        size: finalSize,
-      }),
+      body: JSON.stringify(requestBody),
     })
 
     if (!response.ok) {

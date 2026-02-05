@@ -139,20 +139,40 @@ export function ChatVideoCreator({
     }
   }, [messages])
 
-  // Poll for video status
+  // Poll for video status with progress tracking
   useEffect(() => {
     if (state.videoStatus !== 'generating' || !state.videoId) return
+
+    const startTime = state.videoStartTime || Date.now()
 
     const pollInterval = setInterval(async () => {
       try {
         const response = await fetch(`/api/videos/generate-grok?id=${state.videoId}`)
         if (response.ok) {
           const data = await response.json()
+
+          // Update progress
+          if (data.render_progress !== undefined) {
+            onStateChange((prev: VideoCreationState) => ({
+              ...prev,
+              videoProgress: data.render_progress,
+            }))
+          } else {
+            // Estimate progress based on elapsed time (typical 60-90 seconds)
+            const elapsed = (Date.now() - startTime) / 1000
+            const estimatedProgress = Math.min(95, Math.round((elapsed / 80) * 100))
+            onStateChange((prev: VideoCreationState) => ({
+              ...prev,
+              videoProgress: estimatedProgress,
+            }))
+          }
+
           if (data.status === 'completed' && data.output_url) {
             onStateChange((prev: VideoCreationState) => ({
               ...prev,
               videoUrl: data.output_url,
               videoStatus: 'complete',
+              videoProgress: 100,
             }))
             clearInterval(pollInterval)
             handleGenerateCopy(data.output_url)
@@ -524,7 +544,12 @@ Return ONLY the prompt text, no JSON or formatting. Keep it under 200 characters
       action: 'generating_video',
     })
 
-    onStateChange((prev: VideoCreationState) => ({ ...prev, videoStatus: 'generating' }))
+    onStateChange((prev: VideoCreationState) => ({
+      ...prev,
+      videoStatus: 'generating',
+      videoStartTime: Date.now(),
+      videoProgress: 0,
+    }))
 
     try {
       const promptResponse = await fetch('/api/ai/chat', {
@@ -575,6 +600,7 @@ Return ONLY the prompt text, no formatting. Keep it under 200 characters.`,
         videoId: data.videoId,
         videoPrompt,
         videoStatus: 'generating',
+        videoStartTime: prev.videoStartTime || Date.now(),
       }))
       refreshCredits()
 

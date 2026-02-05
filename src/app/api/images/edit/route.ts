@@ -160,7 +160,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ImageEdit
     // Use OpenAI's image edit API (DALL-E 2)
     // Note: DALL-E 2 edit API supports mask for inpainting
     const editParams: Parameters<typeof openai.images.edit>[0] = {
-      model: 'openai/dall-e-2',
+      model: 'dall-e-2',
       image: imageFile,
       prompt: editPrompt,
       n: numVariations,

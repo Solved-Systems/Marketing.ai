@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Check,
   Sparkles,
+  Download,
 } from 'lucide-react'
 import type {
   ContentCreationState,
@@ -28,6 +29,7 @@ import { VIDEO_MODELS, DEFAULT_STYLE_PROMPT } from '@/types/video-creation'
 import { useCredits } from '@/hooks/use-credits'
 import { getVideoGenerationType, getCreditCost } from '@/lib/billing/models'
 import type { ModelQuality } from '@/lib/billing/models'
+import { InlineProgress } from '@/components/ui/generation-progress'
 
 interface ChatContentCreatorProps {
   brandId: string
@@ -64,6 +66,26 @@ export function ChatContentCreator({
     return newMsg.id
   }, [])
 
+  // Download image or video
+  const handleDownload = useCallback(async (url: string, type: 'image' | 'video' = 'image') => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const extension = type === 'video' ? 'mp4' : 'png'
+      const filename = `${brand?.name || 'content'}-${Date.now()}.${extension}`
+
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+    } catch (error) {
+      console.error('Download failed:', error)
+    }
+  }, [brand?.name])
+
   // Initialize with welcome message
   useEffect(() => {
     if (initialized || !brand) return
@@ -93,20 +115,34 @@ export function ChatContentCreator({
     }
   }, [messages])
 
-  // Poll for video status
+  // Poll for video status with progress tracking
   useEffect(() => {
     if (state.videoStatus !== 'generating' || !state.videoId) return
+
+    const startTime = state.videoStartTime || Date.now()
 
     const pollInterval = setInterval(async () => {
       try {
         const response = await fetch(`/api/videos/generate-grok?id=${state.videoId}`)
         if (response.ok) {
           const data = await response.json()
+
+          // Update progress
+          if (data.render_progress !== undefined) {
+            onStateChange(prev => ({ ...prev, videoProgress: data.render_progress }))
+          } else {
+            // Estimate progress based on elapsed time
+            const elapsed = (Date.now() - startTime) / 1000
+            const estimatedProgress = Math.min(95, Math.round((elapsed / 80) * 100))
+            onStateChange(prev => ({ ...prev, videoProgress: estimatedProgress }))
+          }
+
           if (data.status === 'completed' && data.output_url) {
             onStateChange(prev => ({
               ...prev,
               videoUrl: data.output_url,
               videoStatus: 'complete',
+              videoProgress: 100,
               phase: 'copy',
             }))
             clearInterval(pollInterval)
@@ -371,7 +407,13 @@ export function ChatContentCreator({
       action: 'generating_video',
     })
 
-    onStateChange(prev => ({ ...prev, videoStatus: 'generating', phase: 'animate' }))
+    onStateChange(prev => ({
+      ...prev,
+      videoStatus: 'generating',
+      phase: 'animate',
+      videoStartTime: Date.now(),
+      videoProgress: 0,
+    }))
 
     try {
       const response = await fetch('/api/videos/generate-grok', {
@@ -396,6 +438,7 @@ export function ChatContentCreator({
         ...prev,
         videoId: data.videoId,
         videoStatus: 'generating',
+        videoStartTime: prev.videoStartTime || Date.now(),
       }))
       refreshCredits()
 
@@ -612,23 +655,36 @@ Respond with ONLY a JSON block:
                 {msg.images && msg.images.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-2">
                     {msg.images.map((img, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => msg.action === 'composite_ready' && handleSelectImage(img)}
-                        className={`relative group ${msg.action === 'composite_ready' ? 'cursor-pointer hover:ring-2 hover:ring-primary' : ''} ${state.selectedImage === img ? 'ring-2 ring-primary' : ''}`}
-                      >
-                        <img
-                          src={img}
-                          alt={`Image ${idx + 1}`}
-                          className="w-32 h-32 object-cover rounded border border-border"
-                        />
-                        {state.selectedImage === img && (
-                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center rounded">
-                            <Check className="h-6 w-6 text-primary" />
-                          </div>
-                        )}
-                      </button>
+                      <div key={idx} className="relative group">
+                        <button
+                          type="button"
+                          onClick={() => msg.action === 'composite_ready' && handleSelectImage(img)}
+                          className={`relative ${msg.action === 'composite_ready' ? 'cursor-pointer hover:ring-2 hover:ring-primary' : ''} ${state.selectedImage === img ? 'ring-2 ring-primary' : ''}`}
+                        >
+                          <img
+                            src={img}
+                            alt={`Image ${idx + 1}`}
+                            className="w-32 h-32 object-cover rounded border border-border"
+                          />
+                          {state.selectedImage === img && (
+                            <div className="absolute inset-0 bg-primary/20 flex items-center justify-center rounded">
+                              <Check className="h-6 w-6 text-primary" />
+                            </div>
+                          )}
+                        </button>
+                        {/* Download button - appears on hover */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDownload(img, 'image')
+                          }}
+                          className="absolute bottom-1 right-1 p-1.5 bg-black/70 hover:bg-black/90 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Download image"
+                        >
+                          <Download className="h-3.5 w-3.5 text-white" />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -668,12 +724,22 @@ Respond with ONLY a JSON block:
                 </div>
               )}
 
-              {/* Loading indicator */}
+              {/* Loading indicator with progress */}
               {(msg.action === 'generating_composite' ||
                 msg.action === 'generating_video' ||
                 msg.action === 'generating_copy') && (
-                <div className="flex items-center gap-2 mt-2 mr-8 text-sm text-primary">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                <div className="mt-2 mr-8">
+                  {msg.action === 'generating_video' && state.videoProgress !== undefined ? (
+                    <InlineProgress
+                      progress={state.videoProgress}
+                      type="animation"
+                      className="w-48"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-primary">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
