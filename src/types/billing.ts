@@ -5,6 +5,7 @@ export type GenerationType =
   | 'image_default'
   | 'image_standard'
   | 'image_premium'
+  | 'image_edit'
   | 'video_default'
   | 'video_premium'
 

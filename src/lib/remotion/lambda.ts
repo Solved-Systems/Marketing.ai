@@ -1,9 +1,13 @@
 import { renderMediaOnLambda, getRenderProgress } from '@remotion/lambda/client'
-import type { RenderMediaOnLambdaOutput } from '@remotion/lambda/client'
+import type { AwsRegion } from '@remotion/lambda/client'
 
-const REGION = 'us-east-1'
+const REGION = (process.env.REMOTION_AWS_REGION || 'us-east-1') as AwsRegion
 const FUNCTION_NAME = process.env.REMOTION_FUNCTION_NAME!
 const SERVE_URL = process.env.REMOTION_SERVE_URL!
+
+// AWS credentials - check both standard and REMOTION_ prefixed variables
+const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID || process.env.REMOTION_AWS_ACCESS_KEY_ID
+const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY || process.env.REMOTION_AWS_SECRET_ACCESS_KEY
 
 export interface LambdaRenderResult {
   renderId: string
@@ -26,7 +30,11 @@ export async function startLambdaRender(
   inputProps: Record<string, unknown>
 ): Promise<LambdaRenderResult> {
   if (!FUNCTION_NAME || !SERVE_URL) {
-    throw new Error('Remotion Lambda not configured. Set REMOTION_FUNCTION_NAME and REMOTION_SERVE_URL')
+    throw new Error('Remotion Lambda not configured. Set REMOTION_FUNCTION_NAME and REMOTION_SERVE_URL environment variables.')
+  }
+
+  if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
+    throw new Error('AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or REMOTION_AWS_ACCESS_KEY_ID and REMOTION_AWS_SECRET_ACCESS_KEY).')
   }
 
   const result = await renderMediaOnLambda({
@@ -56,6 +64,10 @@ export async function checkLambdaProgress(
   renderId: string,
   bucketName: string
 ): Promise<RenderProgressResult> {
+  if (!FUNCTION_NAME) {
+    throw new Error('REMOTION_FUNCTION_NAME not configured')
+  }
+
   const progress = await getRenderProgress({
     renderId,
     bucketName,

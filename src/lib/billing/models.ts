@@ -32,6 +32,13 @@ export const CREDIT_COSTS: Record<GenerationType, CreditCost> = {
     description: 'Best quality image generation',
     model: 'FLUX.2 Max / Imagen 4',
   },
+  image_edit: {
+    type: 'image_edit',
+    credits: 2,
+    label: 'Image Edit',
+    description: 'Edit existing images with AI',
+    model: 'OpenAI DALL-E 2',
+  },
   video_default: {
     type: 'video_default',
     credits: 10,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getXAIClient } from '@/lib/xai/client'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export interface AnimateRequest {
   imageUrl: string
@@ -13,6 +14,55 @@ export interface AnimateResponse {
   success: boolean
   requestId?: string
   error?: string
+}
+
+/**
+ * Upload a base64 image to Supabase Storage and return a public URL
+ */
+async function uploadBase64Image(base64Data: string, userId: string): Promise<string> {
+  const supabase = createAdminClient()
+
+  // Extract the base64 content and mime type
+  const matches = base64Data.match(/^data:([^;]+);base64,(.+)$/)
+  if (!matches) {
+    throw new Error('Invalid base64 image format')
+  }
+
+  const mimeType = matches[1]
+  const base64Content = matches[2]
+  const buffer = Buffer.from(base64Content, 'base64')
+
+  // Determine file extension
+  const extMap: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+  }
+  const ext = extMap[mimeType] || 'png'
+
+  // Generate unique filename
+  const filename = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
+
+  // Upload to storage
+  const { error } = await supabase.storage
+    .from('temp-images')
+    .upload(filename, buffer, {
+      contentType: mimeType,
+      upsert: false,
+    })
+
+  if (error) {
+    console.error('Storage upload error:', error)
+    throw new Error(`Failed to upload image: ${error.message}`)
+  }
+
+  // Get public URL
+  const { data: urlData } = supabase.storage
+    .from('temp-images')
+    .getPublicUrl(filename)
+
+  return urlData.publicUrl
 }
 
 // POST: Start video animation from image
@@ -49,13 +99,41 @@ export async function POST(request: NextRequest): Promise<NextResponse<AnimateRe
       )
     }
 
+    // Get user ID for storage path
+    const supabase = createAdminClient()
+    const { data: user } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single()
+
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+    }
+
+    // Handle base64 images - upload to storage first
+    let finalImageUrl = imageUrl
+    if (imageUrl.startsWith('data:')) {
+      console.log('Uploading base64 image to storage for animation...')
+      try {
+        finalImageUrl = await uploadBase64Image(imageUrl, user.id)
+        console.log('Image uploaded successfully:', finalImageUrl)
+      } catch (uploadError) {
+        console.error('Failed to upload image:', uploadError)
+        return NextResponse.json(
+          { success: false, error: `Failed to process image: ${uploadError instanceof Error ? uploadError.message : 'Upload failed'}` },
+          { status: 500 }
+        )
+      }
+    }
+
     // Call Grok video API with image
     const xai = getXAIClient()
     const response = await xai.generateVideo({
       prompt,
       duration,
       aspect_ratio: aspectRatio,
-      image: { url: imageUrl },
+      image: { url: finalImageUrl },
     })
 
     return NextResponse.json({

@@ -52,8 +52,16 @@ export class XAIClient {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}))
-      throw new Error(error.message || `xAI API error: ${response.status}`)
+      const errorText = await response.text()
+      let errorMessage = `xAI API error: ${response.status}`
+      try {
+        const error = JSON.parse(errorText)
+        errorMessage = error.error?.message || error.message || error.detail || errorMessage
+      } catch {
+        if (errorText) errorMessage = errorText
+      }
+      console.error('xAI video generation error:', { status: response.status, error: errorMessage })
+      throw new Error(errorMessage)
     }
 
     return response.json()
@@ -70,8 +78,16 @@ export class XAIClient {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}))
-      throw new Error(error.message || `xAI API error: ${response.status}`)
+      const errorText = await response.text()
+      let errorMessage = `xAI API error: ${response.status}`
+      try {
+        const error = JSON.parse(errorText)
+        errorMessage = error.error?.message || error.message || error.detail || errorMessage
+      } catch {
+        if (errorText) errorMessage = errorText
+      }
+      console.error('xAI video result error:', { status: response.status, error: errorMessage })
+      throw new Error(errorMessage)
     }
 
     return response.json()

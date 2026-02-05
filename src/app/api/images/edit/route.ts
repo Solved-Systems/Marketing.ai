@@ -2,22 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import OpenAI from 'openai'
+import { toFile } from 'openai'
 
-export interface OpenAIImageRequest {
-  prompt: string
-  model?: string
-  size?: '1024x1024' | '1792x1024' | '1024x1792'
-  quality?: 'standard' | 'hd'
-  n?: number
+export interface ImageEditRequest {
+  imageUrl: string
+  editPrompt: string
+  size?: '1024x1024' | '512x512' | '256x256'
 }
 
-export interface OpenAIImageResponse {
+export interface ImageEditResponse {
   success: boolean
   images?: { url: string }[]
   error?: string
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<OpenAIImageResponse>> {
+export async function POST(request: NextRequest): Promise<NextResponse<ImageEditResponse>> {
   try {
     const session = await auth()
 
@@ -35,17 +34,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
       }, { status: 500 })
     }
 
-    const body = await request.json() as OpenAIImageRequest
-    const {
-      prompt,
-      model = 'openai/dall-e-3',
-      size = '1024x1024',
-      quality = 'standard',
-      n = 1
-    } = body
+    const body = await request.json() as ImageEditRequest
+    const { imageUrl, editPrompt, size = '1024x1024' } = body
 
-    if (!prompt) {
-      return NextResponse.json({ success: false, error: 'Prompt is required' }, { status: 400 })
+    if (!imageUrl) {
+      return NextResponse.json({ success: false, error: 'Image URL is required' }, { status: 400 })
+    }
+
+    if (!editPrompt) {
+      return NextResponse.json({ success: false, error: 'Edit prompt is required' }, { status: 400 })
     }
 
     const supabase = createAdminClient()
@@ -61,18 +58,50 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    // Generate image using OpenAI via Vercel AI Gateway
+    // Fetch the image and convert to buffer
+    let imageBuffer: Buffer
+    let mimeType = 'image/png'
+
+    if (imageUrl.startsWith('data:')) {
+      // Parse base64 data URL
+      const matches = imageUrl.match(/^data:([^;]+);base64,(.+)$/)
+      if (!matches) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid base64 image format'
+        }, { status: 400 })
+      }
+      mimeType = matches[1]
+      imageBuffer = Buffer.from(matches[2], 'base64')
+    } else {
+      // Fetch from URL
+      const imageResponse = await fetch(imageUrl)
+      if (!imageResponse.ok) {
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to fetch source image'
+        }, { status: 400 })
+      }
+      imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+      mimeType = imageResponse.headers.get('content-type') || 'image/png'
+    }
+
+    // Create OpenAI client with Vercel AI Gateway
     const openai = new OpenAI({
       apiKey: gatewayKey,
       baseURL: 'https://ai-gateway.vercel.sh/v1',
     })
 
-    const result = await openai.images.generate({
-      model,
-      prompt,
-      n,
-      size,
-      quality,
+    // Convert buffer to File for OpenAI API
+    const imageFile = await toFile(imageBuffer, 'image.png', { type: mimeType })
+
+    // Use OpenAI's image edit API (DALL-E 2)
+    const result = await openai.images.edit({
+      model: 'openai/dall-e-2',
+      image: imageFile,
+      prompt: editPrompt,
+      n: 1,
+      size: size,
       response_format: 'b64_json',
     })
 
@@ -102,10 +131,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<OpenAIIma
       images,
     })
   } catch (error) {
-    console.error('OpenAI image generation error:', error)
+    console.error('Image edit error:', error)
 
     // Extract detailed error message
-    let errorMessage = 'Failed to generate image'
+    let errorMessage = 'Failed to edit image'
     if (error instanceof Error) {
       errorMessage = error.message
     }

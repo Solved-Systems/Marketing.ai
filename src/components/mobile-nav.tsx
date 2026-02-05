@@ -39,7 +39,7 @@ const dashboardNavItems = [
   { title: './dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: './brands', href: '/brands', icon: Palette },
   { title: './calendar', href: '/calendar', icon: Calendar },
-  { title: './videos', href: '/videos', icon: Video },
+  { title: './content', href: '/videos', icon: Video },
   { title: './integrations', href: '/integrations', icon: Plug },
   { title: './config', href: '/settings', icon: Settings },
   { title: './billing', href: '/settings/billing', icon: CreditCard },
