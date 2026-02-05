@@ -28,6 +28,13 @@ import {
   Trash2,
   Save,
   Clapperboard,
+  Settings2,
+  Ratio,
+  Clock,
+  Gauge,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
 } from 'lucide-react'
 import {
   Select,
@@ -37,8 +44,51 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ImageEditModal } from '@/components/content/ImageEditModal'
+import { VideoEditModal } from '@/components/content/VideoEditModal'
 
 type GenerationMode = 'grok-imagine' | 'openai' | 'remotion'
+
+// Image size options
+const GROK_IMAGE_SIZES = [
+  { value: '1024x1024', label: 'Square', aspectRatio: '1:1' },
+  { value: '1536x1024', label: 'Landscape', aspectRatio: '3:2' },
+  { value: '1024x1536', label: 'Portrait', aspectRatio: '2:3' },
+  { value: '1792x1024', label: 'Wide', aspectRatio: '16:9' },
+  { value: '1024x1792', label: 'Tall', aspectRatio: '9:16' },
+]
+
+const OPENAI_IMAGE_SIZES = [
+  { value: '1024x1024', label: 'Square', aspectRatio: '1:1' },
+  { value: '1792x1024', label: 'Landscape', aspectRatio: '16:9' },
+  { value: '1024x1792', label: 'Portrait', aspectRatio: '9:16' },
+]
+
+// Animation settings
+const ANIMATION_DURATIONS = [
+  { value: 3, label: '3s' },
+  { value: 5, label: '5s' },
+  { value: 8, label: '8s' },
+  { value: 10, label: '10s' },
+  { value: 15, label: '15s' },
+]
+
+const ANIMATION_ASPECT_RATIOS = [
+  { value: '16:9', label: 'Widescreen' },
+  { value: '9:16', label: 'Vertical' },
+  { value: '1:1', label: 'Square' },
+  { value: '4:3', label: 'Standard' },
+]
+
+const ANIMATION_RESOLUTIONS = [
+  { value: '720p', label: 'HD (720p)' },
+  { value: '480p', label: 'SD (480p)' },
+]
+
+const MOTION_INTENSITIES = [
+  { value: 'subtle', label: 'Subtle', description: 'Minimal movement' },
+  { value: 'moderate', label: 'Moderate', description: 'Natural motion' },
+  { value: 'dynamic', label: 'Dynamic', description: 'Cinematic' },
+]
 
 // Remotion template options
 const REMOTION_TEMPLATES = [
@@ -92,6 +142,8 @@ interface Message {
   animationRequestId?: string
   parentImageUrl?: string
   timestamp?: string
+  generationEngine?: string
+  imageSize?: string
 }
 
 interface Chat {
@@ -99,6 +151,15 @@ interface Chat {
   title: string
   messages: Message[]
   updated_at: string
+}
+
+// Animation settings interface
+interface AnimationSettings {
+  duration: number
+  aspectRatio: string
+  resolution: string
+  motionIntensity: string
+  prompt: string
 }
 
 export default function CreateContentPage({
@@ -117,6 +178,27 @@ export default function CreateContentPage({
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null)
 
+  // Video edit modal state
+  const [videoEditModalOpen, setVideoEditModalOpen] = useState(false)
+  const [editingVideoUrl, setEditingVideoUrl] = useState<string | null>(null)
+  const [editingVideoOriginalImage, setEditingVideoOriginalImage] = useState<string | undefined>()
+
+  // Image generation settings
+  const [imageSize, setImageSize] = useState('1024x1024')
+  const [showImageSettings, setShowImageSettings] = useState(false)
+
+  // Animation settings
+  const [animationSettings, setAnimationSettings] = useState<AnimationSettings>({
+    duration: 5,
+    aspectRatio: '16:9',
+    resolution: '720p',
+    motionIntensity: 'moderate',
+    prompt: '',
+  })
+  const [showAnimationSettings, setShowAnimationSettings] = useState(false)
+  const [animatingMessageId, setAnimatingMessageId] = useState<string | null>(null)
+  const [pendingAnimationImage, setPendingAnimationImage] = useState<string | null>(null)
+
   // Remotion video options
   const [remotionTemplate, setRemotionTemplate] = useState('feature')
   const [remotionDuration, setRemotionDuration] = useState('30 seconds')
@@ -132,6 +214,9 @@ export default function CreateContentPage({
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Get current image sizes based on mode
+  const currentImageSizes = generationMode === 'openai' ? OPENAI_IMAGE_SIZES : GROK_IMAGE_SIZES
 
   // Fetch brand data
   useEffect(() => {
@@ -176,15 +261,12 @@ export default function CreateContentPage({
   useEffect(() => {
     if (messages.length === 0) return
 
-    // Mark as having unsaved changes
     setHasUnsavedChanges(true)
 
-    // Clear existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current)
     }
 
-    // Debounce save by 2 seconds
     saveTimeoutRef.current = setTimeout(() => {
       saveChat()
     }, 2000)
@@ -202,7 +284,6 @@ export default function CreateContentPage({
 
     setIsSaving(true)
     try {
-      // Clean messages for storage (remove transient state)
       const cleanMessages = messages.map(msg => ({
         id: msg.id,
         role: msg.role,
@@ -212,14 +293,14 @@ export default function CreateContentPage({
         generatedVideo: msg.generatedVideo,
         parentImageUrl: msg.parentImageUrl,
         timestamp: msg.timestamp || new Date().toISOString(),
+        generationEngine: msg.generationEngine,
+        imageSize: msg.imageSize,
       }))
 
-      // Generate title from first user message
       const firstUserMsg = messages.find(m => m.role === 'user')
       const title = firstUserMsg?.content?.slice(0, 50) || 'Untitled Chat'
 
       if (currentChatId) {
-        // Update existing chat
         const response = await fetch(`/api/chats/${currentChatId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -227,7 +308,6 @@ export default function CreateContentPage({
         })
         if (response.ok) {
           setHasUnsavedChanges(false)
-          // Update local chat list
           setChats(prev => prev.map(c =>
             c.id === currentChatId
               ? { ...c, messages: cleanMessages, title, updated_at: new Date().toISOString() }
@@ -235,7 +315,6 @@ export default function CreateContentPage({
           ))
         }
       } else {
-        // Create new chat
         const response = await fetch('/api/chats', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -356,7 +435,6 @@ export default function CreateContentPage({
 
     const assistantMessageId = (Date.now() + 1).toString()
 
-    // Add generating message
     setMessages(prev => [...prev, {
       id: assistantMessageId,
       role: 'assistant',
@@ -366,7 +444,6 @@ export default function CreateContentPage({
     }])
 
     try {
-      // Start Remotion render
       const response = await fetch('/api/videos/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -388,10 +465,9 @@ export default function CreateContentPage({
         throw new Error(data.error || 'Failed to start render')
       }
 
-      // Poll for completion
       const videoId = data.videoId
       let attempts = 0
-      const maxAttempts = 150 // ~5 minutes
+      const maxAttempts = 150
 
       const pollInterval = setInterval(async () => {
         attempts++
@@ -435,7 +511,7 @@ export default function CreateContentPage({
         } catch (pollError) {
           console.error('Poll error:', pollError)
         }
-      }, 2000) // Poll every 2 seconds
+      }, 2000)
 
     } catch (error) {
       console.error('Remotion error:', error)
@@ -452,7 +528,6 @@ export default function CreateContentPage({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // For Remotion, use dedicated handler
     if (generationMode === 'remotion') {
       handleRemotionSubmit()
       return
@@ -460,6 +535,7 @@ export default function CreateContentPage({
 
     if ((!input.trim() && uploadedImages.length === 0) || isLoading) return
 
+    const sizeLabel = currentImageSizes.find(s => s.value === imageSize)?.label || imageSize
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -474,24 +550,23 @@ export default function CreateContentPage({
     setUploadedImages([])
     setIsLoading(true)
 
-    const engineName = generationMode === 'grok-imagine' ? 'Grok Imagine' : 'FLUX Pro'
+    const engineName = generationMode === 'grok-imagine' ? 'Grok Imagine' : 'OpenAI DALL-E'
     const assistantMessageId = (Date.now() + 1).toString()
 
-    // Add generating message with loading state
     setMessages(prev => [...prev, {
       id: assistantMessageId,
       role: 'assistant',
-      content: `🎨 **Generating with ${engineName}...**\n\n"${userPrompt}"`,
+      content: `🎨 **Generating with ${engineName}...**\n\nSize: ${sizeLabel}\n"${userPrompt}"`,
       isGenerating: true,
       timestamp: new Date().toISOString(),
+      generationEngine: generationMode,
+      imageSize: imageSize,
     }])
 
     try {
-      // Build the prompt with brand context
       const brandContext = brand ? `Brand: ${brand.name}. ${brand.tagline || ''} ${brand.description || ''}. Colors: ${brand.primary_color}, ${brand.secondary_color}, ${brand.accent_color}.` : ''
       const fullPrompt = `${brandContext}\n\nCreate: ${userPrompt}`
 
-      // Choose API endpoint based on engine
       const endpoint = generationMode === 'grok-imagine'
         ? '/api/images/generate-grok'
         : '/api/images/generate-openai'
@@ -502,9 +577,10 @@ export default function CreateContentPage({
         body: JSON.stringify({
           prompt: fullPrompt,
           n: 1,
+          size: imageSize,
           ...(generationMode === 'grok-imagine'
             ? { response_format: 'url' }
-            : { size: '1024x1024', quality: 'standard' }
+            : { quality: 'standard' }
           ),
         }),
       })
@@ -512,19 +588,17 @@ export default function CreateContentPage({
       const data = await response.json()
 
       if (data.success && data.images?.length > 0) {
-        // Update message with generated image
         setMessages(prev => prev.map(msg =>
           msg.id === assistantMessageId
             ? {
                 ...msg,
-                content: `✨ **Generated with ${engineName}**\n\n"${userPrompt}"`,
+                content: `✨ **Generated with ${engineName}**\n\nSize: ${sizeLabel}\n"${userPrompt}"`,
                 generatedImages: data.images.map((img: { url: string }) => img.url),
                 isGenerating: false,
               }
             : msg
         ))
       } else {
-        // Error state
         setMessages(prev => prev.map(msg =>
           msg.id === assistantMessageId
             ? {
@@ -551,24 +625,37 @@ export default function CreateContentPage({
     setIsLoading(false)
   }
 
-  // Handle animating an image to video
-  const handleAnimate = async (messageId: string, imageUrl: string) => {
+  // Open animation settings panel for an image
+  const openAnimationSettings = (messageId: string, imageUrl: string) => {
+    setAnimatingMessageId(messageId)
+    setPendingAnimationImage(imageUrl)
+    setShowAnimationSettings(true)
+  }
+
+  // Handle animating an image to video with settings
+  const handleAnimate = async () => {
+    if (!pendingAnimationImage || !animatingMessageId) return
+
+    setShowAnimationSettings(false)
+
     // Update message to show animating state
     setMessages(prev => prev.map(msg =>
-      msg.id === messageId
+      msg.id === animatingMessageId
         ? { ...msg, isAnimating: true }
         : msg
     ))
 
     try {
-      // Start animation
       const response = await fetch('/api/videos/animate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageUrl,
-          prompt: 'Animate this image with smooth, cinematic motion. Add subtle movement and life to the scene.',
-          duration: 5,
+          imageUrl: pendingAnimationImage,
+          prompt: animationSettings.prompt || 'Animate this image with smooth, cinematic motion. Add subtle movement and life to the scene.',
+          duration: animationSettings.duration,
+          aspectRatio: animationSettings.aspectRatio,
+          resolution: animationSettings.resolution,
+          motionIntensity: animationSettings.motionIntensity,
         }),
       })
 
@@ -578,17 +665,16 @@ export default function CreateContentPage({
         throw new Error(data.error || 'Failed to start animation')
       }
 
-      // Poll for completion
       const requestId = data.requestId
       let attempts = 0
-      const maxAttempts = 60 // 5 minutes max
+      const maxAttempts = 60
 
       const pollInterval = setInterval(async () => {
         attempts++
         if (attempts >= maxAttempts) {
           clearInterval(pollInterval)
           setMessages(prev => prev.map(msg =>
-            msg.id === messageId
+            msg.id === animatingMessageId
               ? { ...msg, isAnimating: false, content: msg.content + '\n\n❌ Animation timed out' }
               : msg
           ))
@@ -602,14 +688,16 @@ export default function CreateContentPage({
           if (statusData.videoUrl) {
             clearInterval(pollInterval)
             setMessages(prev => prev.map(msg =>
-              msg.id === messageId
-                ? { ...msg, isAnimating: false, generatedVideo: statusData.videoUrl }
+              msg.id === animatingMessageId
+                ? { ...msg, isAnimating: false, generatedVideo: statusData.videoUrl, parentImageUrl: pendingAnimationImage || undefined }
                 : msg
             ))
+            setPendingAnimationImage(null)
+            setAnimatingMessageId(null)
           } else if (statusData.status === 'failed') {
             clearInterval(pollInterval)
             setMessages(prev => prev.map(msg =>
-              msg.id === messageId
+              msg.id === animatingMessageId
                 ? { ...msg, isAnimating: false, content: msg.content + `\n\n❌ Animation failed: ${statusData.error}` }
                 : msg
             ))
@@ -617,12 +705,12 @@ export default function CreateContentPage({
         } catch (pollError) {
           console.error('Poll error:', pollError)
         }
-      }, 5000) // Poll every 5 seconds
+      }, 5000)
 
     } catch (error) {
       console.error('Animation error:', error)
       setMessages(prev => prev.map(msg =>
-        msg.id === messageId
+        msg.id === animatingMessageId
           ? { ...msg, isAnimating: false, content: msg.content + `\n\n❌ Animation failed: ${error instanceof Error ? error.message : 'Unknown error'}` }
           : msg
       ))
@@ -633,6 +721,13 @@ export default function CreateContentPage({
   const handleOpenEdit = (imageUrl: string) => {
     setEditingImageUrl(imageUrl)
     setEditModalOpen(true)
+  }
+
+  // Handle opening video edit modal
+  const handleOpenVideoEdit = (videoUrl: string, originalImageUrl?: string) => {
+    setEditingVideoUrl(videoUrl)
+    setEditingVideoOriginalImage(originalImageUrl)
+    setVideoEditModalOpen(true)
   }
 
   // Handle edit completion - add edited image as new message
@@ -647,6 +742,18 @@ export default function CreateContentPage({
     }
     setMessages(prev => [...prev, assistantMessage])
     setEditingImageUrl(null)
+  }
+
+  // Handle video edit completion
+  const handleVideoEditComplete = (newVideoUrl: string) => {
+    const assistantMessage: Message = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: '🎬 **Re-animated Video**\n\nHere\'s your new video. You can edit it again or download it.',
+      generatedVideo: newVideoUrl,
+      timestamp: new Date().toISOString(),
+    }
+    setMessages(prev => [...prev, assistantMessage])
   }
 
   // Quick action handlers
@@ -682,6 +789,111 @@ export default function CreateContentPage({
           <div className="text-center">
             <ImageIcon className="h-16 w-16 text-primary mx-auto mb-4" />
             <p className="text-xl font-semibold text-primary">Drop images here</p>
+          </div>
+        </div>
+      )}
+
+      {/* Animation Settings Panel */}
+      {showAnimationSettings && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-lg max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Film className="h-5 w-5 text-primary" />
+                Animation Settings
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowAnimationSettings(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-mono text-muted-foreground">motion_prompt (optional)</label>
+                <Input
+                  value={animationSettings.prompt}
+                  onChange={(e) => setAnimationSettings(prev => ({ ...prev, prompt: e.target.value }))}
+                  placeholder="Describe the motion you want..."
+                  className="font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-mono text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> duration
+                  </label>
+                  <Select value={String(animationSettings.duration)} onValueChange={(v) => setAnimationSettings(prev => ({ ...prev, duration: parseInt(v) }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ANIMATION_DURATIONS.map(d => (
+                        <SelectItem key={d.value} value={String(d.value)}>{d.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-mono text-muted-foreground flex items-center gap-1">
+                    <Ratio className="h-3 w-3" /> aspect_ratio
+                  </label>
+                  <Select value={animationSettings.aspectRatio} onValueChange={(v) => setAnimationSettings(prev => ({ ...prev, aspectRatio: v }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ANIMATION_ASPECT_RATIOS.map(ar => (
+                        <SelectItem key={ar.value} value={ar.value}>{ar.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-mono text-muted-foreground">resolution</label>
+                  <Select value={animationSettings.resolution} onValueChange={(v) => setAnimationSettings(prev => ({ ...prev, resolution: v }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ANIMATION_RESOLUTIONS.map(r => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-mono text-muted-foreground flex items-center gap-1">
+                    <Gauge className="h-3 w-3" /> motion
+                  </label>
+                  <Select value={animationSettings.motionIntensity} onValueChange={(v) => setAnimationSettings(prev => ({ ...prev, motionIntensity: v }))}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MOTION_INTENSITIES.map(m => (
+                        <SelectItem key={m.value} value={m.value}>
+                          <span>{m.label}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setShowAnimationSettings(false)} className="flex-1">
+                Cancel
+              </Button>
+              <Button variant="terminal" onClick={handleAnimate} className="flex-1">
+                <Wand2 className="h-4 w-4 mr-2" />
+                Animate
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -843,13 +1055,10 @@ export default function CreateContentPage({
                     {msg.isGenerating && (
                       <div className="mt-4">
                         <div className="relative aspect-square max-w-md rounded-lg border border-border overflow-hidden bg-gradient-to-br from-primary/5 to-primary/10">
-                          {/* Animated gradient overlay */}
                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent animate-shimmer" />
-                          {/* Scan line effect */}
                           <div className="absolute inset-0 overflow-hidden">
                             <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent animate-scan" />
                           </div>
-                          {/* Center content */}
                           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                             <div className="relative">
                               <Wand2 className="h-8 w-8 text-primary animate-pulse" />
@@ -857,7 +1066,6 @@ export default function CreateContentPage({
                             </div>
                             <p className="text-xs text-muted-foreground font-mono">generating...</p>
                           </div>
-                          {/* Corner accents */}
                           <div className="absolute top-2 left-2 w-4 h-4 border-l-2 border-t-2 border-primary/30" />
                           <div className="absolute top-2 right-2 w-4 h-4 border-r-2 border-t-2 border-primary/30" />
                           <div className="absolute bottom-2 left-2 w-4 h-4 border-l-2 border-b-2 border-primary/30" />
@@ -899,7 +1107,7 @@ export default function CreateContentPage({
                                     size="sm"
                                     variant="outline"
                                     onClick={() => handleOpenEdit(img)}
-                                    className="gap-1"
+                                    className="gap-1 bg-background/80 backdrop-blur-sm"
                                   >
                                     <Pencil className="h-4 w-4" />
                                     Edit
@@ -907,7 +1115,7 @@ export default function CreateContentPage({
                                   <Button
                                     size="sm"
                                     variant="default"
-                                    onClick={() => handleAnimate(msg.id, img)}
+                                    onClick={() => openAnimationSettings(msg.id, img)}
                                     className="gap-1"
                                   >
                                     <Play className="h-4 w-4" />
@@ -926,6 +1134,13 @@ export default function CreateContentPage({
                                     <Download className="h-4 w-4" />
                                   </Button>
                                 </div>
+                                {/* Show generation engine badge */}
+                                {msg.generationEngine && (
+                                  <div className="absolute top-2 left-2 px-2 py-1 bg-background/80 backdrop-blur-sm rounded text-xs font-mono">
+                                    {msg.generationEngine === 'grok-imagine' ? 'Grok' : 'DALL-E'}
+                                    {msg.imageSize && ` • ${currentImageSizes.find(s => s.value === msg.imageSize)?.aspectRatio || msg.imageSize}`}
+                                  </div>
+                                )}
                               </>
                             )}
                           </div>
@@ -935,15 +1150,39 @@ export default function CreateContentPage({
 
                     {/* Generated video */}
                     {msg.generatedVideo && (
-                      <div className="mt-4">
+                      <div className="mt-4 relative group">
                         <video
                           src={msg.generatedVideo}
                           controls
                           autoPlay
                           muted
                           loop
-                          className="w-full rounded-lg"
+                          className="w-full max-w-md rounded-lg"
                         />
+                        <div className="absolute bottom-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenVideoEdit(msg.generatedVideo!, msg.parentImageUrl)}
+                            className="gap-1 bg-background/80 backdrop-blur-sm"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              const link = document.createElement('a')
+                              link.href = msg.generatedVideo!
+                              link.download = `video-${Date.now()}.mp4`
+                              link.click()
+                            }}
+                            className="bg-background/80 backdrop-blur-sm"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -986,6 +1225,13 @@ export default function CreateContentPage({
                       <Video className="h-4 w-4 text-primary" />
                       Create Video
                     </Button>
+                  </div>
+
+                  {/* Workflow hint */}
+                  <div className="mt-6 p-4 bg-primary/5 border border-primary/20 rounded-lg max-w-lg">
+                    <p className="text-sm text-center">
+                      <span className="font-semibold text-primary">Workflow tip:</span> Generate an image with any engine, then click <span className="font-mono bg-muted px-1 rounded">Animate</span> to turn it into a video with Grok Imagine.
+                    </p>
                   </div>
 
                   {/* Brand Logos */}
@@ -1056,7 +1302,7 @@ export default function CreateContentPage({
               }`}
             >
               <Zap className="h-3.5 w-3.5" />
-              FLUX
+              DALL-E
             </button>
             <button
               type="button"
@@ -1071,6 +1317,44 @@ export default function CreateContentPage({
               Remotion
             </button>
           </div>
+
+          {/* Image Settings (for Grok & OpenAI) */}
+          {generationMode !== 'remotion' && (
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={() => setShowImageSettings(!showImageSettings)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+                Image Settings
+                {showImageSettings ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {showImageSettings && (
+                <div className="mt-2 p-3 bg-muted/30 rounded-lg border border-border/50">
+                  <div className="flex items-center gap-3 justify-center">
+                    <label className="text-xs font-mono text-muted-foreground">size:</label>
+                    <div className="flex gap-1">
+                      {currentImageSizes.map(s => (
+                        <button
+                          key={s.value}
+                          type="button"
+                          onClick={() => setImageSize(s.value)}
+                          className={`px-2 py-1 rounded text-xs font-mono transition-colors ${
+                            imageSize === s.value
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {s.aspectRatio}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Remotion Template Selection */}
           {generationMode === 'remotion' && (
@@ -1201,7 +1485,7 @@ export default function CreateContentPage({
           <p className="text-xs text-muted-foreground text-center mt-2">
             {generationMode === 'remotion'
               ? 'Renders a branded video using AWS Lambda'
-              : 'Drag & drop images anywhere'
+              : `Generate images with ${generationMode === 'grok-imagine' ? 'Grok' : 'DALL-E'} • Click Animate to create videos with Grok`
             }
           </p>
         </div>
@@ -1217,6 +1501,21 @@ export default function CreateContentPage({
           }}
           imageUrl={editingImageUrl}
           onEditComplete={handleEditComplete}
+        />
+      )}
+
+      {/* Video Edit Modal */}
+      {editingVideoUrl && (
+        <VideoEditModal
+          isOpen={videoEditModalOpen}
+          onClose={() => {
+            setVideoEditModalOpen(false)
+            setEditingVideoUrl(null)
+            setEditingVideoOriginalImage(undefined)
+          }}
+          videoUrl={editingVideoUrl}
+          originalImageUrl={editingVideoOriginalImage}
+          onVideoEdited={handleVideoEditComplete}
         />
       )}
     </div>

@@ -4,16 +4,44 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import OpenAI from 'openai'
 import { toFile } from 'openai'
 
+// Supported edit sizes
+export const IMAGE_EDIT_SIZES = [
+  { value: '1024x1024', label: 'Large (1024×1024)', description: 'Best quality' },
+  { value: '512x512', label: 'Medium (512×512)', description: 'Faster, good quality' },
+  { value: '256x256', label: 'Small (256×256)', description: 'Fastest, preview quality' },
+] as const
+
+export type ImageEditSize = typeof IMAGE_EDIT_SIZES[number]['value']
+
+// Quick edit presets
+export const EDIT_PRESETS = [
+  { value: 'remove_background', label: 'Remove Background', prompt: 'Remove the background, keep only the main subject with a transparent or white background' },
+  { value: 'enhance', label: 'Enhance Quality', prompt: 'Enhance the image quality, improve lighting and colors while keeping the same composition' },
+  { value: 'style_painting', label: 'Oil Painting Style', prompt: 'Transform this into an oil painting style with visible brush strokes' },
+  { value: 'style_watercolor', label: 'Watercolor Style', prompt: 'Transform this into a watercolor painting with soft, flowing colors' },
+  { value: 'style_sketch', label: 'Pencil Sketch', prompt: 'Transform this into a detailed pencil sketch' },
+  { value: 'style_cartoon', label: 'Cartoon Style', prompt: 'Transform this into a cartoon or illustration style' },
+  { value: 'lighting_dramatic', label: 'Dramatic Lighting', prompt: 'Add dramatic cinematic lighting with shadows and highlights' },
+  { value: 'lighting_soft', label: 'Soft Lighting', prompt: 'Apply soft, diffused lighting for a gentle mood' },
+  { value: 'color_vibrant', label: 'Vibrant Colors', prompt: 'Make the colors more vibrant and saturated' },
+  { value: 'color_muted', label: 'Muted Colors', prompt: 'Apply muted, desaturated colors for a vintage look' },
+] as const
+
 export interface ImageEditRequest {
   imageUrl: string
   editPrompt: string
-  size?: '1024x1024' | '512x512' | '256x256'
+  size?: ImageEditSize
+  maskUrl?: string // Optional mask image for inpainting
+  n?: number // Number of variations (1-4)
+  preset?: string // Quick edit preset
 }
 
 export interface ImageEditResponse {
   success: boolean
-  images?: { url: string }[]
+  images?: { url: string; index: number }[]
   error?: string
+  appliedPreset?: string
+  appliedSize?: string
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<ImageEditResponse>> {
@@ -35,15 +63,30 @@ export async function POST(request: NextRequest): Promise<NextResponse<ImageEdit
     }
 
     const body = await request.json() as ImageEditRequest
-    const { imageUrl, editPrompt, size = '1024x1024' } = body
+    const { imageUrl, editPrompt: rawPrompt, size = '1024x1024', maskUrl, n = 1, preset } = body
 
     if (!imageUrl) {
       return NextResponse.json({ success: false, error: 'Image URL is required' }, { status: 400 })
     }
 
+    // Handle preset prompts
+    let editPrompt = rawPrompt
+    let appliedPreset: string | undefined
+
+    if (preset) {
+      const presetConfig = EDIT_PRESETS.find(p => p.value === preset)
+      if (presetConfig) {
+        editPrompt = presetConfig.prompt
+        appliedPreset = preset
+      }
+    }
+
     if (!editPrompt) {
       return NextResponse.json({ success: false, error: 'Edit prompt is required' }, { status: 400 })
     }
+
+    // Validate number of variations
+    const numVariations = Math.min(Math.max(1, n), 4)
 
     const supabase = createAdminClient()
 
@@ -95,27 +138,59 @@ export async function POST(request: NextRequest): Promise<NextResponse<ImageEdit
     // Convert buffer to File for OpenAI API
     const imageFile = await toFile(imageBuffer, 'image.png', { type: mimeType })
 
+    // Handle mask image if provided
+    let maskFile: Awaited<ReturnType<typeof toFile>> | undefined
+    if (maskUrl) {
+      let maskBuffer: Buffer
+      if (maskUrl.startsWith('data:')) {
+        const matches = maskUrl.match(/^data:([^;]+);base64,(.+)$/)
+        if (matches) {
+          maskBuffer = Buffer.from(matches[2], 'base64')
+          maskFile = await toFile(maskBuffer, 'mask.png', { type: 'image/png' })
+        }
+      } else {
+        const maskResponse = await fetch(maskUrl)
+        if (maskResponse.ok) {
+          maskBuffer = Buffer.from(await maskResponse.arrayBuffer())
+          maskFile = await toFile(maskBuffer, 'mask.png', { type: 'image/png' })
+        }
+      }
+    }
+
     // Use OpenAI's image edit API (DALL-E 2)
-    const result = await openai.images.edit({
+    // Note: DALL-E 2 edit API supports mask for inpainting
+    const editParams: Parameters<typeof openai.images.edit>[0] = {
       model: 'openai/dall-e-2',
       image: imageFile,
       prompt: editPrompt,
-      n: 1,
+      n: numVariations,
       size: size,
       response_format: 'b64_json',
-    })
+    }
+
+    // Add mask if provided (for inpainting)
+    if (maskFile) {
+      editParams.mask = maskFile
+    }
+
+    const result = await openai.images.edit(editParams)
+
+    // Type guard: result could be Stream or ImagesResponse
+    // We need the non-streaming response which has .data
+    const resultData = 'data' in result ? result.data : null
 
     // Extract images from result
-    if (!result.data || result.data.length === 0) {
+    if (!resultData || resultData.length === 0) {
       return NextResponse.json({
         success: false,
         error: 'No images generated'
       }, { status: 500 })
     }
 
-    const images = result.data
-      .map(img => ({
+    const images = resultData
+      .map((img, index) => ({
         url: img.b64_json ? `data:image/png;base64,${img.b64_json}` : (img.url || ''),
+        index,
       }))
       .filter(img => img.url)
 
@@ -129,6 +204,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ImageEdit
     return NextResponse.json({
       success: true,
       images,
+      appliedPreset,
+      appliedSize: size,
     })
   } catch (error) {
     console.error('Image edit error:', error)
