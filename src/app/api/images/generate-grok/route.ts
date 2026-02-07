@@ -52,10 +52,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<GrokImage
     const {
       prompt,
       n = 1,
-      response_format = 'url',
+      // response_format and quality are part of the API but not currently used
       size = '1024x1024',
       aspectRatio,
-      quality = 'standard'
     } = body
 
     if (!prompt) {

@@ -440,7 +440,6 @@ export function GitHubActivityPanel({
 
 // Activity card component
 function ActivityCard({
-  type,
   title,
   subtitle,
   date,
@@ -448,7 +447,7 @@ function ActivityCard({
   isGenerating,
   onGenerate,
 }: {
-  type: 'pr' | 'commit'
+  type?: 'pr' | 'commit' // Reserved for future styling
   title: string
   subtitle: string
   date: string

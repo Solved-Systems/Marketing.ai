@@ -10,7 +10,7 @@ import {
   Loader2,
   AlertTriangle,
   Cpu,
-  Image,
+  Image as ImageIcon,
   Video,
   Mail,
   Power,
@@ -31,6 +31,7 @@ export default function AdminSettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
+  // Sync settings to local state for form editing
   useEffect(() => {
     if (settings) {
       if (settings.model_preferences) {
@@ -162,7 +163,7 @@ export default function AdminSettingsPage() {
                 {/* Image Generation */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <Image className="h-4 w-4 text-muted-foreground" />
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
                     <span className="font-mono text-sm">Image Generation</span>
                   </div>
                   <div className="grid grid-cols-2 gap-4 pl-6">

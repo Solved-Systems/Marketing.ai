@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Terminal, Zap, Video, Image, MessageSquare, Github, ArrowRight } from 'lucide-react'
+import { Terminal, Zap, Video, Image as ImageIcon, MessageSquare, Github, ArrowRight } from 'lucide-react'
 
 export default function Home() {
   const [typedText, setTypedText] = useState('')
@@ -123,7 +123,7 @@ export default function Home() {
               description="Generate marketing videos from prompts with brand colors and logos automatically applied."
             />
             <FeatureCard
-              icon={<Image className="h-6 w-6" />}
+              icon={<ImageIcon className="h-6 w-6" />}
               title="AI Image Generator"
               description="Create social graphics, banners, and ad creatives in your brand style."
             />

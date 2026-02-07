@@ -27,9 +27,9 @@ export const SocialTeaser: React.FC<SocialTeaserProps> = ({
   callToAction,
   primaryColor,
   secondaryColor,
-  accentColor,
+  accentColor: _accentColor,
   brandName,
-  style,
+  style: _style,
 }) => {
   const frame = useCurrentFrame()
   const { fps, durationInFrames } = useVideoConfig()
@@ -38,6 +38,8 @@ export const SocialTeaser: React.FC<SocialTeaserProps> = ({
   const titleIn = 5
   const titleOut = Math.floor(durationInFrames * 0.4)
   const ctaIn = Math.floor(durationInFrames * 0.6)
+  void _accentColor // Reserved for accent color styling
+  void _style // Reserved for style-specific rendering
 
   // Animations
   const titleScale = spring({

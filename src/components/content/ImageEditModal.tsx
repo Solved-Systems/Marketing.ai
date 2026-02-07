@@ -76,6 +76,10 @@ export function ImageEditModal({
   const [numVariations, setNumVariations] = useState(1)
   const [activePreset, setActivePreset] = useState<string | null>(null)
 
+  // Track current source image (original or edited version for iterative editing)
+  const [currentSourceUrl, setCurrentSourceUrl] = useState(imageUrl)
+  const [editHistory, setEditHistory] = useState<string[]>([imageUrl])
+
   // Mask drawing state
   const [isMaskMode, setIsMaskMode] = useState(false)
   const [brushSize, setBrushSize] = useState(30)
@@ -84,9 +88,17 @@ export function ImageEditModal({
   const [isDrawing, setIsDrawing] = useState(false)
   const [canvasReady, setCanvasReady] = useState(false)
 
+  // Reset source URL when modal opens with a new image
+  useEffect(() => {
+    if (isOpen && imageUrl) {
+      setCurrentSourceUrl(imageUrl)
+      setEditHistory([imageUrl])
+    }
+  }, [isOpen, imageUrl])
+
   // Initialize canvas when mask mode is enabled
   useEffect(() => {
-    if (isMaskMode && canvasRef.current && imageUrl) {
+    if (isMaskMode && canvasRef.current && currentSourceUrl) {
       const canvas = canvasRef.current
       const ctx = canvas.getContext('2d')
       if (!ctx) return
@@ -105,9 +117,9 @@ export function ImageEditModal({
         ctx.globalCompositeOperation = 'destination-out'
         setCanvasReady(true)
       }
-      img.src = imageUrl
+      img.src = currentSourceUrl
     }
-  }, [isMaskMode, imageUrl])
+  }, [isMaskMode, currentSourceUrl])
 
   // Drawing handlers
   const startDrawing = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -155,7 +167,7 @@ export function ImageEditModal({
   }, [isDrawing])
 
   const clearMask = useCallback(() => {
-    if (!canvasRef.current || !imageUrl) return
+    if (!canvasRef.current || !currentSourceUrl) return
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
@@ -169,9 +181,9 @@ export function ImageEditModal({
       ctx.drawImage(img, 0, 0)
       ctx.globalCompositeOperation = 'destination-out'
     }
-    img.src = imageUrl
+    img.src = currentSourceUrl
     setMaskDataUrl(null)
-  }, [imageUrl])
+  }, [currentSourceUrl])
 
   const handlePresetClick = (presetValue: string) => {
     if (activePreset === presetValue) {
@@ -198,7 +210,7 @@ export function ImageEditModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageUrl,
+          imageUrl: currentSourceUrl, // Use current source for iterative editing
           editPrompt: editPrompt.trim(),
           size,
           n: numVariations,
@@ -239,6 +251,8 @@ export function ImageEditModal({
     setIsMaskMode(false)
     setMaskDataUrl(null)
     setCanvasReady(false)
+    setCurrentSourceUrl(imageUrl)
+    setEditHistory([imageUrl])
     onClose()
   }
 
@@ -258,6 +272,11 @@ export function ImageEditModal({
           <DialogTitle className="font-mono flex items-center gap-2">
             <Pencil className="h-5 w-5 text-primary" />
             Edit Image
+            {editHistory.length > 1 && (
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                {editHistory.length - 1} edit{editHistory.length > 2 ? 's' : ''} deep
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -288,21 +307,39 @@ export function ImageEditModal({
 
           {/* Image comparison */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Original / Mask Canvas */}
+            {/* Source / Mask Canvas */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-mono text-muted-foreground">
-                  {isMaskMode ? 'mask_editor' : 'original'}
+                  {isMaskMode ? 'mask_editor' : currentSourceUrl !== imageUrl ? 'source (edited)' : 'original'}
                 </p>
-                <Button
-                  variant={isMaskMode ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setIsMaskMode(!isMaskMode)}
-                  className="h-7 text-xs"
-                >
-                  <Eraser className="h-3.5 w-3.5 mr-1" />
-                  {isMaskMode ? 'Exit Mask' : 'Mask Mode'}
-                </Button>
+                <div className="flex items-center gap-1">
+                  {currentSourceUrl !== imageUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setCurrentSourceUrl(imageUrl)
+                        setEditHistory([imageUrl])
+                        setMaskDataUrl(null)
+                        setCanvasReady(false)
+                      }}
+                      className="h-7 text-xs"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                      Reset
+                    </Button>
+                  )}
+                  <Button
+                    variant={isMaskMode ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setIsMaskMode(!isMaskMode)}
+                    className="h-7 text-xs"
+                  >
+                    <Eraser className="h-3.5 w-3.5 mr-1" />
+                    {isMaskMode ? 'Exit Mask' : 'Mask Mode'}
+                  </Button>
+                </div>
               </div>
               <div className="relative aspect-square rounded-lg border border-border overflow-hidden bg-muted/20">
                 {isMaskMode ? (
@@ -342,8 +379,8 @@ export function ImageEditModal({
                   </>
                 ) : (
                   <img
-                    src={imageUrl}
-                    alt="Original"
+                    src={currentSourceUrl}
+                    alt="Source"
                     className="w-full h-full object-contain"
                   />
                 )}
@@ -430,6 +467,31 @@ export function ImageEditModal({
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* Continue Editing button */}
+              {selectedImage && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Set the selected edited image as the new source
+                    const newSourceUrl = selectedImage.url
+                    setCurrentSourceUrl(newSourceUrl)
+                    setEditHistory([...editHistory, newSourceUrl])
+                    setEditedImages([])
+                    setSelectedImageIndex(0)
+                    setEditPrompt('')
+                    setActivePreset(null)
+                    setMaskDataUrl(null)
+                    setCanvasReady(false)
+                    setIsMaskMode(false)
+                  }}
+                  className="w-full"
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Continue Editing This
+                </Button>
               )}
             </div>
           </div>

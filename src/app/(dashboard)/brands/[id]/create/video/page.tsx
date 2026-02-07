@@ -855,8 +855,8 @@ export default function CreateContentPage({
         {/* Chat area */}
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto" ref={scrollRef}>
-            <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+          <div className="flex-1 overflow-y-auto touch-pan-y" ref={scrollRef}>
+            <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 flex flex-col gap-6">
               {messages.length === 0 ? (
                 <ChatEmptyState
                   onQuickAction={handleQuickAction}
@@ -879,9 +879,16 @@ export default function CreateContentPage({
 
               {/* Loading indicator */}
               {isLoading && messages.length > 0 && !messages[messages.length - 1]?.isGenerating && (
-                <div className="flex justify-start">
-                  <div className="bg-card/80 border border-border/50 rounded-xl px-4 py-3">
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center">
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  </div>
+                  <div className="rounded-2xl px-4 py-2.5 bg-muted">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
                   </div>
                 </div>
               )}
@@ -889,8 +896,8 @@ export default function CreateContentPage({
           </div>
 
           {/* Input area */}
-          <div className="flex-shrink-0 border-t border-border/30 bg-card/30 backdrop-blur-sm">
-            <div className="max-w-2xl mx-auto px-4 py-4">
+          <div className="flex-shrink-0 border-t border-border bg-background/80 backdrop-blur-md">
+            <div className="max-w-3xl mx-auto px-4 md:px-6 py-4">
               <ChatInput
                 value={input}
                 onChange={setInput}

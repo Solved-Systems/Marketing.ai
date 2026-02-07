@@ -54,7 +54,7 @@ export default function LoginPage() {
 
           <div className="pt-4 border-t border-border/50">
             <p className="text-xs text-center text-muted-foreground font-mono">
-              We'll request access to your repos so you can connect them to brands
+              We&apos;ll request access to your repos so you can connect them to brands
             </p>
           </div>
         </CardContent>

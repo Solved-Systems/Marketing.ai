@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plug, Github, Twitter, Youtube, Instagram, Linkedin, Check } from 'lucide-react'
+import { Github, Twitter, Youtube, Instagram, Linkedin, Check } from 'lucide-react'
 
 const integrations = [
   {

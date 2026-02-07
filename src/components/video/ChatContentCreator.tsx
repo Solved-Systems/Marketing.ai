@@ -4,12 +4,10 @@ import { useState, useRef, useEffect, useCallback, DragEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Label } from '@/components/ui/label'
 import {
   Send,
   Loader2,
   Upload,
-  Image as ImageIcon,
   Play,
   X,
   Paperclip,
@@ -23,9 +21,8 @@ import type {
   ChatMessage,
   Brand,
   MarketingCopy,
-  VideoModel,
 } from '@/types/video-creation'
-import { VIDEO_MODELS, DEFAULT_STYLE_PROMPT } from '@/types/video-creation'
+import { DEFAULT_STYLE_PROMPT } from '@/types/video-creation'
 import { useCredits } from '@/hooks/use-credits'
 import { getVideoGenerationType, getCreditCost } from '@/lib/billing/models'
 import type { ModelQuality } from '@/lib/billing/models'
@@ -47,7 +44,7 @@ export function ChatContentCreator({
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
+  const [isUploading] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [initialized, setInitialized] = useState(false)

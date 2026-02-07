@@ -19,7 +19,7 @@ import { ModelSelector } from '@/components/billing/model-selector'
 import { CreditUsage } from '@/components/billing/credit-usage'
 import { useCredits } from '@/hooks/use-credits'
 import { getImageGenerationType, getCreditCost, type ModelQuality } from '@/lib/billing/models'
-import { ArrowLeft, Image, Loader2, Sparkles, Download, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Image as ImageIcon, Loader2, Sparkles, Download, AlertCircle } from 'lucide-react'
 
 interface ImageFormData {
   prompt: string
@@ -166,7 +166,7 @@ export default function CreateImagePage({
           <Card className="terminal-border bg-card/50">
             <CardHeader>
               <CardTitle className="font-mono text-sm flex items-center gap-2">
-                <Image className="h-4 w-4 text-primary" />
+                <ImageIcon className="h-4 w-4 text-primary" />
                 select_type
               </CardTitle>
             </CardHeader>

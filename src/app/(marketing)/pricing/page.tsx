@@ -15,6 +15,7 @@ function PricingContent() {
   const { subscription, createCheckoutSession } = useSubscription()
   const [showCanceled, setShowCanceled] = useState(false)
 
+  // Show canceled banner based on URL param
   useEffect(() => {
     if (canceled) {
       setShowCanceled(true)

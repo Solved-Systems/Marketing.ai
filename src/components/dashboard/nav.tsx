@@ -13,7 +13,6 @@ import {
   Calendar,
   Video,
   Plug,
-  Settings,
   ChevronRight,
   CreditCard,
   Zap,

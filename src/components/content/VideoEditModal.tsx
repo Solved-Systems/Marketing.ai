@@ -24,19 +24,14 @@ import {
   SkipBack,
   SkipForward,
   Scissors,
-  RotateCcw,
   Wand2,
   Download,
   X,
-  Check,
   Gauge,
-  Clock,
   Volume2,
   VolumeX,
-  Maximize,
   RefreshCw,
   ImageIcon,
-  Settings,
 } from 'lucide-react'
 
 // Video aspect ratios

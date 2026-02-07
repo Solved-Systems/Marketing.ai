@@ -47,7 +47,7 @@ export function ChatVideoCreator({
   const [pendingImages, setPendingImages] = useState<string[]>([]) // Images to send with next message
   const [isDragOver, setIsDragOver] = useState(false)
   const [initialized, setInitialized] = useState(false)
-  const [availableLogos, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
+  const [, setAvailableLogos] = useState<{ path: string; downloadUrl: string }[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)

@@ -27,18 +27,19 @@ export const ReleaseNotes: React.FC<ReleaseNotesProps> = ({
   features,
   callToAction,
   primaryColor,
-  secondaryColor,
+  secondaryColor: _secondaryColor,
   accentColor,
   brandName,
-  style,
+  style: _style,
 }) => {
   const frame = useCurrentFrame()
   const { fps, durationInFrames } = useVideoConfig()
 
   // Phase timings
   const headerPhase = Math.floor(durationInFrames * 0.2)
-  const featuresPhase = Math.floor(durationInFrames * 0.7)
   const ctaPhase = Math.floor(durationInFrames * 0.85)
+  void _secondaryColor // Reserved for secondary color styling
+  void _style // Reserved for style-specific rendering
 
   // Header animations
   const headerOpacity = interpolate(frame, [0, 15], [0, 1], {

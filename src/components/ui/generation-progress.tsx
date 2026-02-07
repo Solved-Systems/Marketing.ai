@@ -19,9 +19,10 @@ export function GenerationProgress({
   status,
   previewUrl,
   startTime,
-  estimatedDuration = 60,
+  estimatedDuration: _estimatedDuration = 60,
   className = '',
 }: GenerationProgressProps) {
+  void _estimatedDuration // Reserved for future time estimation
   const [internalProgress, setInternalProgress] = useState(0)
 
   // Simulate progress for image generation (no real progress available)
@@ -110,7 +111,7 @@ export function GenerationProgress({
         {/* Estimated time remaining */}
         {progress > 0 && progress < 100 && startTime && (
           <div className="text-[10px] text-white/50 text-right">
-            {getTimeRemaining(startTime, progress, estimatedDuration)}
+            {getTimeRemaining(startTime, progress)}
           </div>
         )}
       </div>
@@ -118,7 +119,7 @@ export function GenerationProgress({
   )
 }
 
-function getTimeRemaining(startTime: number, progress: number, estimatedTotal: number): string {
+function getTimeRemaining(startTime: number, progress: number): string {
   if (progress <= 0 || progress >= 100) return ''
 
   const elapsed = (Date.now() - startTime) / 1000

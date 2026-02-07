@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Palette, Video, Image, MessageSquare, ArrowRight, Loader2, Trash2 } from 'lucide-react'
+import { Plus, Palette, Video, Image as ImageIcon, MessageSquare, ArrowRight, Loader2, Trash2 } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -179,7 +179,7 @@ function BrandCard({ brand, onDelete }: { brand: Brand; onDelete: (id: string) =
                 <Video className="h-3 w-3" />0 content
               </span>
               <span className="flex items-center gap-1">
-                <Image className="h-3 w-3" />0 images
+                <ImageIcon className="h-3 w-3" />0 images
               </span>
               <span className="flex items-center gap-1">
                 <MessageSquare className="h-3 w-3" />0 posts

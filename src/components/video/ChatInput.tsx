@@ -79,22 +79,38 @@ export function ChatInput({
 }: ChatInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (value.trim() || uploadedImages.length > 0) {
+        onSubmit(e)
+      }
+    }
+  }
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value)
+    // Auto-resize
+    e.target.style.height = 'auto'
+    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+  }
+
   return (
-    <div className="space-y-4">
-      {/* Uploaded images */}
+    <div className="space-y-3">
+      {/* Uploaded images preview */}
       {uploadedImages.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-2">
           {uploadedImages.map((img, idx) => (
-            <div key={idx} className="relative group">
+            <div key={idx} className="relative group flex-shrink-0">
               <img
                 src={img}
                 alt=""
-                className="h-14 w-14 object-contain rounded-lg border border-border bg-muted/30"
+                className="h-16 w-16 object-cover rounded-lg ring-1 ring-border"
               />
               <button
                 type="button"
                 onClick={() => onRemoveImage(idx)}
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -103,154 +119,165 @@ export function ChatInput({
         </div>
       )}
 
-      {/* Main input */}
-      {generationMode === 'remotion' ? (
-        <div className="space-y-3">
-          {/* Remotion settings */}
+      {/* Main input container */}
+      <div className="rounded-xl border border-border bg-background shadow-sm">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="sr-only"
+          onChange={(e) => e.target.files && onFilesSelected(e.target.files)}
+        />
+
+        {/* Textarea */}
+        <div className="p-3">
+          <textarea
+            value={value}
+            onChange={handleTextareaChange}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              generationMode === 'remotion'
+                ? 'Add custom text for your video (title, description, features...)'
+                : 'Describe what you want to create...'
+            }
+            disabled={isLoading}
+            rows={1}
+            className="w-full resize-none border-0 bg-transparent text-sm leading-relaxed placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0 min-h-[24px] max-h-[200px]"
+          />
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center justify-between gap-2 px-3 pb-3">
           <div className="flex items-center gap-2">
-            <Select value={remotionTemplate} onValueChange={onRemotionTemplateChange}>
-              <SelectTrigger className="flex-1 h-9 bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {remotionTemplates.map(t => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={remotionDuration} onValueChange={onRemotionDurationChange}>
-              <SelectTrigger className="w-20 h-9 bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {remotionDurations.map(d => (
-                  <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={remotionStyle} onValueChange={onRemotionStyleChange}>
-              <SelectTrigger className="w-24 h-9 bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {remotionStyles.map(s => (
-                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Attach button - only for image modes */}
+            {generationMode !== 'remotion' && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                disabled={isLoading}
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* Mode-specific controls */}
+            {generationMode === 'remotion' ? (
+              <div className="flex items-center gap-1.5">
+                <Select value={remotionTemplate} onValueChange={onRemotionTemplateChange}>
+                  <SelectTrigger className="h-8 w-auto gap-1 text-xs border-0 bg-muted/50 hover:bg-muted px-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {remotionTemplates.map(t => (
+                      <SelectItem key={t.value} value={t.value} className="text-xs">
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={remotionDuration} onValueChange={onRemotionDurationChange}>
+                  <SelectTrigger className="h-8 w-16 text-xs border-0 bg-muted/50 hover:bg-muted px-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {remotionDurations.map(d => (
+                      <SelectItem key={d.value} value={d.value} className="text-xs">
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={remotionStyle} onValueChange={onRemotionStyleChange}>
+                  <SelectTrigger className="h-8 w-20 text-xs border-0 bg-muted/50 hover:bg-muted px-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {remotionStyles.map(s => (
+                      <SelectItem key={s.value} value={s.value} className="text-xs">
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <Select value={imageSize} onValueChange={onImageSizeChange}>
+                <SelectTrigger className="h-8 w-16 text-xs border-0 bg-muted/50 hover:bg-muted px-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {imageSizes.map(s => (
+                    <SelectItem key={s.value} value={s.value} className="text-xs">
+                      {s.aspectRatio}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
+
+          {/* Submit button */}
           <Button
-            onClick={onSubmit as () => void}
-            className="w-full h-10"
-            disabled={isLoading || !hasBrand}
+            type={generationMode === 'remotion' ? 'button' : 'submit'}
+            size="sm"
+            onClick={generationMode === 'remotion' ? (onSubmit as () => void) : undefined}
+            disabled={
+              isLoading ||
+              (generationMode === 'remotion' ? !hasBrand : (!value.trim() && uploadedImages.length === 0))
+            }
+            className="h-8 px-3"
           >
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                <span className="text-xs">
+                  {generationMode === 'remotion' ? 'Rendering' : 'Generating'}
+                </span>
+              </>
             ) : (
-              <Clapperboard className="h-4 w-4 mr-2" />
+              <>
+                {generationMode === 'remotion' ? (
+                  <Clapperboard className="h-4 w-4 mr-1.5" />
+                ) : (
+                  <Send className="h-4 w-4 mr-1.5" />
+                )}
+                <span className="text-xs">
+                  {generationMode === 'remotion' ? 'Generate' : 'Send'}
+                </span>
+              </>
             )}
-            {isLoading ? 'Rendering...' : 'Generate Video'}
           </Button>
         </div>
-      ) : (
-        <form onSubmit={onSubmit}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="sr-only"
-            onChange={(e) => e.target.files && onFilesSelected(e.target.files)}
-          />
-
-          {/* Chat input box */}
-          <div className="relative flex items-end gap-2 p-2 bg-muted/30 rounded-xl border border-border focus-within:border-primary/50 transition-colors">
-            {/* Attach button */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
-
-            {/* Text input */}
-            <textarea
-              value={value}
-              onChange={(e) => {
-                onChange(e.target.value)
-                e.target.style.height = 'auto'
-                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  if (value.trim() || uploadedImages.length > 0) {
-                    onSubmit(e)
-                  }
-                }
-              }}
-              placeholder="Describe what you want to create..."
-              disabled={isLoading}
-              rows={1}
-              className="flex-1 min-h-[36px] max-h-[120px] py-2 px-1 bg-transparent border-0 resize-none text-sm placeholder:text-muted-foreground/60 focus:outline-none"
-            />
-
-            {/* Size selector */}
-            <Select value={imageSize} onValueChange={onImageSizeChange}>
-              <SelectTrigger className="w-16 h-8 text-xs border-0 bg-muted/50 hover:bg-muted">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {imageSizes.map(s => (
-                  <SelectItem key={s.value} value={s.value} className="text-xs">
-                    {s.aspectRatio}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Send button */}
-            <Button
-              type="submit"
-              size="icon"
-              disabled={isLoading || (!value.trim() && uploadedImages.length === 0)}
-              className="h-8 w-8 shrink-0"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </form>
-      )}
+      </div>
 
       {/* Engine selector */}
-      <div className="flex items-center justify-center gap-1">
-        {[
-          { mode: 'grok-imagine' as const, icon: Wand2, label: 'Grok' },
-          { mode: 'openai' as const, icon: Zap, label: 'DALL·E' },
-          { mode: 'remotion' as const, icon: Clapperboard, label: 'Remotion' },
-        ].map(({ mode, icon: Icon, label }) => (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => onModeChange(mode)}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors',
-              generationMode === mode
-                ? 'bg-foreground text-background'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Icon className="h-3 w-3" />
-            {label}
-          </button>
-        ))}
+      <div className="flex items-center justify-center">
+        <div className="inline-flex items-center gap-0.5 p-1 rounded-full bg-muted/50">
+          {[
+            { mode: 'grok-imagine' as const, icon: Wand2, label: 'Grok' },
+            { mode: 'openai' as const, icon: Zap, label: 'DALL·E' },
+            { mode: 'remotion' as const, icon: Clapperboard, label: 'Remotion' },
+          ].map(({ mode, icon: Icon, label }) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => onModeChange(mode)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+                generationMode === mode
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

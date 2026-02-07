@@ -83,7 +83,7 @@ async function testLambdaRender() {
         console.log('RENDER COMPLETE!')
         console.log(`Output URL: ${progress.outputFile}`)
         console.log(`Render time: ${progress.timeToFinish}ms`)
-        console.log(`Cost: ~$${(progress.costs as any)?.estimatedCost?.toFixed(4) || 'N/A'}`)
+        console.log(`Cost: ~$${(progress.costs as { estimatedCost?: number })?.estimatedCost?.toFixed(4) || 'N/A'}`)
         console.log('================================')
         break
       }

@@ -140,7 +140,8 @@ export async function GET(request: Request) {
 
     // Recursively find all CSS/SCSS/style files in the repo
     const styleExtensions = ['.css', '.scss', '.sass', '.less']
-    const styleFileNames = ['tailwind.config', 'theme', 'variables', 'globals', 'styles']
+    // Style file patterns for potential future matching
+    void ['tailwind.config', 'theme', 'variables', 'globals', 'styles']
 
     async function findStyleFilesInDirectory(dirPath: string, maxDepth: number = 4): Promise<string[]> {
       if (maxDepth <= 0) return []

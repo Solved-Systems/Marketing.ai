@@ -1,15 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
   Palette,
   Video,
-  Image,
+  Image as ImageIcon,
   MessageSquare,
-  Plus,
   ArrowRight,
   Activity,
   Zap,
@@ -46,7 +44,7 @@ export default function DashboardPage() {
           badge="AI"
         />
         <QuickActionCard
-          icon={<Image className="h-5 w-5" />}
+          icon={<ImageIcon className="h-5 w-5" />}
           title="Create Image"
           description="Generate graphics"
           href="/brands"

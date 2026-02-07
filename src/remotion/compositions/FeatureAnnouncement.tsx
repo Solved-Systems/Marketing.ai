@@ -6,7 +6,6 @@ import {
   interpolate,
   useCurrentFrame,
   useVideoConfig,
-  Sequence,
   spring,
 } from 'remotion'
 
@@ -72,7 +71,6 @@ export const FeatureAnnouncement: React.FC<FeatureAnnouncementProps> = ({
   const styleConfig = getStyleConfig()
 
   // Animation timings
-  const introEnd = Math.floor(fps * 0.8)
   const titleStart = Math.floor(fps * 0.3)
   const descStart = Math.floor(fps * 0.8)
   const featuresStart = Math.floor(fps * 1.5)

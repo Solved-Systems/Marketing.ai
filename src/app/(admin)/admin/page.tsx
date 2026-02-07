@@ -9,7 +9,6 @@ import {
   Search,
   Lock,
   Unlock,
-  Shield,
   ChevronLeft,
   ChevronRight,
   Loader2,

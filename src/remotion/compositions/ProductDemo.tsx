@@ -30,15 +30,15 @@ export const ProductDemo: React.FC<ProductDemoProps> = ({
   secondaryColor,
   accentColor,
   brandName,
-  style,
+  style: _style,
 }) => {
   const frame = useCurrentFrame()
   const { fps, durationInFrames } = useVideoConfig()
 
   // Phase timings
   const phase1End = Math.floor(durationInFrames * 0.25)
-  const phase2End = Math.floor(durationInFrames * 0.7)
   const phase3Start = Math.floor(durationInFrames * 0.75)
+  void _style // Reserved for future style-specific rendering
 
   // Intro animations
   const introScale = spring({

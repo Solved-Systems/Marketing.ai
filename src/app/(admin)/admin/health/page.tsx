@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,7 +33,7 @@ export default function AdminHealthPage() {
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const runHealthChecks = async () => {
+  const runHealthChecks = useCallback(async () => {
     setIsRefreshing(true)
     setChecks((prev) => prev.map((c) => ({ ...c, status: 'checking' as const })))
 
@@ -151,14 +151,14 @@ export default function AdminHealthPage() {
 
     setLastChecked(new Date())
     setIsRefreshing(false)
-  }
+  }, [])
 
   useEffect(() => {
     runHealthChecks()
     // Refresh every 30 seconds
     const interval = setInterval(runHealthChecks, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [runHealthChecks])
 
   const getStatusIcon = (status: HealthCheck['status']) => {
     switch (status) {

@@ -23,9 +23,7 @@ import {
   Lock,
   Search,
   Save,
-  RefreshCw,
   Plus,
-  Upload,
 } from 'lucide-react'
 
 interface GitHubRepo {

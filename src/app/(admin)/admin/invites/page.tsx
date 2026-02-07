@@ -22,7 +22,7 @@ export default function AdminInvitesPage() {
   const { isSuperAdmin } = useAdmin()
   const {
     invitations,
-    total,
+    total: _total,
     status,
     isLoading,
     error,
@@ -30,6 +30,7 @@ export default function AdminInvitesPage() {
     createInvite,
     deleteInvite,
   } = useAdminInvites()
+  void _total // Reserved for future pagination
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [email, setEmail] = useState('')

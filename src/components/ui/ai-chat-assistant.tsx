@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Sparkles, Send, Loader2, X, MessageSquare, Minimize2, Maximize2, ImagePlus, Trash2 } from 'lucide-react'
+import { Sparkles, Send, Loader2, X, MessageSquare, Minimize2, Maximize2, ImagePlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface Message {
@@ -248,7 +248,7 @@ Examples:
                 <div className="flex flex-col items-center justify-center h-full text-center py-8">
                   <MessageSquare className="h-8 w-8 text-muted-foreground mb-2" />
                   <p className="text-sm text-muted-foreground mb-2">
-                    Describe what you want and I'll help fill out the form
+                    Describe what you want and I&apos;ll help fill out the form
                   </p>
                   <p className="text-xs text-muted-foreground/70">
                     Drop images to extract brand colors & style

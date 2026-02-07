@@ -13,6 +13,17 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Custom rule overrides
+  {
+    rules: {
+      // Disable this rule - it's too aggressive for valid patterns like
+      // syncing external data to local state for form editing
+      "react-hooks/set-state-in-effect": "off",
+      // Allow <img> elements - many cases use dynamic external URLs where
+      // next/image optimization doesn't apply or requires complex configuration
+      "@next/next/no-img-element": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
