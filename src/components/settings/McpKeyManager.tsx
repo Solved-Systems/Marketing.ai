@@ -25,8 +25,11 @@ export function McpKeyManager() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('claude-web')
+  const [mcpUrl, setMcpUrl] = useState('/api/mcp')
 
-  const mcpUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/mcp` : '/api/mcp'
+  useEffect(() => {
+    setMcpUrl(`${window.location.origin}/api/mcp`)
+  }, [])
 
   const fetchKeys = useCallback(async () => {
     const res = await fetch('/api/mcp/keys')
