@@ -309,7 +309,7 @@ function MessageBubble({ message, isLatest, isLoading }: MessageBubbleProps) {
               : 'bg-muted border border-border'
           }`}
         >
-          <MessageContent content={message.content} />
+          {message.content && <MessageContent content={message.content} />}
 
           {/* Tool invocations */}
           {message.toolInvocations && message.toolInvocations.length > 0 && (

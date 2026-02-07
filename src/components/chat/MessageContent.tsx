@@ -8,6 +8,7 @@ interface MessageContentProps {
 
 export function MessageContent({ content }: MessageContentProps) {
   const rendered = useMemo(() => {
+    if (!content) return ''
     // Simple markdown-like parsing
     let html = content
       // Code blocks
