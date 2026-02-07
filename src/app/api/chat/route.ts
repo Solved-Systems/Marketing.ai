@@ -3,181 +3,22 @@ import { createGateway } from '@ai-sdk/gateway'
 import { z } from 'zod'
 import { auth } from '@/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getXAIClient } from '@/lib/xai/client'
-
-const XAI_API_BASE = 'https://api.x.ai/v1'
+import { startLambdaRender, checkLambdaProgress } from '@/lib/remotion/lambda'
+import {
+  generateGrokImages,
+  generateOpenAIImages,
+  generateImagenImages,
+  editImageWithDallE,
+  EDIT_PRESETS,
+} from '@/lib/images/generate'
+import { fetchGitHubRepoInfo, fetchGitHubActivity, fetchGitHubFile } from '@/lib/github/api'
+import { startGrokVideo, checkGrokVideoStatus } from '@/lib/video/grok'
+import { getCompositionId, pollLambdaCompletion } from '@/lib/video/remotion-helpers'
 
 function getGateway() {
   const apiKey = process.env.AI_GATEWAY_API_KEY
   if (!apiKey) throw new Error('AI_GATEWAY_API_KEY not configured')
   return createGateway({ apiKey })
-}
-
-// Direct Grok image generation (no internal fetch needed)
-async function generateGrokImages(prompt: string, n: number = 2) {
-  const apiKey = process.env.XAI_API_KEY
-  if (!apiKey) throw new Error('XAI_API_KEY not configured')
-
-  const response = await fetch(`${XAI_API_BASE}/images/generations`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'grok-2-image',
-      prompt,
-      n: Math.min(n, 4),
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err.error?.message || `Grok API error: ${response.status}`)
-  }
-
-  const data = await response.json()
-  return (
-    data.data?.map((img: { url?: string; b64_json?: string }) => ({
-      url: img.url || (img.b64_json ? `data:image/png;base64,${img.b64_json}` : null),
-    })).filter((img: { url: string | null }) => img.url) || []
-  )
-}
-
-// Direct GitHub API calls using the user's access token
-async function fetchGitHubRepoInfo(accessToken: string, owner: string, repo: string) {
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    Accept: 'application/vnd.github.v3+json',
-  }
-
-  const fullRepo = `${owner}/${repo}`
-
-  const [repoRes, readmeRes, pkgRes] = await Promise.all([
-    fetch(`https://api.github.com/repos/${fullRepo}`, { headers }),
-    fetch(`https://api.github.com/repos/${fullRepo}/readme`, { headers }).catch(() => null),
-    fetch(`https://api.github.com/repos/${fullRepo}/contents/package.json`, { headers }).catch(() => null),
-  ])
-
-  if (!repoRes.ok) throw new Error(`Repo not found: ${fullRepo}`)
-  const repoData = await repoRes.json()
-
-  let readme = null
-  if (readmeRes?.ok) {
-    const readmeData = await readmeRes.json()
-    if (readmeData.content) {
-      readme = Buffer.from(readmeData.content, 'base64').toString('utf-8')
-      if (readme.length > 4000) readme = readme.substring(0, 4000) + '\n...(truncated)'
-    }
-  }
-
-  let packageJson = null
-  if (pkgRes?.ok) {
-    const pkgData = await pkgRes.json()
-    if (pkgData.content) {
-      try {
-        packageJson = JSON.parse(Buffer.from(pkgData.content, 'base64').toString('utf-8'))
-      } catch { /* ignore */ }
-    }
-  }
-
-  return {
-    name: repoData.name,
-    fullName: repoData.full_name,
-    description: repoData.description,
-    stars: repoData.stargazers_count,
-    forks: repoData.forks_count,
-    watchers: repoData.watchers_count,
-    language: repoData.language,
-    topics: repoData.topics || [],
-    url: repoData.html_url,
-    homepage: repoData.homepage,
-    readme,
-    packageJson: packageJson
-      ? {
-          name: packageJson.name,
-          description: packageJson.description,
-          dependencies: Object.keys(packageJson.dependencies || {}),
-          devDependencies: Object.keys(packageJson.devDependencies || {}),
-        }
-      : null,
-  }
-}
-
-async function fetchGitHubActivity(accessToken: string, owner: string, repo: string) {
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    Accept: 'application/vnd.github.v3+json',
-  }
-
-  const fullRepo = `${owner}/${repo}`
-
-  const [prsRes, commitsRes] = await Promise.all([
-    fetch(`https://api.github.com/repos/${fullRepo}/pulls?state=closed&sort=updated&direction=desc&per_page=10`, { headers }),
-    fetch(`https://api.github.com/repos/${fullRepo}/commits?per_page=15`, { headers }),
-  ])
-
-  const prs = prsRes.ok ? await prsRes.json() : []
-  const commits = commitsRes.ok ? await commitsRes.json() : []
-
-  return {
-    mergedPRs: (Array.isArray(prs) ? prs : [])
-      .filter((pr: any) => pr.merged_at)
-      .slice(0, 5)
-      .map((pr: any) => ({
-        number: pr.number,
-        title: pr.title,
-        mergedAt: pr.merged_at,
-        url: pr.html_url,
-        author: pr.user?.login,
-      })),
-    recentCommits: (Array.isArray(commits) ? commits : []).slice(0, 10).map((c: any) => ({
-      sha: c.sha?.substring(0, 7),
-      message: c.commit?.message?.split('\n')[0],
-      date: c.commit?.author?.date,
-      author: c.author?.login || c.commit?.author?.name,
-    })),
-  }
-}
-
-async function fetchGitHubFile(accessToken: string, owner: string, repo: string, path: string) {
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    Accept: 'application/vnd.github.v3+json',
-  }
-
-  const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
-    { headers }
-  )
-
-  if (!response.ok) throw new Error(`File not found: ${path}`)
-  const data = await response.json()
-
-  if (data.content) {
-    const content = Buffer.from(data.content, 'base64').toString('utf-8')
-    return {
-      path: data.path,
-      size: data.size,
-      content: content.length > 10000 ? content.substring(0, 10000) + '\n...(truncated)' : content,
-    }
-  }
-
-  // Directory listing
-  if (Array.isArray(data)) {
-    return {
-      path,
-      type: 'directory',
-      entries: data.map((item: any) => ({
-        name: item.name,
-        type: item.type,
-        size: item.size,
-        path: item.path,
-      })),
-    }
-  }
-
-  throw new Error('Unexpected response format')
 }
 
 export async function POST(request: Request) {
@@ -231,20 +72,38 @@ Always incorporate the brand's identity into generated content.`
     const gateway = getGateway()
     const result = streamText({
       model: gateway('anthropic/claude-sonnet-4-20250514'),
-      system: `You are MRKT, an AI marketing agent that creates visual content for brands. You operate like an MCP (Model Context Protocol) server — you have tools to generate images, videos, analyze GitHub repos, and read code files.
+      system: `You are MRKT, an AI marketing agent that creates visual content for brands. You operate like an MCP (Model Context Protocol) server — you have tools to generate images, edit images, create videos (both AI-animated and template-based), analyze GitHub repos, and read code files.
 
 ${brandContext}
 
+## Image Providers:
+- **Grok** (default): Fast, creative, great for marketing visuals and stylized content. Best all-rounder.
+- **OpenAI** (GPT-5.2): Photorealistic quality via AI Gateway. Falls back to Imagen if needed. Best for realistic product shots.
+- **Imagen** (Google Imagen 4.0): High quality via AI Gateway. Great for clean, professional imagery.
+- **DALL-E 2 Edit**: Edit/transform existing images — change style, remove backgrounds, enhance quality.
+
+## Video Engines:
+- **Grok Imagine** (generate_video): AI-powered video from text or image animation. Short-form (1-15s). Great for social clips and animations.
+- **Remotion Lambda** (generate_remotion_video): Template-based branded videos. 15/30/60 second durations. Templates: feature announcement, product demo, social teaser, release notes. Great for polished marketing videos.
+
 ## How you work:
-1. When the user asks for images, use generate_image immediately. Write rich, detailed prompts for the image generator. Always generate at least 2 images.
+1. When the user asks for images, use generate_image immediately. Write rich, detailed prompts. Always generate at least 2 images. Choose the best provider for the use case, or use grok by default.
 2. When a GitHub repo is mentioned, use analyze_repo to understand it deeply — read the README, topics, description. Then use get_repo_activity to find recent PRs/commits for marketing angles.
 3. Use read_repo_file to read specific code files when you need more context (e.g., landing page copy, component structure, API endpoints).
-4. For videos, use generate_video. You can animate previously generated images by passing their URL.
-5. After generating content, suggest marketing copy, social post ideas, or next steps.
+4. For short AI-animated videos, use generate_video. You can animate previously generated images by passing their URL.
+5. For polished branded videos, use generate_remotion_video. Use check_remotion_status to poll progress. Pass a heroImageUrl from a previous image generation for richer results.
+6. Use edit_image to refine generated images — apply style transfers, remove backgrounds, or enhance quality.
+7. After generating content, suggest marketing copy, social post ideas, or next steps.
+
+## Cross-provider workflows:
+- Generate with OpenAI → animate with Grok video (pass imageUrl)
+- Generate with Grok → edit/restyle with DALL-E 2 (pass imageUrl to edit_image)
+- Generate with any provider → use as heroImageUrl in Remotion composition
+- Analyze repo → generate images → create Remotion video with hero image
 
 ## Agent behavior:
 - Think step-by-step: analyze the request, gather context, then create
-- Chain tools when needed (e.g., analyze repo → read key files → generate images based on findings)
+- Chain tools when needed (e.g., analyze repo → read key files → generate images → create video)
 - Be direct and action-oriented — start creating immediately, don't ask "would you like me to..."
 - Reference specific repo features, code, and commits when creating marketing content
 - Describe generated images/videos briefly after they appear
@@ -254,23 +113,67 @@ ${brandContext}
 - Use the brand's color scheme and identity in all generated content
 - Marketing content should be authentic and highlight real features`,
       messages,
-      stopWhen: stepCountIs(5),
+      stopWhen: stepCountIs(8),
       tools: {
         generate_image: {
           description:
-            'Generate marketing images with AI. Creates high-quality visuals using Grok. Use detailed, creative prompts that specify style, composition, colors, and mood.',
+            'Generate marketing images with AI. Supports multiple providers: grok (fast, creative), openai (GPT-5.2, photorealistic, falls back to Imagen), imagen (Google Imagen 4.0, high quality). Use detailed, creative prompts that specify style, composition, colors, and mood.',
           inputSchema: z.object({
             prompt: z.string().describe('Detailed image description including style, composition, colors, mood, and subject'),
             n: z.number().min(1).max(4).default(2).describe('Number of images (1-4)'),
+            provider: z.enum(['grok', 'openai', 'imagen']).default('grok').describe('Image provider: grok (default, fast), openai (GPT-5.2 photorealistic), imagen (Google Imagen 4.0)'),
           }),
-          execute: async ({ prompt, n }: { prompt: string; n: number }) => {
+          execute: async ({ prompt, n, provider }: { prompt: string; n: number; provider: 'grok' | 'openai' | 'imagen' }) => {
             try {
-              const images = await generateGrokImages(prompt, n)
+              const gatewayKey = process.env.AI_GATEWAY_API_KEY
+              let images: { url: string }[]
+
+              if (provider === 'openai') {
+                if (!gatewayKey) throw new Error('AI_GATEWAY_API_KEY not configured')
+                images = await generateOpenAIImages(gatewayKey, prompt, n)
+              } else if (provider === 'imagen') {
+                if (!gatewayKey) throw new Error('AI_GATEWAY_API_KEY not configured')
+                images = await generateImagenImages(gatewayKey, prompt, n)
+              } else {
+                images = await generateGrokImages(prompt, n)
+              }
+
               return {
                 success: true,
                 images,
                 prompt,
-                provider: 'grok',
+                provider,
+                count: images.length,
+              }
+            } catch (error) {
+              return { success: false, error: String(error), images: [] }
+            }
+          },
+        },
+
+        edit_image: {
+          description:
+            'Edit an existing image using DALL-E 2. Can apply style transformations, enhance quality, remove backgrounds, or make custom edits. Use on previously generated images to refine them.',
+          inputSchema: z.object({
+            prompt: z.string().describe('Editing instruction describing the desired change'),
+            imageUrl: z.string().describe('URL of the image to edit (from a previous generation)'),
+            preset: z.enum(['remove_background', 'enhance', 'style_oil', 'style_watercolor', 'style_sketch']).optional().describe('Quick edit preset (overrides prompt)'),
+            n: z.number().min(1).max(4).default(1).describe('Number of edit variations (1-4)'),
+          }),
+          execute: async ({ prompt, imageUrl, preset, n }: { prompt: string; imageUrl: string; preset?: string; n: number }) => {
+            try {
+              const gatewayKey = process.env.AI_GATEWAY_API_KEY
+              if (!gatewayKey) throw new Error('AI_GATEWAY_API_KEY not configured')
+
+              const editPrompt = (preset && EDIT_PRESETS[preset]) || prompt
+              const images = await editImageWithDallE(gatewayKey, imageUrl, editPrompt, n)
+
+              return {
+                success: true,
+                images,
+                prompt: editPrompt,
+                provider: 'dall-e-2',
+                preset: preset || null,
                 count: images.length,
               }
             } catch (error) {
@@ -297,19 +200,12 @@ ${brandContext}
             prompt: string
             imageUrl?: string
             duration: number
-            aspectRatio: string
+            aspectRatio: '16:9' | '9:16' | '1:1'
           }) => {
             try {
               if (!user) return { success: false, error: 'User not found', status: 'failed' }
 
-              const xai = getXAIClient()
-              const grokResponse = await xai.generateVideo({
-                prompt,
-                duration,
-                aspect_ratio: aspectRatio as any,
-                resolution: '720p',
-                ...(imageUrl && { image: { url: imageUrl } }),
-              })
+              const { requestId } = await startGrokVideo({ prompt, imageUrl, duration, aspectRatio })
 
               // Store in database if we have a brand
               let videoId = `vid-${Date.now()}`
@@ -336,7 +232,7 @@ ${brandContext}
                     secondary_color: '#ea580c',
                     accent_color: '#22c55e',
                     brand_name: brandName,
-                    external_request_id: grokResponse.request_id,
+                    external_request_id: requestId,
                   })
                   .select('id')
                   .single()
@@ -347,7 +243,7 @@ ${brandContext}
               return {
                 success: true,
                 videoId,
-                requestId: grokResponse.request_id,
+                requestId,
                 status: 'processing',
                 message: 'Video generation started. It typically takes 1-2 minutes.',
               }
@@ -364,25 +260,181 @@ ${brandContext}
           }),
           execute: async ({ requestId }: { requestId: string }) => {
             try {
-              const xai = getXAIClient()
-              const result = await xai.getVideoResult(requestId)
+              return await checkGrokVideoStatus(requestId)
+            } catch (error) {
+              return { status: 'error', error: String(error) }
+            }
+          },
+        },
 
-              if (result.url) {
+        generate_remotion_video: {
+          description:
+            'Generate a branded marketing video using Remotion templates rendered on AWS Lambda. Great for feature announcements, product demos, social teasers, and release notes. Can use a previously generated image as the hero visual.',
+          inputSchema: z.object({
+            template: z.enum(['feature', 'product', 'social', 'release']).describe('Video template: feature (announcement), product (demo), social (teaser), release (notes)'),
+            title: z.string().describe('Video title/headline'),
+            description: z.string().describe('Short description or subtitle'),
+            features: z.array(z.string()).describe('Bullet point features or highlights'),
+            callToAction: z.string().default('Learn More').describe('CTA button text'),
+            duration: z.enum(['15', '30', '60']).default('30').describe('Video duration in seconds'),
+            style: z.enum(['Modern', 'Minimal', 'Bold', 'Playful']).default('Modern').describe('Visual style'),
+            heroImageUrl: z.string().optional().describe('URL of an image to use as hero visual (from a previous generation)'),
+          }),
+          execute: async ({
+            template,
+            title,
+            description,
+            features,
+            callToAction,
+            duration,
+            style,
+            heroImageUrl,
+          }: {
+            template: string
+            title: string
+            description: string
+            features: string[]
+            callToAction: string
+            duration: string
+            style: string
+            heroImageUrl?: string
+          }) => {
+            try {
+              if (!user) return { success: false, error: 'User not found', status: 'failed' }
+
+              // Fetch brand for colors
+              let primaryColor = '#6366f1'
+              let secondaryColor = '#8b5cf6'
+              let accentColor = '#22c55e'
+
+              if (brandId) {
+                const { data: brand } = await supabase
+                  .from('brands')
+                  .select('primary_color, secondary_color, accent_color, name')
+                  .eq('id', brandId)
+                  .eq('user_id', user.id)
+                  .single()
+
+                if (brand) {
+                  primaryColor = brand.primary_color || primaryColor
+                  secondaryColor = brand.secondary_color || secondaryColor
+                  accentColor = brand.accent_color || accentColor
+                }
+              }
+
+              const compositionId = getCompositionId(template, duration)
+              const inputProps: Record<string, unknown> = {
+                title,
+                description,
+                features,
+                callToAction: callToAction || 'Learn More',
+                primaryColor,
+                secondaryColor,
+                accentColor,
+                brandName: brandName || 'Brand',
+                style,
+              }
+              if (heroImageUrl) {
+                inputProps.heroImageUrl = heroImageUrl
+              }
+
+              const { renderId, bucketName } = await startLambdaRender(compositionId, inputProps)
+
+              // Store in videos table
+              let videoId = `vid-${Date.now()}`
+              if (brandId) {
+                const { data: video } = await supabase
+                  .from('videos')
+                  .insert({
+                    user_id: user.id,
+                    brand_id: brandId,
+                    title,
+                    description,
+                    prompt: `${template}: ${title}`,
+                    template,
+                    duration: `${duration} seconds`,
+                    style,
+                    call_to_action: callToAction,
+                    features,
+                    engine: 'remotion-lambda',
+                    status: 'processing',
+                    quality: 'default',
+                    primary_color: primaryColor,
+                    secondary_color: secondaryColor,
+                    accent_color: accentColor,
+                    brand_name: brandName,
+                    render_id: renderId,
+                    render_bucket: bucketName,
+                  })
+                  .select('id')
+                  .single()
+
+                if (video) videoId = video.id
+              }
+
+              // Start background polling
+              pollLambdaCompletion(videoId, renderId, bucketName).catch(err => {
+                console.error('Lambda polling error:', err)
+              })
+
+              return {
+                success: true,
+                videoId,
+                renderId,
+                status: 'rendering',
+                template,
+                duration: `${duration}s`,
+                message: 'Remotion video render started. Typically takes 30-90 seconds.',
+              }
+            } catch (error) {
+              return { success: false, error: String(error), status: 'failed' }
+            }
+          },
+        },
+
+        check_remotion_status: {
+          description:
+            'Check the status of a Remotion video render. Returns progress percentage and output URL when done.',
+          inputSchema: z.object({
+            videoId: z.string().describe('The video ID from generate_remotion_video'),
+          }),
+          execute: async ({ videoId }: { videoId: string }) => {
+            try {
+              const { data: video } = await supabase
+                .from('videos')
+                .select('status, output_url, render_id, render_bucket, error_message')
+                .eq('id', videoId)
+                .single()
+
+              if (!video) return { status: 'not_found', error: 'Video not found' }
+
+              if (video.status === 'completed' && video.output_url) {
                 return {
                   status: 'completed',
-                  outputUrl: result.url,
+                  outputUrl: video.output_url,
                   message: 'Video is ready!',
                 }
               }
 
-              if (result.status === 'failed') {
-                return { status: 'failed', error: result.error || 'Generation failed' }
+              if (video.status === 'failed') {
+                return { status: 'failed', error: video.error_message || 'Render failed' }
               }
 
-              return {
-                status: 'processing',
-                message: 'Still generating...',
+              // Check live progress if still processing
+              if (video.render_id && video.render_bucket) {
+                try {
+                  const progress = await checkLambdaProgress(video.render_id, video.render_bucket)
+                  return {
+                    status: 'rendering',
+                    progress: progress.progress,
+                    message: `Rendering... ${progress.progress}% complete`,
+                  }
+                } catch {
+                  // Fall through
+                }
               }
+
+              return { status: 'processing', message: 'Still rendering...' }
             } catch (error) {
               return { status: 'error', error: String(error) }
             }

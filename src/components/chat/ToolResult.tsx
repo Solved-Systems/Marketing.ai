@@ -41,15 +41,17 @@ interface ToolResultProps {
 
 function getToolMeta(toolName: string) {
   const meta: Record<string, { icon: typeof Image; color: string; label: string; cmd: string }> = {
-    generate_image: { icon: Image, color: 'hsl(var(--primary))', label: 'Image Generation', cmd: 'grok' },
+    generate_image: { icon: Image, color: 'hsl(var(--primary))', label: 'Image Generation', cmd: 'generate' },
+    edit_image: { icon: Zap, color: 'hsl(var(--primary))', label: 'Image Edit', cmd: 'edit' },
     generate_video: { icon: Video, color: 'hsl(142 76% 36%)', label: 'Video Generation', cmd: 'grok-imagine' },
     check_video_status: { icon: Clock, color: 'hsl(142 76% 36%)', label: 'Video Status', cmd: 'status' },
+    generate_remotion_video: { icon: Play, color: 'hsl(262 83% 58%)', label: 'Remotion Video', cmd: 'remotion' },
+    check_remotion_status: { icon: Clock, color: 'hsl(262 83% 58%)', label: 'Render Status', cmd: 'remotion-status' },
     analyze_repo: { icon: Github, color: 'hsl(var(--muted-foreground))', label: 'Repo Analysis', cmd: 'github' },
     get_repo_activity: { icon: GitPullRequest, color: 'hsl(var(--muted-foreground))', label: 'Repo Activity', cmd: 'activity' },
     read_repo_file: { icon: FileCode, color: 'hsl(38 92% 50%)', label: 'Read File', cmd: 'read' },
     // Legacy tool names
     analyze_github_repo: { icon: Github, color: 'hsl(var(--muted-foreground))', label: 'Repo Analysis', cmd: 'github' },
-    edit_image: { icon: Zap, color: 'hsl(var(--primary))', label: 'Image Edit', cmd: 'edit' },
   }
   return meta[toolName] || { icon: Zap, color: 'hsl(var(--muted-foreground))', label: toolName, cmd: 'tool' }
 }
@@ -124,10 +126,12 @@ export function ToolResult({ tool: rawTool }: ToolResultProps) {
               {(toolName === 'generate_image' || toolName === 'edit_image') && <ImageResult result={result} />}
               {toolName === 'generate_video' && <VideoStartResult result={result} />}
               {toolName === 'check_video_status' && <VideoStatusResult result={result} />}
+              {toolName === 'generate_remotion_video' && <RemotionVideoResult result={result} />}
+              {toolName === 'check_remotion_status' && <RemotionVideoResult result={result} />}
               {(toolName === 'analyze_repo' || toolName === 'analyze_github_repo') && <RepoResult result={result} />}
               {toolName === 'get_repo_activity' && <ActivityResult result={result} />}
               {toolName === 'read_repo_file' && <FileResult result={result} />}
-              {!['generate_image', 'edit_image', 'generate_video', 'check_video_status', 'analyze_repo', 'analyze_github_repo', 'get_repo_activity', 'read_repo_file'].includes(toolName) && <GenericResult result={result} />}
+              {!['generate_image', 'edit_image', 'generate_video', 'check_video_status', 'generate_remotion_video', 'check_remotion_status', 'analyze_repo', 'analyze_github_repo', 'get_repo_activity', 'read_repo_file'].includes(toolName) && <GenericResult result={result} />}
             </div>
           )}
         </div>
@@ -138,8 +142,14 @@ export function ToolResult({ tool: rawTool }: ToolResultProps) {
 
 function getLoadingDescription(toolName: string, args: Record<string, unknown>): string | null {
   switch (toolName) {
-    case 'generate_image': return `"${String(args.prompt || '').slice(0, 50)}..."`
+    case 'generate_image': {
+      const provider = args.provider ? ` [${args.provider}]` : ''
+      return `"${String(args.prompt || '').slice(0, 50)}..."${provider}`
+    }
+    case 'edit_image': return `"${String(args.prompt || '').slice(0, 50)}..."`
     case 'generate_video': return `"${String(args.prompt || '').slice(0, 50)}..."`
+    case 'generate_remotion_video': return `${args.template} — "${String(args.title || '').slice(0, 40)}"`
+    case 'check_remotion_status': return 'polling...'
     case 'analyze_repo':
     case 'analyze_github_repo': return `${args.owner}/${args.repo}`
     case 'get_repo_activity': return `${args.owner}/${args.repo}`
@@ -257,6 +267,74 @@ function VideoStatusResult({ result }: { result: Record<string, unknown> }) {
       <div className="flex items-center gap-2 text-sm">
         <Loader2 size={14} className="animate-spin text-green-500" />
         <span>{message || `Status: ${status || 'checking...'}`}</span>
+      </div>
+    </div>
+  )
+}
+
+// ── Remotion Video Result ─────────────────────────────────────
+
+function RemotionVideoResult({ result }: { result: Record<string, unknown> }) {
+  const status = result.status as string | undefined
+  const outputUrl = result.outputUrl as string | undefined
+  const error = result.error as string | undefined
+  const message = result.message as string | undefined
+  const progress = result.progress as number | undefined
+  const template = result.template as string | undefined
+  const duration = result.duration as string | undefined
+  const videoId = result.videoId as string | undefined
+  const renderId = result.renderId as string | undefined
+
+  if (error) return <ErrorDisplay error={error} />
+
+  // Completed — show inline video player
+  if (status === 'completed' && outputUrl) {
+    return (
+      <div>
+        <video
+          controls
+          autoPlay
+          muted
+          playsInline
+          src={outputUrl}
+          className="w-full max-w-lg rounded-lg border border-border"
+        />
+        <div className="flex gap-2 mt-3">
+          <a href={outputUrl} download className="flex-1">
+            <Button variant="outline" size="sm" className="w-full gap-1.5">
+              <Download size={14} /> Download
+            </Button>
+          </a>
+          <a href={outputUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button variant="outline" size="sm" className="w-full gap-1.5">
+              <ExternalLink size={14} /> Open
+            </Button>
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  // Rendering / processing — show progress
+  return (
+    <div className="p-3 rounded bg-muted/50 border border-border space-y-2">
+      <div className="flex items-center gap-2 text-sm">
+        <Loader2 size={14} className="animate-spin text-purple-500" />
+        <span>{message || `Status: ${status || 'starting...'}`}</span>
+      </div>
+      {progress !== undefined && progress > 0 && (
+        <div className="w-full bg-muted rounded-full h-1.5">
+          <div
+            className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+            style={{ width: `${Math.min(progress, 100)}%` }}
+          />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground font-mono">
+        {template && <span>template: {template}</span>}
+        {duration && <span>duration: {duration}</span>}
+        {videoId && <span>id: {videoId.slice(0, 8)}...</span>}
+        {renderId && <span>render: {renderId.slice(0, 8)}...</span>}
       </div>
     </div>
   )

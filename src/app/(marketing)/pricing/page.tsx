@@ -11,7 +11,7 @@ import type { BillingInterval, PlanSlug } from '@/types/billing'
 
 function PricingContent() {
   const searchParams = useSearchParams()
-  const canceled = searchParams.get('canceled')
+  const canceled = searchParams?.get('canceled')
   const { subscription, createCheckoutSession } = useSubscription()
   const [showCanceled, setShowCanceled] = useState(false)
 

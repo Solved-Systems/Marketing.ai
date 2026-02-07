@@ -23,7 +23,7 @@ import type { BillingInterval, PlanSlug } from '@/types/billing'
 
 function BillingContent() {
   const searchParams = useSearchParams()
-  const success = searchParams.get('success')
+  const success = searchParams?.get('success')
   const {
     subscription,
     isSubscribed,

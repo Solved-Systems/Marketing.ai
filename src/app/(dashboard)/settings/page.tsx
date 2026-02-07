@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { User, Bell, Key, Palette } from 'lucide-react'
+import { User, Bell, Palette } from 'lucide-react'
+import { McpKeyManager } from '@/components/settings/McpKeyManager'
 
 export default function SettingsPage() {
   return (
@@ -81,32 +82,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* API Keys */}
-        <Card className="terminal-border bg-card/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 font-mono text-sm">
-              <Key className="h-4 w-4 text-primary" />
-              api_keys
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="openai" className="font-mono text-sm">
-                openai_key
-              </Label>
-              <Input id="openai" type="password" placeholder="sk-..." className="font-mono" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="anthropic" className="font-mono text-sm">
-                anthropic_key
-              </Label>
-              <Input id="anthropic" type="password" placeholder="sk-ant-..." className="font-mono" />
-            </div>
-            <Button variant="terminal" size="sm">
-              Save API Keys
-            </Button>
-          </CardContent>
-        </Card>
+        {/* MCP API Keys */}
+        <McpKeyManager />
 
         {/* Theme Settings */}
         <Card className="terminal-border bg-card/50">

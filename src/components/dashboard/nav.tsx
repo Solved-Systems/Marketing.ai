@@ -48,7 +48,7 @@ export function DashboardNav() {
       <nav className="flex-1 p-4">
         <ul className="space-y-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
             return (
               <li key={item.href}>
                 <Link
@@ -74,14 +74,14 @@ export function DashboardNav() {
                 href="/admin"
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 rounded text-sm font-mono transition-all',
-                  pathname.startsWith('/admin')
+                  pathname?.startsWith('/admin')
                     ? 'bg-red-500/20 text-red-500 border border-red-500/30'
                     : 'text-red-500/70 hover:text-red-500 hover:bg-red-500/10'
                 )}
               >
                 <Shield className="h-4 w-4" />
                 <span>./admin</span>
-                {pathname.startsWith('/admin') && <ChevronRight className="h-3 w-3 ml-auto" />}
+                {pathname?.startsWith('/admin') && <ChevronRight className="h-3 w-3 ml-auto" />}
               </Link>
             </li>
           )}
