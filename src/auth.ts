@@ -12,12 +12,15 @@ function getSupabaseAdmin() {
   })
 }
 
+// Clean env vars that might have escaped newlines from Vercel
+const cleanEnvValue = (val: string | undefined) => val?.replace(/\\n|\n/g, '').trim()
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   providers: [
     GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+      clientId: cleanEnvValue(process.env.GITHUB_CLIENT_ID)!,
+      clientSecret: cleanEnvValue(process.env.GITHUB_CLIENT_SECRET)!,
       authorization: {
         params: {
           // Request access to user's repos

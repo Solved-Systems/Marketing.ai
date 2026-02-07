@@ -395,7 +395,7 @@ export default function BrandDetailPage({
                 <h1 className="text-xl md:text-3xl font-bold truncate" style={{ color: formData.primary_color }}>
                   {formData.name}
                 </h1>
-                <Link href={`/brands/${id}/create/video`}>
+                <Link href={`/brands/${id}/chat`}>
                   <Button variant="terminal" size="sm" className="shrink-0">
                     <Sparkles className="h-4 w-4" />
                     Create Content
