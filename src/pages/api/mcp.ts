@@ -47,14 +47,22 @@ function parseBody(req: NextApiRequest): Promise<unknown> {
   })
 }
 
-/** Extract and validate Bearer token from Authorization header */
+/** Extract and validate API key from Authorization header or query parameter */
 async function authenticateRequest(req: NextApiRequest): Promise<McpUserContext> {
+  // Check Authorization header first
   const authHeader = req.headers.authorization
-  if (!authHeader?.startsWith('Bearer ')) {
-    throw new Error('Missing or invalid Authorization header. Use: Bearer mrkt_xxx')
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7)
+    return validateMcpKey(token)
   }
-  const token = authHeader.slice(7)
-  return validateMcpKey(token)
+
+  // Fall back to query parameter (for mobile clients that don't support headers)
+  const queryKey = req.query.api_key
+  if (typeof queryKey === 'string' && queryKey.length > 0) {
+    return validateMcpKey(queryKey)
+  }
+
+  throw new Error('Missing API key. Use Authorization: Bearer mrkt_xxx header or ?api_key=mrkt_xxx query parameter')
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

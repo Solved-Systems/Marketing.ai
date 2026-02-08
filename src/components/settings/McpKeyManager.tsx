@@ -100,12 +100,12 @@ export function McpKeyManager() {
               variant="ghost"
               size="sm"
               className="h-6 px-2 font-mono text-xs shrink-0"
-              onClick={() => copyText(mcpUrl, 'url')}
+              onClick={() => copyText(`${mcpUrl}?api_key=YOUR_API_KEY`, 'url')}
             >
               {copied === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             </Button>
           </div>
-          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl}</code>
+          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl}?api_key=YOUR_API_KEY</code>
 
           {/* Setup Tabs */}
           <div className="flex gap-1 border-b border-border/50 mt-3 overflow-x-auto">
@@ -131,8 +131,7 @@ export function McpKeyManager() {
                 <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
                   <li>Go to <strong>Settings</strong> → <strong>Connectors</strong></li>
                   <li>Click <strong>Add Custom Connector</strong></li>
-                  <li>Paste the MCP URL above</li>
-                  <li>Add your API key as Bearer token</li>
+                  <li>Paste the MCP URL above (replace <code className="text-primary">YOUR_API_KEY</code> with your key)</li>
                 </ol>
                 <p className="text-muted-foreground">MCP Apps render images and videos inline in chat.</p>
               </>
@@ -213,6 +212,7 @@ export function McpKeyManager() {
                   <li>URL: <code className="text-primary">{mcpUrl}</code></li>
                   <li>Transport: <code className="text-primary">Streamable HTTP</code></li>
                   <li>Header: <code className="text-primary">Authorization: Bearer YOUR_API_KEY</code></li>
+                  <li>Or use URL with key: <code className="text-primary">{mcpUrl}?api_key=YOUR_API_KEY</code></li>
                 </ul>
               </>
             )}
