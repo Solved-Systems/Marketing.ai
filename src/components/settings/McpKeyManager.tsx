@@ -100,12 +100,12 @@ export function McpKeyManager() {
               variant="ghost"
               size="sm"
               className="h-6 px-2 font-mono text-xs shrink-0"
-              onClick={() => copyText(`${mcpUrl}?api_key=YOUR_API_KEY`, 'url')}
+              onClick={() => copyText(`${mcpUrl}/YOUR_API_KEY`, 'url')}
             >
               {copied === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             </Button>
           </div>
-          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl}?api_key=YOUR_API_KEY</code>
+          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl}/YOUR_API_KEY</code>
 
           {/* Setup Tabs */}
           <div className="flex gap-1 border-b border-border/50 mt-3 overflow-x-auto">
@@ -146,10 +146,7 @@ export function McpKeyManager() {
 {`{
   "mcpServers": {
     "mrktcmd": {
-      "url": "${mcpUrl}",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
+      "url": "${mcpUrl}/YOUR_API_KEY"
     }
   }
 }`}
@@ -160,7 +157,7 @@ export function McpKeyManager() {
                     className="absolute top-1 right-1 h-6 w-6 p-0"
                     onClick={() =>
                       copyText(
-                        JSON.stringify({ mcpServers: { mrktcmd: { url: mcpUrl, headers: { Authorization: 'Bearer YOUR_API_KEY' } } } }, null, 2),
+                        JSON.stringify({ mcpServers: { mrktcmd: { url: `${mcpUrl}/YOUR_API_KEY` } } }, null, 2),
                         'desktop-config'
                       )
                     }
@@ -181,10 +178,7 @@ export function McpKeyManager() {
   "servers": {
     "mrktcmd": {
       "type": "http",
-      "url": "${mcpUrl}",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
+      "url": "${mcpUrl}/YOUR_API_KEY"
     }
   }
 }`}
@@ -195,7 +189,7 @@ export function McpKeyManager() {
                     className="absolute top-1 right-1 h-6 w-6 p-0"
                     onClick={() =>
                       copyText(
-                        JSON.stringify({ servers: { mrktcmd: { type: 'http', url: mcpUrl, headers: { Authorization: 'Bearer YOUR_API_KEY' } } } }, null, 2),
+                        JSON.stringify({ servers: { mrktcmd: { type: 'http', url: `${mcpUrl}/YOUR_API_KEY` } } }, null, 2),
                         'vscode-config'
                       )
                     }
@@ -209,10 +203,8 @@ export function McpKeyManager() {
               <>
                 <p className="text-muted-foreground">For any MCP client supporting Streamable HTTP transport:</p>
                 <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>URL: <code className="text-primary">{mcpUrl}</code></li>
+                  <li>URL: <code className="text-primary">{mcpUrl}/YOUR_API_KEY</code></li>
                   <li>Transport: <code className="text-primary">Streamable HTTP</code></li>
-                  <li>Header: <code className="text-primary">Authorization: Bearer YOUR_API_KEY</code></li>
-                  <li>Or use URL with key: <code className="text-primary">{mcpUrl}?api_key=YOUR_API_KEY</code></li>
                 </ul>
               </>
             )}
