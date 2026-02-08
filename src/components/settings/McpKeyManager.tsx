@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Key, Copy, Check, Trash2, Plus, ExternalLink } from 'lucide-react'
+import { Key, Copy, Check, Trash2, Plus } from 'lucide-react'
 
 interface McpKey {
   id: string
@@ -18,10 +18,12 @@ interface McpKey {
 
 type Tab = 'claude-web' | 'claude-desktop' | 'vscode' | 'generic'
 
+const MCP_KEY_STORAGE = 'mrktcmd_mcp_key'
+
 export function McpKeyManager() {
   const [keys, setKeys] = useState<McpKey[]>([])
   const [newKeyName, setNewKeyName] = useState('')
-  const [createdKey, setCreatedKey] = useState<string | null>(null)
+  const [apiKey, setApiKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('claude-web')
@@ -31,22 +33,45 @@ export function McpKeyManager() {
     setMcpBaseUrl(`${window.location.origin}/api/mcp`)
   }, [])
 
-  const mcpUrl = createdKey ? `${mcpBaseUrl}/${createdKey}` : `${mcpBaseUrl}/YOUR_API_KEY`
+  const mcpUrl = apiKey ? `${mcpBaseUrl}/${apiKey}` : null
 
   const fetchKeys = useCallback(async () => {
     const res = await fetch('/api/mcp/keys')
     if (res.ok) {
       const data = await res.json()
       setKeys(data.keys || [])
+      return data.keys || []
     }
+    return []
   }, [])
 
-  useEffect(() => { fetchKeys() }, [fetchKeys])
+  // Auto-provision: load key from localStorage or create one
+  useEffect(() => {
+    const stored = localStorage.getItem(MCP_KEY_STORAGE)
+    if (stored) {
+      setApiKey(stored)
+      fetchKeys()
+      return
+    }
+    // No stored key — create one automatically
+    ;(async () => {
+      const res = await fetch('/api/mcp/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Default' }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        localStorage.setItem(MCP_KEY_STORAGE, data.key)
+        setApiKey(data.key)
+        fetchKeys()
+      }
+    })()
+  }, [fetchKeys])
 
   const createKey = async () => {
     if (!newKeyName.trim() || loading) return
     setLoading(true)
-    setCreatedKey(null)
     try {
       const res = await fetch('/api/mcp/keys', {
         method: 'POST',
@@ -55,7 +80,8 @@ export function McpKeyManager() {
       })
       if (res.ok) {
         const data = await res.json()
-        setCreatedKey(data.key)
+        localStorage.setItem(MCP_KEY_STORAGE, data.key)
+        setApiKey(data.key)
         setNewKeyName('')
         fetchKeys()
       }
@@ -64,8 +90,23 @@ export function McpKeyManager() {
     }
   }
 
-  const revokeKey = async (id: string) => {
+  const revokeKey = async (id: string, keyPrefix: string) => {
     await fetch(`/api/mcp/keys?id=${id}`, { method: 'DELETE' })
+    // If revoking the active key, clear it and auto-provision a new one
+    if (apiKey?.startsWith(keyPrefix)) {
+      localStorage.removeItem(MCP_KEY_STORAGE)
+      setApiKey(null)
+      const res = await fetch('/api/mcp/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Default' }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        localStorage.setItem(MCP_KEY_STORAGE, data.key)
+        setApiKey(data.key)
+      }
+    }
     fetchKeys()
   }
 
@@ -98,16 +139,18 @@ export function McpKeyManager() {
         <div className="rounded-lg border border-border/50 bg-muted/30 p-3 sm:p-4 space-y-3 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <p className="font-mono text-xs text-muted-foreground">MCP Server URL</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 font-mono text-xs shrink-0"
-              onClick={() => copyText(mcpUrl, 'url')}
-            >
-              {copied === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-            </Button>
+            {mcpUrl && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 font-mono text-xs shrink-0"
+                onClick={() => copyText(mcpUrl, 'url')}
+              >
+                {copied === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+            )}
           </div>
-          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl}</code>
+          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl ?? 'Loading...'}</code>
 
           {/* Setup Tabs */}
           <div className="flex gap-1 border-b border-border/50 mt-3 overflow-x-auto">
@@ -237,28 +280,6 @@ export function McpKeyManager() {
           </div>
         </div>
 
-        {/* Newly Created Key Banner */}
-        {createdKey && (
-          <div className="rounded-lg border border-primary/50 bg-primary/5 p-4 space-y-2">
-            <p className="text-xs font-mono text-primary font-semibold">
-              API key created — copy it now, it won't be shown again
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs font-mono bg-background/80 rounded px-3 py-2 break-all select-all">
-                {createdKey}
-              </code>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0"
-                onClick={() => copyText(createdKey, 'new-key')}
-              >
-                {copied === 'new-key' ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
-        )}
-
         {/* Key List */}
         {keys.length > 0 && (
           <div className="space-y-2">
@@ -278,7 +299,7 @@ export function McpKeyManager() {
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => revokeKey(key.id)}
+                  onClick={() => revokeKey(key.id, key.key_prefix)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
