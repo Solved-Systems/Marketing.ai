@@ -82,7 +82,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* MCP API Keys */}
+        {/* Authenticated MCP Endpoint */}
         <McpKeyManager />
 
         {/* Theme Settings */}

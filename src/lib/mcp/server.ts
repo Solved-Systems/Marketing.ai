@@ -31,7 +31,7 @@ try {
 
 function checkScope(context: McpUserContext, scope: string) {
   if (!context.scopes.includes(scope)) {
-    throw new Error(`Access denied: '${scope}' scope not granted for this API key`)
+    throw new Error(`Access denied: '${scope}' scope not granted for this MCP credential`)
   }
 }
 
@@ -425,7 +425,7 @@ export function createMrktMcpServer(context: McpUserContext): McpServer {
     },
     async ({ owner, repo }) => {
       checkScope(context, 'github')
-      if (!context.githubAccessToken) throw new Error('GitHub access token not available. Re-create your API key while logged in with GitHub.')
+      if (!context.githubAccessToken) throw new Error('GitHub access token not available. Rotate your MCP GUID while logged in with GitHub.')
       const result = await fetchGitHubRepoInfo(context.githubAccessToken, owner, repo)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     }
@@ -441,7 +441,7 @@ export function createMrktMcpServer(context: McpUserContext): McpServer {
     },
     async ({ owner, repo }) => {
       checkScope(context, 'github')
-      if (!context.githubAccessToken) throw new Error('GitHub access token not available. Re-create your API key while logged in with GitHub.')
+      if (!context.githubAccessToken) throw new Error('GitHub access token not available. Rotate your MCP GUID while logged in with GitHub.')
       const result = await fetchGitHubActivity(context.githubAccessToken, owner, repo)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     }
@@ -458,7 +458,7 @@ export function createMrktMcpServer(context: McpUserContext): McpServer {
     },
     async ({ owner, repo, path }) => {
       checkScope(context, 'github')
-      if (!context.githubAccessToken) throw new Error('GitHub access token not available. Re-create your API key while logged in with GitHub.')
+      if (!context.githubAccessToken) throw new Error('GitHub access token not available. Rotate your MCP GUID while logged in with GitHub.')
       const result = await fetchGitHubFile(context.githubAccessToken, owner, repo, path)
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
     }

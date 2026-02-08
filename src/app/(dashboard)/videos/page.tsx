@@ -87,7 +87,7 @@ export default function ContentPage() {
               {brands.map((brand) => (
                 <button
                   key={brand.id}
-                  onClick={() => router.push(`/brands/${brand.id}/create/video`)}
+                  onClick={() => router.push(`/brands/${brand.id}/chat`)}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
                 >
                   <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center flex-shrink-0">

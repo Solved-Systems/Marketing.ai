@@ -47,22 +47,21 @@ function parseBody(req: NextApiRequest): Promise<unknown> {
   })
 }
 
-/** Extract and validate API key from Authorization header or query parameter */
+/** Extract and validate Bearer token from Authorization header */
 async function authenticateRequest(req: NextApiRequest): Promise<McpUserContext> {
-  // Check Authorization header first
   const authHeader = req.headers.authorization
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7)
-    return validateMcpKey(token)
+  const fromHeader = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+
+  const host = req.headers.host || 'localhost'
+  const url = new URL(req.url || '/api/mcp', `http://${host}`)
+  const fromQuery = url.searchParams.get('guid') || url.searchParams.get('token')
+
+  const token = fromHeader || fromQuery
+  if (!token) {
+    throw new Error('Missing MCP authentication token. Use Bearer token header or ?guid=YOUR_GUID.')
   }
 
-  // Fall back to query parameter (for mobile clients that don't support headers)
-  const queryKey = req.query.api_key
-  if (typeof queryKey === 'string' && queryKey.length > 0) {
-    return validateMcpKey(queryKey)
-  }
-
-  throw new Error('Missing API key. Use /api/mcp/mrkt_xxx or Authorization: Bearer mrkt_xxx header')
+  return validateMcpKey(token)
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -144,7 +143,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!res.headersSent) {
       const message = error instanceof Error ? error.message : 'Internal server error'
       // Auth errors get 401
-      if (message.includes('Invalid API key') || message.includes('Missing API key')) {
+      if (message.includes('Invalid MCP credential') || message.includes('MCP authentication token') || message.includes('Authorization')) {
         return res.status(401).json({
           jsonrpc: '2.0',
           error: { code: -32600, message },

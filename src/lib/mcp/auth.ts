@@ -63,11 +63,11 @@ export async function validateMcpKey(bearerToken: string): Promise<McpUserContex
     .single()
 
   if (error || !key) {
-    throw new Error('Invalid API key')
+    throw new Error('Invalid MCP credential')
   }
 
   if (key.expires_at && new Date(key.expires_at) < new Date()) {
-    throw new Error('API key expired')
+    throw new Error('MCP credential expired')
   }
 
   // Update last_used_at (fire and forget)

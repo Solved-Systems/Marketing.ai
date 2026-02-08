@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { Chat } from '@/components/chat/Chat'
 import { supabase } from '@/lib/supabase/client'
@@ -22,8 +23,14 @@ export default function BrandChatPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const searchParams = useSearchParams()
   const [brand, setBrand] = useState<Brand | null>(null)
   const [loading, setLoading] = useState(true)
+  const workflow = searchParams?.get('workflow') ?? null
+  const workflowPreset: 'image' | 'post' | 'repo' | 'campaign' | null =
+    workflow === 'image' || workflow === 'post' || workflow === 'repo' || workflow === 'campaign'
+      ? workflow
+      : null
 
   useEffect(() => {
     async function fetchBrand() {
@@ -48,9 +55,9 @@ export default function BrandChatPage({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
+    <div className="flex h-[calc(100vh-3.5rem)] min-h-0 flex-col lg:h-screen">
       {/* Header */}
-      <div className="px-4 md:px-8 py-4 border-b border-border flex items-center justify-between">
+      <div className="border-b border-border px-4 py-3 md:px-6">
         <div className="flex items-center gap-4">
           <Link
             href={`/brands/${id}`}
@@ -64,7 +71,10 @@ export default function BrandChatPage({
               <span>./brands/{brand?.name || id}/chat</span>
             </div>
             {brand && (
-              <h1 className="text-lg font-semibold">{brand.name} Studio</h1>
+              <div>
+                <h1 className="text-lg font-semibold">{brand.name} Studio</h1>
+                {brand.tagline && <p className="text-xs text-muted-foreground">{brand.tagline}</p>}
+              </div>
             )}
           </div>
         </div>
@@ -91,7 +101,7 @@ export default function BrandChatPage({
       </div>
 
       {/* Chat */}
-      <Chat brandId={id} brandName={brand?.name} />
+      <Chat brandId={id} brandName={brand?.name} initialWorkflow={workflowPreset} />
     </div>
   )
 }
