@@ -93,27 +93,27 @@ export function McpKeyManager() {
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Connection Info */}
-        <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-3">
-          <div className="flex items-center justify-between">
+        <div className="rounded-lg border border-border/50 bg-muted/30 p-3 sm:p-4 space-y-3 min-w-0">
+          <div className="flex items-center justify-between gap-2">
             <p className="font-mono text-xs text-muted-foreground">MCP Server URL</p>
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 font-mono text-xs"
+              className="h-6 px-2 font-mono text-xs shrink-0"
               onClick={() => copyText(mcpUrl, 'url')}
             >
               {copied === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             </Button>
           </div>
-          <code className="block text-xs font-mono text-primary break-all">{mcpUrl}</code>
+          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl}</code>
 
           {/* Setup Tabs */}
-          <div className="flex gap-1 border-b border-border/50 mt-3">
+          <div className="flex gap-1 border-b border-border/50 mt-3 overflow-x-auto">
             {tabs.map(t => (
               <button
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
-                className={`px-3 py-1.5 text-xs font-mono border-b-2 transition-colors ${
+                className={`px-2.5 sm:px-3 py-1.5 text-xs font-mono border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === t.key
                     ? 'border-primary text-primary'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
