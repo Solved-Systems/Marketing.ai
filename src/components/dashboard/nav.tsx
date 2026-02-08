@@ -11,8 +11,9 @@ import {
   LayoutDashboard,
   Palette,
   Calendar,
-  Video,
+  MessageSquare,
   Plug,
+  Settings,
   ChevronRight,
   CreditCard,
   Zap,
@@ -24,8 +25,9 @@ const navItems = [
   { title: './dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: './brands', href: '/brands', icon: Palette },
   { title: './calendar', href: '/calendar', icon: Calendar },
-  { title: './content', href: '/videos', icon: Video },
+  { title: './chat', href: '/videos', icon: MessageSquare },
   { title: './integrations', href: '/integrations', icon: Plug },
+  { title: './config', href: '/settings', icon: Settings },
   { title: './billing', href: '/settings/billing', icon: CreditCard },
 ]
 
