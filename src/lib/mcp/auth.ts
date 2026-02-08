@@ -3,11 +3,29 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 const KEY_PREFIX = 'mrkt_'
 const ALGORITHM = 'aes-256-gcm'
+let warnedAboutMcpKeyFallback = false
 
 function getEncryptionKey(): Buffer {
-  const key = process.env.MCP_ENCRYPTION_KEY
-  if (!key) throw new Error('MCP_ENCRYPTION_KEY not configured')
-  return Buffer.from(key, 'base64')
+  const configured = process.env.MCP_ENCRYPTION_KEY?.trim()
+  if (configured) {
+    const decoded = Buffer.from(configured, 'base64')
+    if (decoded.length !== 32) {
+      throw new Error('MCP_ENCRYPTION_KEY must be a base64-encoded 32-byte key')
+    }
+    return decoded
+  }
+
+  const authSecret = process.env.AUTH_SECRET?.trim()
+  if (!authSecret) {
+    throw new Error('MCP_ENCRYPTION_KEY not configured and AUTH_SECRET is missing')
+  }
+
+  if (!warnedAboutMcpKeyFallback) {
+    console.warn('MCP_ENCRYPTION_KEY missing; deriving MCP encryption key from AUTH_SECRET')
+    warnedAboutMcpKeyFallback = true
+  }
+
+  return createHash('sha256').update(authSecret).digest()
 }
 
 export function generateApiKey(): { plaintext: string; prefix: string; hash: string } {

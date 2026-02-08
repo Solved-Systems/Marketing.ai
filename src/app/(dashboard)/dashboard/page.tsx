@@ -40,21 +40,21 @@ export default function DashboardPage() {
           icon={<Video className="h-5 w-5" />}
           title="Create Video"
           description="Generate AI video"
-          href="/brands"
+          href="/chat"
           badge="AI"
         />
         <QuickActionCard
           icon={<ImageIcon className="h-5 w-5" />}
           title="Create Image"
           description="Generate graphics"
-          href="/brands"
+          href="/chat"
           badge="AI"
         />
         <QuickActionCard
           icon={<MessageSquare className="h-5 w-5" />}
           title="Write Post"
           description="Generate social post"
-          href="/brands"
+          href="/chat"
           badge="AI"
         />
       </div>
@@ -133,7 +133,7 @@ export default function DashboardPage() {
               number={3}
               title="Generate content"
               description="Use AI to create videos, images, and posts"
-              href="/brands"
+              href="/chat"
               completed={false}
             />
             <Step

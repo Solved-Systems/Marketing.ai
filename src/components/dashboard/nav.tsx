@@ -25,7 +25,7 @@ const navItems = [
   { title: './dashboard', href: '/dashboard', icon: LayoutDashboard },
   { title: './brands', href: '/brands', icon: Palette },
   { title: './calendar', href: '/calendar', icon: Calendar },
-  { title: './chat', href: '/videos', icon: MessageSquare },
+  { title: './chat', href: '/chat', icon: MessageSquare },
   { title: './integrations', href: '/integrations', icon: Plug },
   { title: './config', href: '/settings', icon: Settings },
   { title: './billing', href: '/settings/billing', icon: CreditCard },
