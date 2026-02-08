@@ -7,15 +7,15 @@ export const config = {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Extract Bearer token from Authorization header
-  const authHeader = req.headers.authorization
-  if (!authHeader?.startsWith('Bearer ')) {
+  const key = req.query.key as string
+
+  if (!key?.startsWith('mrkt_')) {
     return res.status(401).json({
       jsonrpc: '2.0',
-      error: { code: -32600, message: 'Missing or invalid Authorization header. Use: Bearer mrkt_xxx' },
+      error: { code: -32600, message: 'Invalid API key in URL' },
       id: null,
     })
   }
-  const token = authHeader.slice(7)
-  return handleMcpRequest(req, res, token)
+
+  return handleMcpRequest(req, res, key)
 }

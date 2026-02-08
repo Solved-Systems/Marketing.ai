@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Key, Copy, Check, Trash2, Plus, ExternalLink } from 'lucide-react'
+import { Key, Copy, Check, Trash2, Plus } from 'lucide-react'
 
 interface McpKey {
   id: string
@@ -25,11 +25,13 @@ export function McpKeyManager() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('claude-web')
-  const [mcpUrl, setMcpUrl] = useState('/api/mcp')
+  const [mcpBaseUrl, setMcpBaseUrl] = useState('/api/mcp')
 
   useEffect(() => {
-    setMcpUrl(`${window.location.origin}/api/mcp`)
+    setMcpBaseUrl(`${window.location.origin}/api/mcp`)
   }, [])
+
+  const mcpUrl = (key?: string) => `${mcpBaseUrl}/${key || 'YOUR_API_KEY'}`
 
   const fetchKeys = useCallback(async () => {
     const res = await fetch('/api/mcp/keys')
@@ -100,12 +102,13 @@ export function McpKeyManager() {
               variant="ghost"
               size="sm"
               className="h-6 px-2 font-mono text-xs shrink-0"
-              onClick={() => copyText(mcpUrl, 'url')}
+              onClick={() => copyText(mcpUrl(), 'url')}
             >
               {copied === 'url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             </Button>
           </div>
-          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl}</code>
+          <code className="block text-sm sm:text-xs font-mono text-primary break-all bg-background/60 rounded px-2 py-1.5">{mcpUrl()}</code>
+          <p className="text-[10px] text-muted-foreground">API key is embedded in the URL — no Authorization header needed.</p>
 
           {/* Setup Tabs */}
           <div className="flex gap-1 border-b border-border/50 mt-3 overflow-x-auto">
@@ -131,8 +134,7 @@ export function McpKeyManager() {
                 <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
                   <li>Go to <strong>Settings</strong> → <strong>Connectors</strong></li>
                   <li>Click <strong>Add Custom Connector</strong></li>
-                  <li>Paste the MCP URL above</li>
-                  <li>Add your API key as Bearer token</li>
+                  <li>Paste the MCP URL above (includes your API key)</li>
                 </ol>
                 <p className="text-muted-foreground">MCP Apps render images and videos inline in chat.</p>
               </>
@@ -147,10 +149,7 @@ export function McpKeyManager() {
 {`{
   "mcpServers": {
     "mrktcmd": {
-      "url": "${mcpUrl}",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
+      "url": "${mcpUrl()}"
     }
   }
 }`}
@@ -161,7 +160,7 @@ export function McpKeyManager() {
                     className="absolute top-1 right-1 h-6 w-6 p-0"
                     onClick={() =>
                       copyText(
-                        JSON.stringify({ mcpServers: { mrktcmd: { url: mcpUrl, headers: { Authorization: 'Bearer YOUR_API_KEY' } } } }, null, 2),
+                        JSON.stringify({ mcpServers: { mrktcmd: { url: mcpUrl() } } }, null, 2),
                         'desktop-config'
                       )
                     }
@@ -182,10 +181,7 @@ export function McpKeyManager() {
   "servers": {
     "mrktcmd": {
       "type": "http",
-      "url": "${mcpUrl}",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
+      "url": "${mcpUrl()}"
     }
   }
 }`}
@@ -196,7 +192,7 @@ export function McpKeyManager() {
                     className="absolute top-1 right-1 h-6 w-6 p-0"
                     onClick={() =>
                       copyText(
-                        JSON.stringify({ servers: { mrktcmd: { type: 'http', url: mcpUrl, headers: { Authorization: 'Bearer YOUR_API_KEY' } } } }, null, 2),
+                        JSON.stringify({ servers: { mrktcmd: { type: 'http', url: mcpUrl() } } }, null, 2),
                         'vscode-config'
                       )
                     }
@@ -210,10 +206,10 @@ export function McpKeyManager() {
               <>
                 <p className="text-muted-foreground">For any MCP client supporting Streamable HTTP transport:</p>
                 <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>URL: <code className="text-primary">{mcpUrl}</code></li>
+                  <li>URL: <code className="text-primary break-all">{mcpUrl()}</code></li>
                   <li>Transport: <code className="text-primary">Streamable HTTP</code></li>
-                  <li>Header: <code className="text-primary">Authorization: Bearer YOUR_API_KEY</code></li>
                 </ul>
+                <p className="text-muted-foreground">No headers required — the API key is part of the URL.</p>
               </>
             )}
           </div>
@@ -245,22 +241,41 @@ export function McpKeyManager() {
 
         {/* Newly Created Key Banner */}
         {createdKey && (
-          <div className="rounded-lg border border-primary/50 bg-primary/5 p-4 space-y-2">
+          <div className="rounded-lg border border-primary/50 bg-primary/5 p-3 sm:p-4 space-y-3">
             <p className="text-xs font-mono text-primary font-semibold">
               API key created — copy it now, it won't be shown again
             </p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs font-mono bg-background/80 rounded px-3 py-2 break-all select-all">
-                {createdKey}
-              </code>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0"
-                onClick={() => copyText(createdKey, 'new-key')}
-              >
-                {copied === 'new-key' ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-              </Button>
+            <div className="space-y-2">
+              <p className="text-[10px] font-mono text-muted-foreground">MCP URL (ready to use)</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono bg-background/80 rounded px-3 py-2 break-all select-all">
+                  {mcpUrl(createdKey)}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => copyText(mcpUrl(createdKey), 'new-url')}
+                >
+                  {copied === 'new-url' ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-[10px] font-mono text-muted-foreground">Raw key</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono bg-background/80 rounded px-3 py-2 break-all select-all">
+                  {createdKey}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => copyText(createdKey, 'new-key')}
+                >
+                  {copied === 'new-key' ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
           </div>
         )}
