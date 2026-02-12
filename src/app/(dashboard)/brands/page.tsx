@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { ArrowRight, Image as ImageIcon, Loader2, MessageSquare, Palette, Plus, Trash2, Video } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Palette, Video, Image as ImageIcon, MessageSquare, ArrowRight, Loader2, Trash2 } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,25 +44,21 @@ export default function BrandsPage() {
         setIsLoading(false)
       }
     }
-    fetchBrands()
+
+    void fetchBrands()
   }, [])
 
   return (
     <div className="p-4 md:p-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-2">
-            <span>$</span>
-            <span className="text-primary">./brands</span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold">Brands</h1>
-          <p className="text-muted-foreground mt-2 text-sm md:text-base">
-            Manage your brands and create content
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Brands</h1>
+          <p className="mt-2 text-sm text-muted-foreground md:text-base">
+            Manage brand profiles and launch content workflows quickly.
           </p>
         </div>
         <Link href="/brands/new" className="self-start sm:self-auto">
-          <Button variant="terminal" className="w-full sm:w-auto">
+          <Button variant="default" className="w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             New Brand
           </Button>
@@ -70,24 +66,22 @@ export default function BrandsPage() {
       </div>
 
       {isLoading ? (
-        /* Loading State */
-        <Card className="terminal-border bg-card/50">
+        <Card className="bg-card/65">
           <CardContent className="py-16 text-center">
-            <Loader2 className="h-8 w-8 text-primary animate-spin mx-auto mb-4" />
+            <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-primary" />
             <p className="text-muted-foreground">Loading brands...</p>
           </CardContent>
         </Card>
       ) : brands.length === 0 ? (
-        /* Empty State */
-        <Card className="terminal-border bg-card/50">
+        <Card className="bg-card/65">
           <CardContent className="py-16 text-center">
-            <Palette className="h-16 w-16 text-primary/50 mx-auto mb-6" />
-            <h2 className="text-xl font-semibold mb-2">No brands yet</h2>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Create your first brand to start generating AI-powered marketing content.
+            <Palette className="mx-auto mb-6 h-14 w-14 text-primary/70" />
+            <h2 className="mb-2 text-xl font-semibold">No brands yet</h2>
+            <p className="mx-auto mb-6 max-w-md text-muted-foreground">
+              Create your first brand profile to unlock AI-powered content generation workflows.
             </p>
             <Link href="/brands/new">
-              <Button variant="terminal">
+              <Button>
                 <Plus className="h-4 w-4" />
                 Create Brand
               </Button>
@@ -95,14 +89,9 @@ export default function BrandsPage() {
           </CardContent>
         </Card>
       ) : (
-        /* Brands Grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {brands.map((brand) => (
-            <BrandCard
-              key={brand.id}
-              brand={brand}
-              onDelete={(id) => setBrands(prev => prev.filter(b => b.id !== id))}
-            />
+            <BrandCard key={brand.id} brand={brand} onDelete={(id) => setBrands((prev) => prev.filter((b) => b.id !== id))} />
           ))}
         </div>
       )}
@@ -134,30 +123,27 @@ function BrandCard({ brand, onDelete }: { brand: Brand; onDelete: (id: string) =
   return (
     <>
       <Link href={`/brands/${brand.id}`}>
-        <Card className="terminal-border bg-card/50 hover:bg-card/70 transition-all cursor-pointer group h-full relative">
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center">
+        <Card className="group relative h-full cursor-pointer border-border/70 bg-card/65 transition-colors hover:bg-card/90">
+          <CardContent className="p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/14">
                 {brand.logo_url ? (
-                  <img
-                    src={brand.logo_url}
-                    alt={brand.name}
-                    className="w-10 h-10 rounded object-cover"
-                  />
+                  <img src={brand.logo_url} alt={brand.name} className="h-10 w-10 rounded-lg object-cover" />
                 ) : (
-                  <Palette className="h-6 w-6 text-primary" />
+                  <Palette className="h-5 w-5 text-primary" />
                 )}
               </div>
+
               <div className="flex items-center gap-2">
-                {brand.is_default && (
-                  <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                {brand.is_default ? (
+                  <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">
                     Default
                   </Badge>
-                )}
+                ) : null}
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -169,45 +155,45 @@ function BrandCard({ brand, onDelete }: { brand: Brand; onDelete: (id: string) =
               </div>
             </div>
 
-            <h3 className="font-semibold text-lg mb-1">{brand.name}</h3>
-            {brand.tagline && (
-              <p className="text-sm text-muted-foreground mb-4">{brand.tagline}</p>
-            )}
+            <h3 className="text-lg font-semibold tracking-tight">{brand.name}</h3>
+            {brand.tagline ? <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{brand.tagline}</p> : null}
 
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
-                <Video className="h-3 w-3" />0 content
+                <Video className="h-3 w-3" />
+                0 videos
               </span>
               <span className="flex items-center gap-1">
-                <ImageIcon className="h-3 w-3" />0 images
+                <ImageIcon className="h-3 w-3" />
+                0 images
               </span>
               <span className="flex items-center gap-1">
-                <MessageSquare className="h-3 w-3" />0 posts
+                <MessageSquare className="h-3 w-3" />
+                0 posts
               </span>
             </div>
 
-            <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground font-mono">view →</span>
-              <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4">
+              <span className="text-xs text-muted-foreground">Open brand studio</span>
+              <ArrowRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
             </div>
           </CardContent>
         </Card>
       </Link>
 
-      {/* Delete Confirmation Dialog - Outside the Link */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent className="terminal-border bg-card">
+        <AlertDialogContent className="border-border/70 bg-card">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <Trash2 className="h-5 w-5" />
-              Delete Brand
+              Delete brand
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               <p>
                 Are you sure you want to delete <span className="font-semibold text-foreground">{brand.name}</span>?
               </p>
-              <p className="text-destructive/80 text-sm">
-                This will permanently delete this brand and all associated content, videos, and images. This action cannot be undone.
+              <p className="text-sm text-destructive/80">
+                This removes the brand and associated generated content permanently.
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -216,18 +202,18 @@ function BrandCard({ brand, onDelete }: { brand: Brand; onDelete: (id: string) =
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
-                handleDelete()
+                void handleDelete()
               }}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeleting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Deleting...
                 </>
               ) : (
-                'Yes, Delete Brand'
+                'Delete brand'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
