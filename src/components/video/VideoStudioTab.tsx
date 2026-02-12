@@ -26,6 +26,7 @@ import {
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
+  type PromptInputStatus,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
