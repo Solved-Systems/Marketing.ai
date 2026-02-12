@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Camera,
+  ChevronDown,
   Clapperboard,
   Loader2,
   Monitor,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pause,
   Play,
   Scissors,
@@ -33,6 +36,16 @@ import {
 } from "@/components/ai-elements/prompt-input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -231,14 +244,18 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const captureStreamRef = useRef<MediaStream | null>(null)
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
 
   const [selectedPresetId, setSelectedPresetId] = useState(SHOT_PRESETS[0].id)
+  const [isAnimationsCollapsed, setIsAnimationsCollapsed] = useState(false)
+  const [selectedCaptureMode, setSelectedCaptureMode] = useState<CaptureMode>("screen")
+  const [recordCountdown, setRecordCountdown] = useState<number | null>(null)
 
-  const [captureMode, setCaptureMode] = useState<CaptureMode | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [captureError, setCaptureError] = useState<string | null>(null)
+  const [livePreviewStream, setLivePreviewStream] = useState<MediaStream | null>(null)
 
   const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null)
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
@@ -293,14 +310,23 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
     recordingTimerRef.current = null
   }, [])
 
+  const clearCountdownTimer = useCallback(() => {
+    if (!countdownTimerRef.current) return
+    clearInterval(countdownTimerRef.current)
+    countdownTimerRef.current = null
+  }, [])
+
   const stopCaptureTracks = useCallback(() => {
     const stream = captureStreamRef.current
     if (!stream) return
     stream.getTracks().forEach((track) => track.stop())
     captureStreamRef.current = null
+    setLivePreviewStream(null)
   }, [])
 
   const stopRecording = useCallback(() => {
+    clearCountdownTimer()
+    setRecordCountdown(null)
     const recorder = mediaRecorderRef.current
     if (recorder && recorder.state !== "inactive") {
       recorder.stop()
@@ -310,19 +336,17 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
     clearRecordingTimer()
     stopCaptureTracks()
     setIsRecording(false)
-    setCaptureMode(null)
-  }, [clearRecordingTimer, stopCaptureTracks])
+  }, [clearCountdownTimer, clearRecordingTimer, stopCaptureTracks])
 
   const startCapture = useCallback(
     async (mode: CaptureMode) => {
       if (isRecording) return
 
       setCaptureError(null)
-      setCaptureMode(mode)
+      setRecordCountdown(null)
 
       if (!navigator.mediaDevices?.getDisplayMedia) {
         setCaptureError("Screen recording is not supported in this browser.")
-        setCaptureMode(null)
         return
       }
 
@@ -348,6 +372,12 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia(displayOptions)
         captureStreamRef.current = stream
+        setLivePreviewStream(stream)
+        setRecordingBlob(null)
+        setRecordingUrl((previous) => {
+          if (previous) URL.revokeObjectURL(previous)
+          return null
+        })
 
         const mimeType = selectMimeType()
         const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
@@ -386,7 +416,6 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
           setExportStatus(null)
 
           setIsRecording(false)
-          setCaptureMode(null)
           clearRecordingTimer()
           stopCaptureTracks()
         }
@@ -414,14 +443,42 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
         setIsRecording(true)
       } catch (error) {
         setCaptureError(error instanceof Error ? error.message : "Could not start screen capture.")
-        setCaptureMode(null)
         setIsRecording(false)
+        setLivePreviewStream(null)
         clearRecordingTimer()
         stopCaptureTracks()
       }
     },
     [clearRecordingTimer, isRecording, stopCaptureTracks]
   )
+
+  const startRecordingWithCountdown = useCallback(() => {
+    if (isRecording) {
+      stopRecording()
+      return
+    }
+
+    if (recordCountdown !== null) {
+      clearCountdownTimer()
+      setRecordCountdown(null)
+      return
+    }
+
+    setCaptureError(null)
+    setRecordCountdown(3)
+    clearCountdownTimer()
+    countdownTimerRef.current = setInterval(() => {
+      setRecordCountdown((previous) => {
+        if (previous === null) return null
+        if (previous <= 1) {
+          clearCountdownTimer()
+          void startCapture(selectedCaptureMode)
+          return null
+        }
+        return previous - 1
+      })
+    }, 1000)
+  }, [clearCountdownTimer, isRecording, recordCountdown, selectedCaptureMode, startCapture, stopRecording])
 
   useEffect(() => {
     if (videoDuration <= 0) return
@@ -449,10 +506,11 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
 
   useEffect(() => {
     return () => {
+      clearCountdownTimer()
       clearRecordingTimer()
       stopCaptureTracks()
     }
-  }, [clearRecordingTimer, stopCaptureTracks])
+  }, [clearCountdownTimer, clearRecordingTimer, stopCaptureTracks])
 
   useEffect(() => {
     return () => {
@@ -465,6 +523,27 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
       if (exportedUrl) URL.revokeObjectURL(exportedUrl)
     }
   }, [exportedUrl])
+
+  useEffect(() => {
+    const videoElement = videoRef.current
+    if (!videoElement) return
+
+    if (livePreviewStream) {
+      videoElement.srcObject = livePreviewStream
+      const playPromise = videoElement.play()
+      if (playPromise) {
+        void playPromise.catch(() => {
+          // Ignore autoplay restrictions for live preview.
+        })
+      }
+      return
+    }
+
+    if (videoElement.srcObject) {
+      videoElement.pause()
+      videoElement.srcObject = null
+    }
+  }, [livePreviewStream])
 
   const splitClipById = useCallback(
     (clipId: string, at: number) => {
@@ -1101,24 +1180,58 @@ ${JSON.stringify(editorSnapshot, null, 2)}`
   const previewObjectPosition = previewClip
     ? `${previewClip.cropX + previewClip.cropWidth / 2}% ${previewClip.cropY + previewClip.cropHeight / 2}%`
     : "50% 50%"
+  const captureModeLabel = selectedCaptureMode === "tab" ? "Browser tab" : "Entire screen"
+  const hasVideoPreview = Boolean(recordingUrl || livePreviewStream)
+  const canPreviewAnimations = Boolean(recordingUrl)
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+    <div
+      className={cn(
+        "grid h-full min-h-0 grid-cols-1",
+        isAnimationsCollapsed
+          ? "xl:grid-cols-[74px_minmax(0,1fr)_360px]"
+          : "xl:grid-cols-[280px_minmax(0,1fr)_360px]"
+      )}
+    >
       <section className="order-2 flex min-h-0 flex-col border-y border-border/50 bg-card/20 xl:order-1 xl:border-y-0 xl:border-r">
         <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-          <p className="text-sm font-semibold">Close-ups</p>
-          <Badge variant="secondary" className="font-mono text-[10px]">
-            {SHOT_PRESETS.length}
-          </Badge>
+          {isAnimationsCollapsed ? (
+            <Sparkles className="h-4 w-4 text-primary" />
+          ) : (
+            <>
+              <p className="text-sm font-semibold">Animations</p>
+              <Badge variant="secondary" className="font-mono text-[10px]">
+                {SHOT_PRESETS.length}
+              </Badge>
+            </>
+          )}
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            className="ml-2"
+            onClick={() => setIsAnimationsCollapsed((value) => !value)}
+            aria-label={isAnimationsCollapsed ? "Expand animations panel" : "Collapse animations panel"}
+            title={isAnimationsCollapsed ? "Expand animations panel" : "Collapse animations panel"}
+          >
+            {isAnimationsCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </Button>
         </div>
+        {!isAnimationsCollapsed && !canPreviewAnimations ? (
+          <div className="border-b border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+            Record once to unlock live animation previews for each preset.
+          </div>
+        ) : null}
         <ScrollArea className="flex-1">
-          <div className="space-y-2 p-3">
+          <div className={cn("space-y-2 p-3", isAnimationsCollapsed && "space-y-1.5 p-2")}>
             {SHOT_PRESETS.map((preset, index) => (
               <button
                 key={preset.id}
                 onClick={() => setSelectedPresetId(preset.id)}
+                aria-label={`${preset.title}: ${preset.description}`}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg border px-2.5 py-2 text-left transition-colors",
+                  "flex w-full items-center rounded-lg border transition-colors",
+                  isAnimationsCollapsed ? "justify-center px-1.5 py-1.5" : "gap-3 px-2.5 py-2 text-left",
                   selectedPresetId === preset.id
                     ? "border-primary/60 bg-primary/10"
                     : "border-border/40 bg-card/40 hover:bg-muted/50"
@@ -1126,17 +1239,43 @@ ${JSON.stringify(editorSnapshot, null, 2)}`
               >
                 <div
                   className={cn(
-                    "h-14 w-20 shrink-0 rounded-md border border-border/30 bg-gradient-to-br",
-                    index % 3 === 0 && "from-cyan-300 via-indigo-500 to-pink-500",
-                    index % 3 === 1 && "from-sky-400 via-blue-500 to-violet-600",
-                    index % 3 === 2 && "from-indigo-400 via-fuchsia-500 to-rose-400"
+                    "relative shrink-0 overflow-hidden rounded-md border border-border/30",
+                    isAnimationsCollapsed ? "h-10 w-10" : "h-14 w-20"
                   )}
-                />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{preset.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">{preset.description}</p>
+                >
+                  {canPreviewAnimations ? (
+                    <video
+                      src={recordingUrl ?? undefined}
+                      className="h-full w-full object-cover"
+                      style={{
+                        transform: `scale(${preset.zoom}) translate(${preset.panX * 45}%, ${preset.panY * 45}%) rotate(${preset.rotate}deg)`,
+                      }}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <div
+                      className={cn(
+                        "h-full w-full bg-gradient-to-br",
+                        index % 3 === 0 && "from-cyan-300 via-indigo-500 to-pink-500",
+                        index % 3 === 1 && "from-sky-400 via-blue-500 to-violet-600",
+                        index % 3 === 2 && "from-indigo-400 via-fuchsia-500 to-rose-400"
+                      )}
+                    />
+                  )}
                 </div>
-                <span className="ml-auto text-xs text-muted-foreground">{preset.duration}s</span>
+                {!isAnimationsCollapsed ? (
+                  <>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{preset.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{preset.description}</p>
+                    </div>
+                    <span className="ml-auto text-xs text-muted-foreground">{preset.duration}s</span>
+                  </>
+                ) : null}
               </button>
             ))}
           </div>
@@ -1147,34 +1286,72 @@ ${JSON.stringify(editorSnapshot, null, 2)}`
         <div className="border-b border-border/50 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <Button
-              onClick={() => void startCapture("screen")}
-              disabled={isRecording}
-              variant={captureMode === "screen" && isRecording ? "destructive" : "outline"}
+              onClick={startRecordingWithCountdown}
+              variant={isRecording ? "destructive" : recordCountdown !== null ? "secondary" : "default"}
             >
-              <Monitor className="h-4 w-4" />
-              Record Screen
+              {isRecording ? <Square className="h-4 w-4" /> : <Video className="h-4 w-4" />}
+              {isRecording
+                ? "Stop Recording"
+                : recordCountdown !== null
+                  ? `Starting in ${recordCountdown}`
+                  : "Record"}
             </Button>
-            <Button
-              onClick={() => void startCapture("tab")}
-              disabled={isRecording}
-              variant={captureMode === "tab" && isRecording ? "destructive" : "outline"}
-            >
-              <Camera className="h-4 w-4" />
-              Record Tab
-            </Button>
-            <Button onClick={stopRecording} disabled={!isRecording} variant="destructive">
-              <Square className="h-4 w-4" />
-              Stop
-            </Button>
-            <Button onClick={downloadRecording} disabled={!recordingBlob} variant="ghost">
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={isRecording || recordCountdown !== null}>
+                  Record Options
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel>Capture source</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={selectedCaptureMode}
+                  onValueChange={(value) => setSelectedCaptureMode(value as CaptureMode)}
+                >
+                  <DropdownMenuRadioItem value="screen">
+                    <Monitor className="h-4 w-4" />
+                    Entire screen
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="tab">
+                    <Camera className="h-4 w-4" />
+                    Browser tab
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (!isRecording && recordCountdown === null) {
+                      setCaptureError(null)
+                      clearCountdownTimer()
+                      void startCapture(selectedCaptureMode)
+                    }
+                  }}
+                >
+                  Start immediately
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Badge variant="outline" className="text-[11px]">
+              {captureModeLabel}
+            </Badge>
+
+            <Button onClick={downloadRecording} disabled={!recordingBlob} variant="ghost" size="sm">
               <Upload className="h-4 w-4" />
               Download
             </Button>
-            <Button onClick={() => void exportEditedVideo()} disabled={!recordingUrl || clips.length === 0 || isExporting} variant="default">
+            <Button
+              onClick={() => void exportEditedVideo()}
+              disabled={!recordingUrl || clips.length === 0 || isExporting}
+              variant="default"
+              size="sm"
+            >
               {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Export Edited
+              Export
             </Button>
-            <Button onClick={downloadEditedExport} disabled={!exportedBlob} variant="ghost">
+            <Button onClick={downloadEditedExport} disabled={!exportedBlob} variant="ghost" size="sm">
               <Upload className="h-4 w-4" />
               Download Edited
             </Button>
@@ -1185,7 +1362,8 @@ ${JSON.stringify(editorSnapshot, null, 2)}`
             )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            To capture another Chrome tab, click <strong>Record Tab</strong> and choose that tab in the browser picker.
+            One record button controls the full flow. Use <strong>Record Options</strong> to switch between
+            entire screen and browser tab capture.
           </p>
           {captureError ? (
             <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
@@ -1218,28 +1396,62 @@ ${JSON.stringify(editorSnapshot, null, 2)}`
 
               <div className="p-3">
                 <div className="relative mx-auto aspect-video w-full overflow-hidden rounded-lg bg-black">
-                  {recordingUrl ? (
+                  {hasVideoPreview ? (
                     <>
                       <video
                         ref={videoRef}
-                        src={recordingUrl}
+                        src={recordingUrl ?? undefined}
                         className="h-full w-full object-cover transition-transform duration-500"
-                        style={{
-                          transform: getPreviewTransform(previewClip),
-                          objectPosition: previewObjectPosition,
-                        }}
-                        onLoadedMetadata={handleLoadedMetadata}
-                        onTimeUpdate={handleTimeUpdate}
+                        style={
+                          recordingUrl
+                            ? {
+                                transform: getPreviewTransform(previewClip),
+                                objectPosition: previewObjectPosition,
+                              }
+                            : undefined
+                        }
+                        onLoadedMetadata={recordingUrl ? handleLoadedMetadata : undefined}
+                        onTimeUpdate={recordingUrl ? handleTimeUpdate : undefined}
                         onEnded={() => setIsPlaying(false)}
                         playsInline
                         muted
                       />
+                      {recordingUrl && !isRecording && !isPlaying ? (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Button
+                            type="button"
+                            size="icon-lg"
+                            variant="secondary"
+                            onClick={() => void togglePlayback()}
+                            className="h-14 w-14 rounded-full border border-border/60 bg-background/70 backdrop-blur"
+                            aria-label="Play recording"
+                          >
+                            <Play className="h-6 w-6" />
+                          </Button>
+                        </div>
+                      ) : null}
+                      {isRecording ? (
+                        <Badge variant="destructive" className="absolute left-3 top-3 font-mono text-[10px]">
+                          REC {formatTime(recordingSeconds)}
+                        </Badge>
+                      ) : null}
                       <div className="pointer-events-none absolute inset-0 border border-white/10" />
                     </>
                   ) : (
                     <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
-                      <Video className="h-8 w-8" />
-                      <p className="text-sm">Record your screen or another browser tab to begin editing.</p>
+                      {recordCountdown !== null ? (
+                        <>
+                          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-primary/40 bg-primary/15 text-2xl font-semibold text-primary">
+                            {recordCountdown}
+                          </div>
+                          <p className="text-sm">Get ready. Recording will start automatically.</p>
+                        </>
+                      ) : (
+                        <>
+                          <Video className="h-8 w-8" />
+                          <p className="text-sm">Press Record to capture your screen or browser tab.</p>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
