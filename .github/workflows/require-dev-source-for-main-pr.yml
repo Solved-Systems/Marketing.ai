@@ -1,0 +1,24 @@
+name: Require Dev Source Branch
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+
+jobs:
+  require-dev-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR source branch
+        run: |
+          echo "base=${{ github.base_ref }} head=${{ github.head_ref }}"
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::PRs into main must come from the dev branch. Open or update your PR with base=main and head=dev."
+            exit 1
+          fi
+          echo "Source branch is dev. Check passed."

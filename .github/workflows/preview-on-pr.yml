@@ -1,0 +1,54 @@
+name: Preview on PR
+
+# When a PR targeting dev is opened or updated, merge the PR branch into
+# dev and push so Vercel builds the dev preview for testing.
+# On merge, dev gets the squash commit and Vercel rebuilds.
+# Then promote-dev-to-main.yml handles dev -> main automatically.
+
+on:
+  pull_request:
+    branches: [dev]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: preview-on-pr
+  cancel-in-progress: true
+
+jobs:
+  sync-to-dev:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ secrets.GH_AUTOMATION_TOKEN || github.token }}
+
+      - name: Merge PR branch into dev
+        env:
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          echo "Merging PR #${PR_NUM} (${PR_BRANCH} @ ${PR_SHA}) into dev..."
+
+          git fetch origin "${PR_BRANCH}"
+
+          if git merge --no-edit "${PR_SHA}"; then
+            echo "Merge succeeded. Pushing to dev..."
+            git push origin dev
+            echo "Dev updated - Vercel will build the preview."
+          else
+            echo "::warning::Merge conflict - PR #${PR_NUM} needs a rebase. Dev was not updated."
+            git merge --abort
+            exit 0
+          fi
