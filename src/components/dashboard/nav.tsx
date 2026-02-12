@@ -26,14 +26,14 @@ import {
 } from 'lucide-react'
 
 const navItems = [
-  { title: './dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: './brands', href: '/brands', icon: Palette },
-  { title: './calendar', href: '/calendar', icon: Calendar },
-  { title: './chat', href: '/chat', icon: MessageSquare },
-  { title: './video-editor', href: '/video-editor', icon: Video },
-  { title: './integrations', href: '/integrations', icon: Plug },
-  { title: './config', href: '/settings', icon: Settings },
-  { title: './billing', href: '/settings/billing', icon: CreditCard },
+  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Brands', href: '/brands', icon: Palette },
+  { title: 'Calendar', href: '/calendar', icon: Calendar },
+  { title: 'Chat', href: '/chat', icon: MessageSquare },
+  { title: 'Video Studio', href: '/video-editor', icon: Video },
+  { title: 'Integrations', href: '/integrations', icon: Plug },
+  { title: 'Settings', href: '/settings', icon: Settings },
+  { title: 'Billing', href: '/settings/billing', icon: CreditCard },
 ]
 
 export function DashboardNav() {
@@ -54,22 +54,22 @@ export function DashboardNav() {
   return (
     <aside
       className={cn(
-        'min-h-screen border-r border-border/50 bg-sidebar flex flex-col transition-[width] duration-200',
-        collapsed ? 'w-[76px]' : 'w-64'
+        'flex min-h-screen flex-col border-r border-border/60 bg-sidebar/90 backdrop-blur transition-[width] duration-200',
+        collapsed ? 'w-[82px]' : 'w-[270px]'
       )}
     >
       {/* Logo */}
-      <div className={cn('border-b border-border/50', collapsed ? 'p-2' : 'p-6')}>
+      <div className={cn('border-b border-border/60', collapsed ? 'p-3' : 'p-5')}>
         <div className={cn('flex items-center', collapsed ? 'flex-col gap-2' : 'justify-between gap-2')}>
-          <Link href="/dashboard" className={cn('flex items-center', collapsed ? 'justify-center' : 'gap-2')}>
-            <Terminal className="h-5 w-5 text-primary shrink-0" />
-            {!collapsed && <span className="font-mono text-primary crt-glow font-semibold">mrktcmd</span>}
+          <Link href="/dashboard" className={cn('flex items-center', collapsed ? 'justify-center' : 'gap-2.5')}>
+            <Terminal className="h-5 w-5 shrink-0 text-primary" />
+            {!collapsed && <span className="text-sm font-semibold tracking-wide text-foreground">MRKTCMD</span>}
           </Link>
           <button
             onClick={() => setCollapsed((value) => !value)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
           >
             {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </button>
@@ -77,7 +77,7 @@ export function DashboardNav() {
       </div>
 
       {/* Navigation */}
-      <nav className={cn('flex-1', collapsed ? 'p-2' : 'p-4')}>
+      <nav className={cn('flex-1', collapsed ? 'p-2' : 'p-3')}>
         <ul className="space-y-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
@@ -88,38 +88,38 @@ export function DashboardNav() {
                   aria-label={collapsed ? item.title : undefined}
                   title={collapsed ? item.title : undefined}
                   className={cn(
-                    'flex items-center rounded text-sm font-mono transition-all',
-                    collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2',
+                    'flex items-center rounded-xl border text-sm transition-colors',
+                    collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5',
                     isActive
-                      ? 'bg-primary/20 text-primary border border-primary/30'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      ? 'border-primary/30 bg-primary/14 text-foreground'
+                      : 'border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground'
                   )}
                 >
-                  <item.icon className="h-4 w-4 shrink-0" />
+                  <item.icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-primary' : 'text-muted-foreground')} />
                   {!collapsed && <span>{item.title}</span>}
-                  {!collapsed && isActive && <ChevronRight className="h-3 w-3 ml-auto" />}
+                  {!collapsed && isActive && <ChevronRight className="ml-auto h-3.5 w-3.5 text-primary" />}
                 </Link>
               </li>
             )
           })}
           {/* Admin Link */}
           {isAdmin && (
-            <li className={cn('border-t border-border/50', collapsed ? 'mt-3 pt-3' : 'mt-4 pt-4')}>
+            <li className={cn('border-t border-border/60', collapsed ? 'mt-3 pt-3' : 'mt-4 pt-4')}>
               <Link
                 href="/admin"
-                aria-label={collapsed ? './admin' : undefined}
-                title={collapsed ? './admin' : undefined}
+                aria-label={collapsed ? 'Admin' : undefined}
+                title={collapsed ? 'Admin' : undefined}
                 className={cn(
-                  'flex items-center rounded text-sm font-mono transition-all',
-                  collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2',
+                  'flex items-center rounded-xl border text-sm transition-colors',
+                  collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5',
                   pathname?.startsWith('/admin')
-                    ? 'bg-red-500/20 text-red-500 border border-red-500/30'
-                    : 'text-red-500/70 hover:text-red-500 hover:bg-red-500/10'
+                    ? 'border-red-500/35 bg-red-500/16 text-red-300'
+                    : 'border-transparent text-red-300/80 hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-200'
                 )}
               >
                 <Shield className="h-4 w-4 shrink-0" />
-                {!collapsed && <span>./admin</span>}
-                {!collapsed && pathname?.startsWith('/admin') && <ChevronRight className="h-3 w-3 ml-auto" />}
+                {!collapsed && <span>Admin</span>}
+                {!collapsed && pathname?.startsWith('/admin') && <ChevronRight className="ml-auto h-3.5 w-3.5" />}
               </Link>
             </li>
           )}
@@ -127,38 +127,40 @@ export function DashboardNav() {
       </nav>
 
       {/* Credits Display */}
-      <div className={cn('border-t border-border/50', collapsed ? 'p-2' : 'p-4')}>
+      <div className={cn('border-t border-border/60', collapsed ? 'p-2' : 'p-3')}>
         {collapsed ? (
           <Link
             href="/settings/billing"
-            className="flex h-10 items-center justify-center rounded border border-border/50 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title="credits"
-            aria-label="credits"
+            className="flex h-10 items-center justify-center rounded-xl border border-border/70 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            title="Billing"
+            aria-label="Billing"
           >
             <Zap className="h-4 w-4 text-primary" />
           </Link>
         ) : (
           <Link href="/settings/billing" className="block">
-            <div className="terminal-border rounded p-3 text-xs font-mono hover:bg-muted/50 transition-colors">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-muted-foreground">credits</span>
+            <div className="rounded-xl border border-border/70 bg-card/70 p-3 text-xs transition-colors hover:bg-card/90">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-muted-foreground">Credits</span>
                 <Zap className="h-3 w-3 text-primary" />
               </div>
               {isLoading ? (
                 <p className="text-muted-foreground">Loading...</p>
               ) : total > 0 ? (
                 <>
-                  <p className="text-lg font-bold text-primary">{remaining}</p>
-                  <div className="mt-1 h-1 bg-muted rounded overflow-hidden">
+                  <p className="text-2xl font-semibold text-foreground">{remaining}</p>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/80">
                     <div
                       className="h-full bg-primary transition-all"
                       style={{ width: `${(remaining / total) * 100}%` }}
                     />
                   </div>
-                  <p className="text-muted-foreground mt-1">{remaining}/{total}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {remaining} of {total} remaining
+                  </p>
                 </>
               ) : (
-                <p className="text-yellow-500">No subscription</p>
+                <p className="text-muted-foreground">No active subscription</p>
               )}
             </div>
           </Link>
@@ -166,25 +168,18 @@ export function DashboardNav() {
       </div>
 
       {/* Footer */}
-      <div className={cn('border-t border-border/50', collapsed ? 'p-2 space-y-2' : 'p-4 space-y-3')}>
-        {!collapsed && (
-          <div className="terminal-border rounded p-3 text-xs font-mono">
-            <p className="text-muted-foreground">$ status</p>
-            <p className="text-primary">system: online</p>
-            <p className="text-green-500/70">ai: ready</p>
-          </div>
-        )}
+      <div className={cn('border-t border-border/60', collapsed ? 'p-2' : 'p-3')}>
         <button
           onClick={() => signOut({ callbackUrl: '/' })}
-          title="./logout"
-          aria-label="./logout"
+          title="Sign out"
+          aria-label="Sign out"
           className={cn(
-            'flex items-center rounded text-sm font-mono text-muted-foreground hover:text-foreground hover:bg-muted transition-all',
-            collapsed ? 'w-full justify-center px-2 py-2.5' : 'w-full gap-2 px-3 py-2'
+            'flex items-center rounded-xl border border-transparent text-sm text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground',
+            collapsed ? 'w-full justify-center px-2 py-2.5' : 'w-full gap-2 px-3.5 py-2.5'
           )}
         >
           <LogOut className="h-4 w-4" />
-          {!collapsed && <span>./logout</span>}
+          {!collapsed && <span>Sign out</span>}
         </button>
       </div>
     </aside>

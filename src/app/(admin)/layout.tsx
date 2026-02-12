@@ -33,7 +33,7 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-background">
       {/* Mobile Navigation */}
       <MobileNav variant="admin" />
 
@@ -43,9 +43,9 @@ export default async function AdminLayout({
       </div>
 
       {/* Main Content - with top padding for mobile header */}
-      <main className="flex-1 overflow-auto pt-14 lg:pt-0">
-        <div className="scanlines fixed inset-0 pointer-events-none" />
-        {children}
+      <main className="relative flex-1 overflow-auto pt-14 lg:pt-0">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_45%_at_100%_0%,rgba(239,68,68,0.1),transparent_72%)]" />
+        <div className="relative min-h-full">{children}</div>
       </main>
     </div>
   )

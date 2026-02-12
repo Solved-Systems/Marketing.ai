@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { JetBrains_Mono, IBM_Plex_Mono } from "next/font/google"
+import { JetBrains_Mono, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google"
 import { cn } from "@/lib/utils"
 import { SessionProvider } from "@/components/providers/session-provider"
 import "./globals.css"
@@ -14,6 +14,13 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
   variable: "--font-ibm-plex-mono",
+  display: "swap",
+})
+
+const ibmPlexSans = IBM_Plex_Sans({
+  weight: ["400", "500", "600", "700"],
+  subsets: ["latin"],
+  variable: "--font-ibm-plex-sans",
   display: "swap",
 })
 
@@ -37,7 +44,8 @@ export default function RootLayout({
         className={cn(
           jetbrainsMono.variable,
           ibmPlexMono.variable,
-          "antialiased noise-overlay"
+          ibmPlexSans.variable,
+          "antialiased"
         )}
         suppressHydrationWarning
       >

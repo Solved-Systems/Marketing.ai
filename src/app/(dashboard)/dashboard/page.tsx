@@ -1,151 +1,125 @@
 'use client'
 
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Activity, ArrowRight, Image as ImageIcon, MessageSquare, Palette, Video, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import {
-  Palette,
-  Video,
-  Image as ImageIcon,
-  MessageSquare,
-  ArrowRight,
-  Activity,
-  Zap,
-} from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function DashboardPage() {
   return (
     <div className="p-4 md:p-8">
-      {/* Header */}
-      <div className="mb-6 md:mb-8">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground font-mono mb-2">
-          <span>$</span>
-          <span className="text-primary">./dashboard</span>
-        </div>
-        <h1 className="text-2xl md:text-3xl font-bold">Command Center</h1>
-        <p className="text-muted-foreground mt-2 text-sm md:text-base">
-          Manage your brands and generate AI content
+      <div className="mb-8 md:mb-10">
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Welcome to your workspace</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground md:text-base">
+          Create new campaigns, manage brand assets, and generate content from one place.
         </p>
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
-        <QuickActionCard
-          icon={<Palette className="h-5 w-5" />}
-          title="New Brand"
-          description="Create a new brand"
-          href="/brands/new"
-        />
-        <QuickActionCard
-          icon={<Video className="h-5 w-5" />}
-          title="Create Video"
-          description="Generate AI video"
-          href="/chat"
-          badge="AI"
-        />
-        <QuickActionCard
-          icon={<ImageIcon className="h-5 w-5" />}
-          title="Create Image"
-          description="Generate graphics"
-          href="/chat"
-          badge="AI"
-        />
-        <QuickActionCard
-          icon={<MessageSquare className="h-5 w-5" />}
-          title="Write Post"
-          description="Generate social post"
-          href="/chat"
-          badge="AI"
-        />
-      </div>
+      <section className="mb-8 md:mb-10">
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Quick actions</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <QuickActionCard
+            icon={<Palette className="h-5 w-5" />}
+            title="New Brand"
+            description="Set up a new brand profile and style guide."
+            href="/brands/new"
+          />
+          <QuickActionCard
+            icon={<Video className="h-5 w-5" />}
+            title="Create Video"
+            description="Open the studio and generate a short video."
+            href="/chat"
+            badge="AI"
+          />
+          <QuickActionCard
+            icon={<ImageIcon className="h-5 w-5" />}
+            title="Create Image"
+            description="Generate visual assets for your channels."
+            href="/chat"
+            badge="AI"
+          />
+          <QuickActionCard
+            icon={<MessageSquare className="h-5 w-5" />}
+            title="Write Post"
+            description="Draft social content using your brand context."
+            href="/chat"
+            badge="AI"
+          />
+        </div>
+      </section>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
-        <Card className="terminal-border bg-card/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-mono text-muted-foreground">
-              total_brands
+      <section className="mb-8 md:mb-10">
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Snapshot</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Card className="bg-card/65">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Brands</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-semibold tracking-tight">0</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                <Link href="/brands/new" className="text-primary transition-colors hover:text-primary/80">
+                  Create your first brand
+                </Link>
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/65">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Content Generated</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-4xl font-semibold tracking-tight">0</p>
+              <p className="mt-2 text-sm text-muted-foreground">Videos, images, and social posts.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/65">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">AI Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-emerald-400" />
+                <span className="text-xl font-semibold">Online</span>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">Ready when you are.</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section>
+        <Card className="bg-card/65">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <Zap className="h-4 w-4 text-primary" />
+              Getting started
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-bold text-primary crt-glow">0</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              <Link href="/brands/new" className="text-primary hover:underline">
-                Create your first brand →
-              </Link>
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="terminal-border bg-card/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-mono text-muted-foreground">
-              content_generated
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-4xl font-bold text-primary crt-glow">0</p>
-            <p className="text-sm text-muted-foreground mt-1">Videos, images, posts</p>
-          </CardContent>
-        </Card>
-
-        <Card className="terminal-border bg-card/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-mono text-muted-foreground">
-              ai_status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <Activity className="h-6 w-6 text-green-500 animate-pulse" />
-              <span className="text-2xl font-bold text-green-500">Online</span>
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">Ready to generate</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Getting Started */}
-      <Card className="terminal-border bg-card/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-primary" />
-            <span className="font-mono">./getting-started</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4 font-mono text-sm">
+          <CardContent className="space-y-3">
             <Step
               number={1}
               title="Create a brand"
-              description="Set up your brand with logo, colors, and details"
+              description="Add brand identity details, colors, and logo assets."
               href="/brands/new"
-              completed={false}
             />
             <Step
               number={2}
-              title="Add products"
-              description="Define products with features and descriptions"
-              href="/brands"
-              completed={false}
+              title="Connect your repo"
+              description="Link GitHub to generate content from product updates."
+              href="/integrations"
             />
             <Step
               number={3}
-              title="Generate content"
-              description="Use AI to create videos, images, and posts"
+              title="Generate and publish"
+              description="Use chat workflows to produce posts, images, and videos."
               href="/chat"
-              completed={false}
             />
-            <Step
-              number={4}
-              title="Connect GitHub"
-              description="Automate content for releases (optional)"
-              href="/integrations"
-              completed={false}
-            />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   )
 }
@@ -164,23 +138,20 @@ function QuickActionCard({
   badge?: string
 }) {
   return (
-    <Link href={href}>
-      <Card className="terminal-border bg-card/50 hover:bg-card/70 transition-all cursor-pointer group h-full">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between mb-3">
-            <div className="text-primary group-hover:scale-110 transition-transform">
-              {icon}
-            </div>
-            {badge && (
-              <Badge variant="outline" className="text-xs border-primary/50 text-primary">
-                {badge}
-              </Badge>
-            )}
-          </div>
-          <h3 className="font-semibold text-sm mb-1">{title}</h3>
-          <p className="text-xs text-muted-foreground">{description}</p>
-        </CardContent>
-      </Card>
+    <Link
+      href={href}
+      className="group h-full rounded-2xl border border-border/70 bg-card/65 p-4 transition-colors hover:bg-card/90"
+    >
+      <div className="mb-3 flex items-start justify-between">
+        <div className="text-primary">{icon}</div>
+        {badge ? (
+          <Badge variant="outline" className="border-primary/35 text-[10px] text-primary">
+            {badge}
+          </Badge>
+        ) : null}
+      </div>
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
     </Link>
   )
 }
@@ -190,33 +161,25 @@ function Step({
   title,
   description,
   href,
-  completed,
 }: {
   number: number
   title: string
   description: string
   href: string
-  completed: boolean
 }) {
   return (
     <Link
       href={href}
-      className="flex items-center gap-4 p-3 rounded terminal-border hover:bg-muted/50 transition-all group"
+      className="group flex items-center gap-4 rounded-xl border border-border/70 bg-card/45 px-4 py-3 transition-colors hover:bg-card/75"
     >
-      <div
-        className={`w-8 h-8 rounded flex items-center justify-center text-sm font-bold ${
-          completed
-            ? 'bg-green-500/20 text-green-500 border border-green-500/50'
-            : 'bg-primary/20 text-primary border border-primary/50'
-        }`}
-      >
-        {completed ? '✓' : number}
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/18 text-sm font-semibold text-primary">
+        {number}
       </div>
-      <div className="flex-1">
-        <p className="font-semibold">{title}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">{title}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
-      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+      <ArrowRight className="h-4 w-4 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
     </Link>
   )
 }

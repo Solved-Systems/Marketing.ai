@@ -7,56 +7,48 @@ import { cn } from '@/lib/utils'
 import { useCredits } from '@/hooks/use-credits'
 import { useAdmin } from '@/hooks/use-admin'
 import { signOut } from 'next-auth/react'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
-import {
-  Terminal,
-  LayoutDashboard,
-  Palette,
-  Calendar,
-  MessageSquare,
-  Video,
-  Plug,
-  Settings,
-  ChevronRight,
-  CreditCard,
-  Zap,
-  Shield,
-  LogOut,
-  Menu,
-  Users,
-  Mail,
-  BarChart3,
   Activity,
   ArrowLeft,
+  BarChart3,
+  Calendar,
+  ChevronRight,
+  CreditCard,
+  LayoutDashboard,
+  LogOut,
+  Mail,
+  Menu,
+  MessageSquare,
+  Palette,
+  Plug,
+  Settings,
+  Shield,
+  Terminal,
+  Users,
+  Video,
+  Zap,
 } from 'lucide-react'
 
 const dashboardNavItems = [
-  { title: './dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { title: './brands', href: '/brands', icon: Palette },
-  { title: './calendar', href: '/calendar', icon: Calendar },
-  { title: './chat', href: '/chat', icon: MessageSquare },
-  { title: './video-editor', href: '/video-editor', icon: Video },
-  { title: './integrations', href: '/integrations', icon: Plug },
-  { title: './config', href: '/settings', icon: Settings },
-  { title: './billing', href: '/settings/billing', icon: CreditCard },
+  { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { title: 'Brands', href: '/brands', icon: Palette },
+  { title: 'Calendar', href: '/calendar', icon: Calendar },
+  { title: 'Chat', href: '/chat', icon: MessageSquare },
+  { title: 'Video Studio', href: '/video-editor', icon: Video },
+  { title: 'Integrations', href: '/integrations', icon: Plug },
+  { title: 'Settings', href: '/settings', icon: Settings },
+  { title: 'Billing', href: '/settings/billing', icon: CreditCard },
 ]
 
 const adminNavItems = [
-  { title: './users', href: '/admin', icon: Users },
-  { title: './invites', href: '/admin/invites', icon: Mail },
-  { title: './stats', href: '/admin/stats', icon: BarChart3 },
-  { title: './health', href: '/admin/health', icon: Activity },
+  { title: 'Users', href: '/admin', icon: Users },
+  { title: 'Invites', href: '/admin/invites', icon: Mail },
+  { title: 'Stats', href: '/admin/stats', icon: BarChart3 },
+  { title: 'Health', href: '/admin/health', icon: Activity },
 ]
 
-const superAdminItems = [
-  { title: './settings', href: '/admin/settings', icon: Settings },
-]
+const superAdminItems = [{ title: 'Settings', href: '/admin/settings', icon: Settings }]
 
 interface MobileNavProps {
   variant?: 'dashboard' | 'admin'
@@ -69,9 +61,8 @@ export function MobileNav({ variant = 'dashboard' }: MobileNavProps) {
   const { isAdmin, isSuperAdmin, role, isLoading: adminLoading } = useAdmin()
 
   const isAdminVariant = variant === 'admin'
-  const primaryColor = isAdminVariant ? 'text-red-500' : 'text-primary'
-  const borderColor = isAdminVariant ? 'border-red-900/50' : 'border-border/50'
-  const bgColor = isAdminVariant ? 'bg-red-950/20' : 'bg-muted/50'
+  const accentClass = isAdminVariant ? 'text-red-400' : 'text-primary'
+  const borderClass = isAdminVariant ? 'border-red-900/45' : 'border-border/60'
 
   const navItems = isAdminVariant
     ? isSuperAdmin
@@ -83,198 +74,168 @@ export function MobileNav({ variant = 'dashboard' }: MobileNavProps) {
     setOpen(false)
   }
 
+  const handleSignOut = () => {
+    setOpen(false)
+    signOut({ callbackUrl: '/' })
+  }
+
   return (
     <>
-      {/* Mobile Header */}
-      <header className={cn(
-        "lg:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-between px-4 bg-sidebar border-b",
-        borderColor
-      )}>
-        <Link href={isAdminVariant ? '/admin' : '/dashboard'} className="flex items-center gap-2">
-          <Terminal className={cn("h-5 w-5", primaryColor)} />
-          <span className={cn("font-mono font-semibold crt-glow", primaryColor)}>
-            {isAdminVariant ? 'admin' : 'mrktcmd'}
+      <header
+        className={cn(
+          'fixed left-0 right-0 top-0 z-40 flex h-14 items-center justify-between border-b bg-sidebar/92 px-4 backdrop-blur lg:hidden',
+          borderClass
+        )}
+      >
+        <Link href={isAdminVariant ? '/admin' : '/dashboard'} className="flex items-center gap-2.5">
+          <Terminal className={cn('h-5 w-5', accentClass)} />
+          <span className="text-sm font-semibold tracking-wide text-foreground">
+            {isAdminVariant ? 'Admin' : 'MRKTCMD'}
           </span>
         </Link>
         <button
           onClick={() => setOpen(true)}
-          className={cn(
-            "p-2 rounded transition-colors",
-            isAdminVariant ? "hover:bg-red-500/10" : "hover:bg-muted"
-          )}
-          aria-label="Open menu"
+          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          aria-label="Open navigation menu"
         >
-          <Menu className={cn("h-6 w-6", primaryColor)} />
+          <Menu className={cn('h-5 w-5', accentClass)} />
         </button>
       </header>
 
-      {/* Mobile Navigation Sheet */}
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="left"
-          className={cn("w-[280px] sm:w-[320px] p-0 bg-sidebar", borderColor)}
+          className={cn('flex w-[286px] flex-col p-0 sm:w-[320px]', borderClass, 'bg-sidebar')}
           showCloseButton={false}
         >
-          <SheetHeader className={cn("p-4 border-b", borderColor)}>
-            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+          <SheetHeader className={cn('border-b px-4 py-4 text-left', borderClass)}>
+            <SheetTitle className="sr-only">Navigation</SheetTitle>
             <SheetDescription className="sr-only">
-              Main navigation menu for the {isAdminVariant ? 'admin' : 'dashboard'}
+              Main navigation menu for the {isAdminVariant ? 'admin' : 'dashboard'}.
             </SheetDescription>
             <Link
               href={isAdminVariant ? '/admin' : '/dashboard'}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2.5"
               onClick={handleLinkClick}
             >
-              <Terminal className={cn("h-5 w-5", primaryColor)} />
-              <span className={cn("font-mono font-semibold crt-glow", primaryColor)}>
-                {isAdminVariant ? 'admin' : 'mrktcmd'}
+              <Terminal className={cn('h-5 w-5', accentClass)} />
+              <span className="text-sm font-semibold tracking-wide text-foreground">
+                {isAdminVariant ? 'Admin' : 'MRKTCMD'}
               </span>
             </Link>
           </SheetHeader>
 
-          {/* Back to Dashboard (Admin only) */}
           {isAdminVariant && (
-            <div className={cn("p-4 border-b", borderColor)}>
+            <div className={cn('border-b p-3', borderClass)}>
               <Link
                 href="/dashboard"
-                className="flex items-center gap-2 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-2 rounded-xl border border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:border-border/60 hover:bg-muted/55 hover:text-foreground"
                 onClick={handleLinkClick}
               >
                 <ArrowLeft className="h-4 w-4" />
-                <span>back to dashboard</span>
+                <span>Back to dashboard</span>
               </Link>
             </div>
           )}
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 overflow-y-auto">
+          <nav className="flex-1 overflow-y-auto p-3">
             <ul className="space-y-1">
               {navItems.map((item) => {
                 const isActive = isAdminVariant
                   ? pathname === item.href
                   : pathname === item.href || pathname?.startsWith(item.href + '/')
+
                 return (
                   <li key={item.href}>
                     <Link
                       href={item.href}
                       onClick={handleLinkClick}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded text-sm font-mono transition-all',
+                        'flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm transition-colors',
                         isActive
                           ? isAdminVariant
-                            ? 'bg-red-500/20 text-red-500 border border-red-500/30'
-                            : 'bg-primary/20 text-primary border border-primary/30'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                            ? 'border-red-500/35 bg-red-500/16 text-red-200'
+                            : 'border-primary/30 bg-primary/14 text-foreground'
+                          : 'border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground'
                       )}
                     >
-                      <item.icon className="h-4 w-4" />
+                      <item.icon className={cn('h-4 w-4', isActive ? accentClass : 'text-muted-foreground')} />
                       <span>{item.title}</span>
-                      {isActive && <ChevronRight className="h-3 w-3 ml-auto" />}
+                      {isActive && <ChevronRight className={cn('ml-auto h-3.5 w-3.5', accentClass)} />}
                     </Link>
                   </li>
                 )
               })}
-              {/* Admin Link (Dashboard only) */}
+
               {!isAdminVariant && isAdmin && (
-                <li className="mt-4 pt-4 border-t border-border/50">
+                <li className="mt-4 border-t border-border/60 pt-4">
                   <Link
                     href="/admin"
                     onClick={handleLinkClick}
                     className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded text-sm font-mono transition-all',
+                      'flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm transition-colors',
                       pathname?.startsWith('/admin')
-                        ? 'bg-red-500/20 text-red-500 border border-red-500/30'
-                        : 'text-red-500/70 hover:text-red-500 hover:bg-red-500/10'
+                        ? 'border-red-500/35 bg-red-500/16 text-red-200'
+                        : 'border-transparent text-red-300/80 hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-200'
                     )}
                   >
                     <Shield className="h-4 w-4" />
-                    <span>./admin</span>
-                    {pathname?.startsWith('/admin') && <ChevronRight className="h-3 w-3 ml-auto" />}
+                    <span>Admin</span>
+                    {pathname?.startsWith('/admin') && <ChevronRight className="ml-auto h-3.5 w-3.5" />}
                   </Link>
                 </li>
               )}
             </ul>
           </nav>
 
-          {/* Credits Display (Dashboard only) */}
-          {!isAdminVariant && (
-            <div className={cn("p-4 border-t", borderColor)}>
+          <div className={cn('border-t p-3', borderClass)}>
+            {isAdminVariant ? (
+              <div className="rounded-xl border border-red-900/40 bg-red-950/20 p-3 text-xs">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-muted-foreground">Role</span>
+                  <Shield className="h-3.5 w-3.5 text-red-400" />
+                </div>
+                {adminLoading ? (
+                  <p className="text-muted-foreground">Loading...</p>
+                ) : (
+                  <p className="text-base font-semibold text-red-200">{role || 'unknown'}</p>
+                )}
+              </div>
+            ) : (
               <Link href="/settings/billing" onClick={handleLinkClick} className="block">
-                <div className={cn("terminal-border rounded p-3 text-xs font-mono hover:bg-muted/50 transition-colors")}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-muted-foreground">credits</span>
-                    <Zap className="h-3 w-3 text-primary" />
+                <div className="rounded-xl border border-border/70 bg-card/70 p-3 text-xs transition-colors hover:bg-card/90">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-muted-foreground">Credits</span>
+                    <Zap className="h-3.5 w-3.5 text-primary" />
                   </div>
                   {creditsLoading ? (
                     <p className="text-muted-foreground">Loading...</p>
                   ) : total > 0 ? (
                     <>
-                      <p className="text-lg font-bold text-primary">{remaining}</p>
-                      <div className="mt-1 h-1 bg-muted rounded overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all"
-                          style={{ width: `${(remaining / total) * 100}%` }}
-                        />
+                      <p className="text-lg font-semibold text-foreground">{remaining}</p>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/80">
+                        <div className="h-full bg-primary transition-all" style={{ width: `${(remaining / total) * 100}%` }} />
                       </div>
-                      <p className="text-muted-foreground mt-1">{remaining}/{total}</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {remaining} of {total} remaining
+                      </p>
                     </>
                   ) : (
-                    <p className="text-yellow-500">No subscription</p>
+                    <p className="text-muted-foreground">No active subscription</p>
                   )}
                 </div>
               </Link>
-            </div>
-          )}
-
-          {/* Admin Status (Admin only) */}
-          {isAdminVariant && (
-            <div className={cn("p-4 border-t", borderColor)}>
-              <div className={cn("border rounded p-3 text-xs font-mono", borderColor, bgColor)}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-muted-foreground">role</span>
-                  <Shield className="h-3 w-3 text-red-500" />
-                </div>
-                {adminLoading ? (
-                  <p className="text-muted-foreground">Loading...</p>
-                ) : (
-                  <p className="text-lg font-bold text-red-500">{role || 'unknown'}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Footer */}
-          <div className={cn("p-4 border-t", borderColor, "space-y-3")}>
-            <div className={cn(
-              "rounded p-3 text-xs font-mono",
-              isAdminVariant ? "border border-red-900/50 bg-red-950/20" : "terminal-border"
-            )}>
-              {isAdminVariant ? (
-                <>
-                  <p className="text-muted-foreground">$ admin_status</p>
-                  <p className="text-red-500">mode: privileged</p>
-                  <p className="text-yellow-500/70">audit: enabled</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-muted-foreground">$ status</p>
-                  <p className="text-primary">system: online</p>
-                  <p className="text-green-500/70">ai: ready</p>
-                </>
-              )}
-            </div>
-            {!isAdminVariant && (
-              <button
-                onClick={() => {
-                  setOpen(false)
-                  signOut({ callbackUrl: '/' })
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded text-sm font-mono text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>./logout</span>
-              </button>
             )}
+          </div>
+
+          <div className={cn('border-t p-3', borderClass)}>
+            <button
+              onClick={handleSignOut}
+              className="flex w-full items-center gap-2 rounded-xl border border-transparent px-3.5 py-2.5 text-sm text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60 hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Sign out</span>
+            </button>
           </div>
         </SheetContent>
       </Sheet>

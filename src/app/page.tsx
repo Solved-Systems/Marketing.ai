@@ -33,9 +33,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background relative">
-      {/* Scanlines overlay */}
-      <div className="scanlines fixed inset-0 pointer-events-none" />
-
       {/* Header */}
       <header className="border-b border-border/50 backdrop-blur-sm sticky top-0 z-40">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
@@ -44,17 +41,17 @@ export default function Home() {
             <span className="font-mono text-primary crt-glow">mrktcmd</span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-            <Link href="#features" className="hover:text-primary transition-colors">./features</Link>
-            <Link href="/pricing" className="hover:text-primary transition-colors">./pricing</Link>
-            <Link href="#docs" className="hover:text-primary transition-colors">./docs</Link>
+            <Link href="#features" className="hover:text-primary transition-colors">Features</Link>
+            <Link href="/pricing" className="hover:text-primary transition-colors">Pricing</Link>
+            <Link href="#docs" className="hover:text-primary transition-colors">Docs</Link>
           </nav>
           <div className="flex items-center gap-3">
             <Link href="/login">
-              <Button variant="ghost" size="sm">login</Button>
+              <Button variant="ghost" size="sm">Login</Button>
             </Link>
             <Link href="/dashboard">
               <Button variant="terminal" size="sm">
-                <span className="prompt">get started</span>
+                Get started
               </Button>
             </Link>
           </div>
@@ -84,8 +81,8 @@ export default function Home() {
             </div>
 
             <h1 className="text-4xl md:text-6xl font-bold mb-6 tracking-tight">
-              <span className="text-primary crt-glow">Command</span>{' '}
-              <span className="text-foreground">your marketing</span>
+              <span className="text-primary crt-glow">Scale</span>{' '}
+              <span className="text-foreground">your marketing content</span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
               Generate videos, images, and social posts for your brands with AI.
@@ -112,7 +109,7 @@ export default function Home() {
         {/* Features */}
         <section id="features" className="py-24 border-t border-border/30">
           <div className="text-center mb-16">
-            <p className="text-primary font-mono text-sm mb-2">./features</p>
+            <p className="text-primary font-mono text-sm mb-2">Features</p>
             <h2 className="text-3xl md:text-4xl font-bold">Everything you need</h2>
           </div>
 
@@ -151,7 +148,7 @@ export default function Home() {
             <Link href="/dashboard">
               <Button variant="terminal" size="lg">
                 <Terminal className="h-4 w-4" />
-                ./start --now
+                Start now
               </Button>
             </Link>
           </div>

@@ -16,17 +16,13 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="scanlines fixed inset-0 pointer-events-none" />
-
       <Card className="w-full max-w-md terminal-border bg-card/50">
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Terminal className="h-6 w-6 text-primary" />
             <span className="font-mono text-xl text-primary crt-glow">mrktcmd</span>
           </div>
-          <CardTitle className="font-mono text-sm text-muted-foreground">
-            $ ./authenticate
-          </CardTitle>
+          <CardTitle className="text-base font-semibold text-foreground">Sign in</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="text-center text-sm text-muted-foreground">
@@ -53,8 +49,8 @@ export default function LoginPage() {
           </Button>
 
           <div className="pt-4 border-t border-border/50">
-            <p className="text-xs text-center text-muted-foreground font-mono">
-              We&apos;ll request access to your repos so you can connect them to brands
+            <p className="text-xs text-center text-muted-foreground">
+              You can manage repository permissions anytime in your GitHub settings.
             </p>
           </div>
         </CardContent>
