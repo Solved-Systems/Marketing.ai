@@ -267,6 +267,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
   const [isExporting, setIsExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
+  const [previewThumbnail, setPreviewThumbnail] = useState<string | null>(null)
 
   const [clips, setClips] = useState<TimelineClip[]>([])
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
@@ -525,6 +526,53 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
   }, [exportedUrl])
 
   useEffect(() => {
+    if (!recordingUrl) {
+      setPreviewThumbnail(null)
+      return
+    }
+
+    let cancelled = false
+    const video = document.createElement("video")
+    video.src = recordingUrl
+    video.muted = true
+    video.playsInline = true
+    video.preload = "auto"
+
+    const handleSeeked = () => {
+      if (cancelled) return
+      try {
+        const canvas = document.createElement("canvas")
+        canvas.width = video.videoWidth || 320
+        canvas.height = video.videoHeight || 180
+        const ctx = canvas.getContext("2d")
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+          setPreviewThumbnail(canvas.toDataURL("image/jpeg", 0.7))
+        }
+      } finally {
+        video.pause()
+        video.removeAttribute("src")
+        video.load()
+      }
+    }
+
+    const handleLoaded = () => {
+      if (cancelled) return
+      video.currentTime = Math.min(1, video.duration * 0.1)
+    }
+
+    video.addEventListener("loadeddata", handleLoaded, { once: true })
+    video.addEventListener("seeked", handleSeeked, { once: true })
+
+    return () => {
+      cancelled = true
+      video.pause()
+      video.removeAttribute("src")
+      video.load()
+    }
+  }, [recordingUrl])
+
+  useEffect(() => {
     const videoElement = videoRef.current
     if (!videoElement) return
 
@@ -536,12 +584,16 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
           // Ignore autoplay restrictions for live preview.
         })
       }
-      return
-    }
-
-    if (videoElement.srcObject) {
+    } else if (videoElement.srcObject) {
       videoElement.pause()
       videoElement.srcObject = null
+    }
+
+    return () => {
+      if (videoElement.srcObject) {
+        videoElement.pause()
+        videoElement.srcObject = null
+      }
     }
   }, [livePreviewStream])
 
@@ -681,6 +733,9 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
         error instanceof Error ? `Export failed: ${error.message}` : "Export failed."
       )
     } finally {
+      sourceVideo.pause()
+      sourceVideo.removeAttribute("src")
+      sourceVideo.load()
       setIsExporting(false)
     }
   }, [clips, isExporting, recordingUrl])
@@ -1243,7 +1298,7 @@ ${JSON.stringify(editorSnapshot, null, 2)}`
                     isAnimationsCollapsed ? "h-10 w-10" : "h-14 w-20"
                   )}
                 >
-                  {canPreviewAnimations ? (
+                  {canPreviewAnimations && selectedPresetId === preset.id ? (
                     <video
                       src={recordingUrl ?? undefined}
                       className="h-full w-full object-cover"
@@ -1255,6 +1310,15 @@ ${JSON.stringify(editorSnapshot, null, 2)}`
                       muted
                       playsInline
                       preload="metadata"
+                    />
+                  ) : canPreviewAnimations && previewThumbnail ? (
+                    <img
+                      src={previewThumbnail}
+                      alt={preset.title}
+                      className="h-full w-full object-cover"
+                      style={{
+                        transform: `scale(${preset.zoom}) translate(${preset.panX * 45}%, ${preset.panY * 45}%) rotate(${preset.rotate}deg)`,
+                      }}
                     />
                   ) : (
                     <div
