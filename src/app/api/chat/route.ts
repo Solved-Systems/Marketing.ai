@@ -21,6 +21,245 @@ function getGateway() {
   return createGateway({ apiKey })
 }
 
+function toToolError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    error: fallback,
+    details: message.slice(0, 180),
+  }
+}
+
+function clampText(value: string, max: number) {
+  if (value.length <= max) return value
+  return `${value.slice(0, max)}\n...(truncated)`
+}
+
+function compactToolOutputForContext(toolName: string, output: Record<string, unknown>) {
+  if (toolName === 'analyze_repo' || toolName === 'analyze_github_repo') {
+    const packageJson = output.packageJson && typeof output.packageJson === 'object'
+      ? (output.packageJson as Record<string, unknown>)
+      : undefined
+
+    const dependencies = Array.isArray(packageJson?.dependencies)
+      ? (packageJson?.dependencies as string[])
+      : []
+    const devDependencies = Array.isArray(packageJson?.devDependencies)
+      ? (packageJson?.devDependencies as string[])
+      : []
+
+    return {
+      name: output.name,
+      fullName: output.fullName,
+      description: typeof output.description === 'string' ? clampText(output.description, 240) : output.description,
+      stars: output.stars,
+      forks: output.forks,
+      watchers: output.watchers,
+      language: output.language,
+      topics: Array.isArray(output.topics) ? (output.topics as string[]).slice(0, 8) : [],
+      url: output.url,
+      homepage: output.homepage,
+      readme: typeof output.readme === 'string' ? clampText(output.readme, 700) : undefined,
+      packageJson: packageJson
+        ? {
+            name: packageJson.name,
+            description: packageJson.description,
+            dependencies: dependencies.slice(0, 10),
+            dependencyCount: dependencies.length,
+            devDependencies: devDependencies.slice(0, 6),
+            devDependencyCount: devDependencies.length,
+          }
+        : undefined,
+      error: output.error,
+      details: output.details,
+    }
+  }
+
+  if (toolName === 'get_repo_activity') {
+    const mergedPRs = Array.isArray(output.mergedPRs) ? (output.mergedPRs as Array<Record<string, unknown>>) : []
+    const recentCommits = Array.isArray(output.recentCommits) ? (output.recentCommits as Array<Record<string, unknown>>) : []
+
+    return {
+      mergedPRs: mergedPRs.slice(0, 4).map((pr) => ({
+        number: pr.number,
+        title: typeof pr.title === 'string' ? clampText(pr.title, 120) : pr.title,
+        author: pr.author,
+        mergedAt: pr.mergedAt,
+        url: pr.url,
+      })),
+      recentCommits: recentCommits.slice(0, 5).map((commit) => ({
+        sha: commit.sha,
+        message: typeof commit.message === 'string' ? clampText(commit.message, 120) : commit.message,
+        date: commit.date,
+        author: commit.author,
+      })),
+      error: output.error,
+      details: output.details,
+    }
+  }
+
+  if (toolName === 'read_repo_file') {
+    const path = typeof output.path === 'string' ? output.path : ''
+    const content = typeof output.content === 'string' ? output.content : ''
+    const entries = Array.isArray(output.entries) ? (output.entries as Array<Record<string, unknown>>) : null
+
+    if (entries) {
+      return {
+        path,
+        type: output.type || 'directory',
+        entries: entries.slice(0, 30).map((entry) => ({
+          name: entry.name,
+          type: entry.type,
+          size: entry.size,
+          path: entry.path,
+        })),
+        entryCount: entries.length,
+        error: output.error,
+        details: output.details,
+      }
+    }
+
+    return {
+      path,
+      size: output.size,
+      lineCount: content ? content.split('\n').length : 0,
+      content: content ? clampText(content, 1800) : undefined,
+      error: output.error,
+      details: output.details,
+    }
+  }
+
+  if (toolName === 'generate_image' || toolName === 'edit_image') {
+    const images = Array.isArray(output.images) ? (output.images as Array<Record<string, unknown>>) : []
+    return {
+      success: output.success,
+      provider: output.provider,
+      prompt: typeof output.prompt === 'string' ? clampText(output.prompt, 300) : output.prompt,
+      count: output.count || images.length,
+      images: images.slice(0, 2).map((image) => ({ url: image.url })),
+      error: output.error,
+      details: output.details,
+    }
+  }
+
+  const compacted: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(output)) {
+    if (typeof value === 'string') {
+      compacted[key] = clampText(value, 400)
+      continue
+    }
+    if (Array.isArray(value)) {
+      compacted[key] = value.slice(0, 5)
+      continue
+    }
+    if (value && typeof value === 'object') {
+      // Recursively clamp nested objects
+      const nested = JSON.stringify(value)
+      if (nested.length > 600) {
+        compacted[key] = clampText(nested, 600)
+        continue
+      }
+    }
+    compacted[key] = value
+  }
+
+  return compacted
+}
+
+function compactMessagesForModel(rawMessages: unknown) {
+  if (!Array.isArray(rawMessages)) return []
+
+  return rawMessages.map((raw) => {
+    if (!raw || typeof raw !== 'object') return raw
+    const message = { ...(raw as Record<string, unknown>) }
+
+    if (typeof message.content === 'string') {
+      message.content = clampText(message.content, 1200)
+    }
+
+    if (Array.isArray(message.parts)) {
+      message.parts = message.parts.map((part) => {
+        if (!part || typeof part !== 'object') return part
+        const nextPart = { ...(part as Record<string, unknown>) }
+
+        if (typeof nextPart.text === 'string') {
+          nextPart.text = clampText(nextPart.text, 1200)
+        }
+
+        if (nextPart.input && typeof nextPart.input === 'object') {
+          nextPart.input = compactToolOutputForContext('', nextPart.input as Record<string, unknown>)
+        }
+
+        const rawType = typeof nextPart.type === 'string' ? nextPart.type : ''
+        const toolName = rawType.startsWith('tool-')
+          ? rawType.slice(5)
+          : (typeof nextPart.toolName === 'string' ? nextPart.toolName : '')
+
+        if (nextPart.output && typeof nextPart.output === 'object' && toolName) {
+          nextPart.output = compactToolOutputForContext(toolName, nextPart.output as Record<string, unknown>)
+        } else if (nextPart.output && typeof nextPart.output === 'object') {
+          nextPart.output = compactToolOutputForContext('', nextPart.output as Record<string, unknown>)
+        }
+
+        if (typeof nextPart.errorText === 'string') {
+          nextPart.errorText = clampText(nextPart.errorText, 220)
+        }
+
+        return nextPart
+      })
+    }
+
+    return message
+  })
+}
+
+/**
+ * Hard character budget for the messages payload.
+ * Keep this conservative because system prompt + tool schemas add significant overhead.
+ * 240K chars of compacted JSON typically leaves enough headroom for model/tool context.
+ */
+const MAX_MESSAGE_CHARS = 240_000
+
+function messageCharSize(message: Record<string, unknown>): number {
+  return JSON.stringify(message).length
+}
+
+/**
+ * Trims conversation history to fit within a hard character budget.
+ * Keeps the most recent messages, drops oldest when over budget.
+ */
+function trimMessages<T extends Record<string, unknown>>(messages: T[]): T[] {
+  if (messages.length === 0) return messages
+
+  // Compute sizes for each message
+  const sizes = messages.map((msg) => messageCharSize(msg))
+  const totalChars = sizes.reduce((sum, s) => sum + s, 0)
+
+  if (totalChars <= MAX_MESSAGE_CHARS) return messages
+
+  // Keep the most recent messages that fit in budget
+  const trimmed: T[] = []
+  let budget = MAX_MESSAGE_CHARS
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (sizes[i] > budget && trimmed.length > 0) break
+    if (sizes[i] > budget && trimmed.length === 0) {
+      // Single giant message: keep it, but hard-clamp content fields.
+      const giant = { ...(messages[i] as Record<string, unknown>) }
+      if (typeof giant.content === 'string') {
+        giant.content = clampText(giant.content, Math.max(800, Math.floor(MAX_MESSAGE_CHARS * 0.3)))
+      }
+      trimmed.unshift(giant as T)
+      break
+    }
+    budget -= sizes[i]
+    trimmed.unshift(messages[i])
+  }
+
+  // Final safety: if even the kept messages are too large (single giant message),
+  // still return them but they'll be caught by the per-message compaction
+  return trimmed
+}
+
 export async function POST(request: Request) {
   try {
     const session = await auth()
@@ -41,7 +280,15 @@ export async function POST(request: Request) {
       .single()
 
     const { messages: rawMessages, brandId } = await request.json()
-    const messages = await convertToModelMessages(rawMessages)
+    const rawCount = Array.isArray(rawMessages) ? rawMessages.length : 0
+    const compactedRaw = compactMessagesForModel(rawMessages)
+    const trimmedRaw = trimMessages(compactedRaw as Record<string, unknown>[])
+
+    if (trimmedRaw.length < rawCount) {
+      console.log(`[chat] Trimmed conversation: ${rawCount} → ${trimmedRaw.length} messages (budget: ${MAX_MESSAGE_CHARS} chars)`)
+    }
+
+    const messages = await convertToModelMessages(trimmedRaw)
 
     // Fetch brand context
     let brandContext = ''
@@ -102,18 +349,41 @@ ${brandContext}
 - Analyze repo → generate images → create Remotion video with hero image
 
 ## Agent behavior:
-- Think step-by-step: analyze the request, gather context, then create
+- Use tools silently. Do NOT narrate each step (avoid "let me...", "now I will...", etc.)
 - Chain tools when needed (e.g., analyze repo → read key files → generate images → create video)
+- For repo exploration, prefer breadth first and keep reads tight: list dirs once, then read at most 3 high-signal files unless user asks for more depth
+- Use at most 5 tool calls per request unless the user explicitly asks for deeper analysis
 - Be direct and action-oriented — start creating immediately, don't ask "would you like me to..."
 - Reference specific repo features, code, and commits when creating marketing content
-- Describe generated images/videos briefly after they appear
+- When a tool call fails, recover internally (try alternate path) and mention only actionable outcomes in the final response
 
 ## Content quality:
 - Image prompts should be detailed, specifying style, composition, colors, mood
 - Use the brand's color scheme and identity in all generated content
-- Marketing content should be authentic and highlight real features`,
+- Marketing content should be authentic and highlight real features
+
+## Response format (required for marketing deliverables):
+Lead with final deliverables first, then optional explanation.
+When generating a marketing post, use this exact markdown shape so UI can render cards:
+
+## Marketing Post #<n>
+**Platform:** <platform>
+**Visual:** <short visual direction>
+**Copy:**
+\`\`\`
+<post copy text>
+\`\`\`
+
+### Why This Post Works
+- <bullet>
+- <bullet>
+
+If assets were generated, include:
+- **Asset options:** short label + direct URL list.
+
+Keep final response concise and avoid exposing raw tool/debug output.`,
       messages,
-      stopWhen: stepCountIs(8),
+      stopWhen: stepCountIs(6),
       tools: {
         generate_image: {
           description:
@@ -450,9 +720,10 @@ ${brandContext}
           }),
           execute: async ({ owner, repo }: { owner: string; repo: string }) => {
             try {
-              return await fetchGitHubRepoInfo(accessToken, owner, repo)
+              const raw = await fetchGitHubRepoInfo(accessToken, owner, repo)
+              return compactToolOutputForContext('analyze_repo', raw as Record<string, unknown>)
             } catch (error) {
-              return { error: String(error) }
+              return toToolError(error, `Unable to analyze ${owner}/${repo}`)
             }
           },
         },
@@ -466,9 +737,10 @@ ${brandContext}
           }),
           execute: async ({ owner, repo }: { owner: string; repo: string }) => {
             try {
-              return await fetchGitHubActivity(accessToken, owner, repo)
+              const raw = await fetchGitHubActivity(accessToken, owner, repo)
+              return compactToolOutputForContext('get_repo_activity', raw as Record<string, unknown>)
             } catch (error) {
-              return { error: String(error) }
+              return toToolError(error, `Unable to fetch recent activity for ${owner}/${repo}`)
             }
           },
         },
@@ -483,9 +755,13 @@ ${brandContext}
           }),
           execute: async ({ owner, repo, path }: { owner: string; repo: string; path: string }) => {
             try {
-              return await fetchGitHubFile(accessToken, owner, repo, path)
+              const raw = await fetchGitHubFile(accessToken, owner, repo, path)
+              return compactToolOutputForContext('read_repo_file', raw as Record<string, unknown>)
             } catch (error) {
-              return { error: String(error) }
+              return {
+                ...toToolError(error, `Unable to read ${path}`),
+                path,
+              }
             }
           },
         },

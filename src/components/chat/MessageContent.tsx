@@ -10,7 +10,7 @@ export function MessageContent({ content }: MessageContentProps) {
   const rendered = useMemo(() => {
     if (!content) return ''
     // Simple markdown-like parsing
-    let html = content
+    const html = content
       // Code blocks
       .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
       // Inline code

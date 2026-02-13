@@ -41,6 +41,7 @@ import {
 import { cn } from '@/lib/utils'
 import { MessageContent } from './MessageContent'
 import { ToolResult } from './ToolResult'
+import { PostCard, parseMarketingPost } from './PostCard'
 
 interface ChatProps {
   brandId?: string
@@ -138,6 +139,115 @@ function extractTextFromMessage(message: Record<string, unknown>) {
   }
 
   return text.trim()
+}
+
+function isToolPart(part: Record<string, unknown>) {
+  const type = typeof part.type === 'string' ? part.type : ''
+  return type === 'dynamic-tool' || type.startsWith('tool-')
+}
+
+function messageHasToolParts(message: Record<string, unknown>) {
+  const parts = Array.isArray(message.parts) ? (message.parts as Array<Record<string, unknown>>) : []
+  return parts.some((part) => part && typeof part === 'object' && isToolPart(part))
+}
+
+function sanitizeWorkingNarration(text: string) {
+  const compact = text
+    .split('\n')
+    .filter((line) => {
+      const value = line.trim()
+      if (!value) return true
+      return !/^(let me|now let me|i(?:'| wi)ll (?:start|analyze|read|check|review))/i.test(value)
+    })
+    .join('\n')
+    .trim()
+
+  return compact || text
+}
+
+function extractImageUrlsFromToolPart(part: Record<string, unknown>) {
+  const output = part.output
+  if (!output || typeof output !== 'object') return [] as string[]
+
+  const result = output as { images?: Array<{ url?: string }> }
+  if (!Array.isArray(result.images)) return [] as string[]
+
+  return result.images
+    .map((image) => (typeof image?.url === 'string' ? image.url : null))
+    .filter((url): url is string => Boolean(url))
+}
+
+function getToolNameFromPart(part: Record<string, unknown>) {
+  const rawType = typeof part.type === 'string' ? part.type : ''
+  if (rawType.startsWith('tool-')) return rawType.slice(5)
+  if (typeof part.toolName === 'string') return part.toolName
+  return ''
+}
+
+function buildAgentActivitySummary(toolParts: Array<Record<string, unknown>>) {
+  let repoName = ''
+  let analyzedRepo = false
+  let readFileCount = 0
+  let generatedImages = 0
+  let mergedPrs = 0
+
+  for (const part of toolParts) {
+    const toolName = getToolNameFromPart(part)
+    const output = part.output
+    const input = part.input
+    const result = output && typeof output === 'object' ? (output as Record<string, unknown>) : undefined
+    const args = input && typeof input === 'object' ? (input as Record<string, unknown>) : undefined
+    const hasError = Boolean(result && typeof result.error === 'string')
+    if (hasError) continue
+
+    if (toolName === 'analyze_repo' || toolName === 'analyze_github_repo') {
+      analyzedRepo = true
+      if (result && typeof result.fullName === 'string' && result.fullName) {
+        repoName = result.fullName
+      } else if (args && typeof args.owner === 'string' && typeof args.repo === 'string') {
+        repoName = `${args.owner}/${args.repo}`
+      }
+    }
+
+    if (toolName === 'get_repo_activity') {
+      const prCount = Array.isArray(result?.mergedPRs) ? result?.mergedPRs.length : 0
+      mergedPrs += prCount
+      if (!repoName && args && typeof args.owner === 'string' && typeof args.repo === 'string') {
+        repoName = `${args.owner}/${args.repo}`
+      }
+    }
+
+    if (toolName === 'read_repo_file') {
+      readFileCount += 1
+    }
+
+    if (toolName === 'generate_image' || toolName === 'edit_image') {
+      const imageCount = Array.isArray(result?.images) ? result.images.length : 0
+      generatedImages += imageCount
+    }
+  }
+
+  const parts: string[] = []
+
+  if (repoName) {
+    parts.push(`Crawled ${repoName}`)
+  } else if (analyzedRepo) {
+    parts.push('Analyzed repo')
+  }
+
+  if (readFileCount > 0) {
+    parts.push(`read ${readFileCount} file${readFileCount === 1 ? '' : 's'}`)
+  }
+
+  if (mergedPrs > 0) {
+    parts.push(`${mergedPrs} PR${mergedPrs === 1 ? '' : 's'}`)
+  }
+
+  if (generatedImages > 0) {
+    parts.push(`generated ${generatedImages} image${generatedImages === 1 ? '' : 's'}`)
+  }
+
+  return parts.slice(0, 3).join(' · ')
 }
 
 function normalizeLoadedMessages(rawMessages: unknown): UIMessage[] {
@@ -265,6 +375,7 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
   const [input, setInput] = useState('')
   const [isInputFocused, setIsInputFocused] = useState(false)
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const [showAgentWork, setShowAgentWork] = useState(false)
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [chatSearch, setChatSearch] = useState('')
@@ -606,6 +717,17 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
     return active?.title || 'Saved chat'
   }, [chats, currentChatId])
 
+  const hasAnyToolCalls = useMemo(
+    () => messages.some((message) => messageHasToolParts(message as unknown as Record<string, unknown>)),
+    [messages]
+  )
+
+  const rawErrorMessage = error?.message || ''
+  const isContextTooLongError = /input is too long|context length|token limit/i.test(rawErrorMessage)
+  const friendlyErrorMessage = isContextTooLongError
+    ? 'This conversation got too long for the model. Start a new chat or retry with a simpler request.'
+    : rawErrorMessage || 'Command failed.'
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isStreaming) return
@@ -710,20 +832,46 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
               onRunRepoCrawl={runRepoCrawlAction}
               onRunCampaign={runCampaignAction}
               hasConnectedRepo={Boolean(brandContext?.github_repo || repoReference.trim())}
+              recentChat={chats[0] || null}
+              onContinueChat={
+                chats[0]
+                  ? () => {
+                      void loadChat(chats[0].id)
+                    }
+                  : undefined
+              }
             />
           ) : (
             <div className="mx-auto max-w-4xl space-y-4 sm:space-y-6">
+              {hasAnyToolCalls && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setShowAgentWork((value) => !value)}
+                  >
+                    {showAgentWork ? 'Hide' : 'Show'} agent work
+                  </Button>
+                </div>
+              )}
+
               {messages.map((message, index) => (
                 <MessageBubble
                   key={message.id}
                   message={message as unknown as MessageBubbleProps['message']}
                   isLoading={isStreaming && index === messages.length - 1}
+                  showAgentWork={showAgentWork}
+                  onToggleAgentWork={() => setShowAgentWork((value) => !value)}
+                  onEditPrompt={handlePromptSelect}
                 />
               ))}
 
               {isStreaming && messages.length > 0 && messages[messages.length - 1]?.role === 'user' && (
                 <div className="flex items-start gap-3 animate-fade-in">
-                  <span className="mt-0.5 text-sm font-mono text-primary">▸</span>
+                  <span className="mt-0.5 flex h-6 min-w-6 items-center justify-center rounded border border-border bg-muted text-[10px] font-semibold text-primary">
+                    AI
+                  </span>
                   <div className="rounded-lg border border-border bg-muted px-4 py-3">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 size={14} className="animate-spin" />
@@ -751,13 +899,20 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
           <div className="mx-auto max-w-4xl">
             {error && (
               <div className="mb-3 flex items-center justify-between gap-2 rounded border border-destructive/30 bg-destructive/20 p-3 text-sm text-destructive">
-                <span className="text-xs font-mono">error: {error.message || 'command failed'}</span>
-                <button
-                  onClick={() => regenerate()}
-                  className="flex items-center gap-1 text-xs transition-colors hover:text-destructive/80"
-                >
-                  <RefreshCw size={12} /> retry
-                </button>
+                <span className="text-xs">{friendlyErrorMessage}</span>
+                <div className="flex items-center gap-2">
+                  {isContextTooLongError && (
+                    <Button variant="outline" size="xs" onClick={startNewChat}>
+                      Start new chat
+                    </Button>
+                  )}
+                  <button
+                    onClick={() => regenerate()}
+                    className="flex items-center gap-1 text-xs transition-colors hover:text-destructive/80"
+                  >
+                    <RefreshCw size={12} /> retry
+                  </button>
+                </div>
               </div>
             )}
 
@@ -854,12 +1009,30 @@ function ChatSidebar({
 }: ChatSidebarProps) {
   const [isEditingRepo, setIsEditingRepo] = useState(false)
   const [repoDraft, setRepoDraft] = useState(repoReference)
+  const [showSyncStatus, setShowSyncStatus] = useState(false)
+  const wasSavingRef = useRef(false)
 
   useEffect(() => {
     if (!isEditingRepo) {
       setRepoDraft(repoReference)
     }
   }, [repoReference, isEditingRepo])
+
+  useEffect(() => {
+    let timer: number | null = null
+
+    if (isSavingChat) {
+      setShowSyncStatus(true)
+    } else if (wasSavingRef.current) {
+      timer = window.setTimeout(() => setShowSyncStatus(false), 1400)
+    }
+
+    wasSavingRef.current = isSavingChat
+
+    return () => {
+      if (timer) window.clearTimeout(timer)
+    }
+  }, [isSavingChat])
 
   const activeRepo = repoReference.trim() || connectedRepo || ''
 
@@ -920,27 +1093,29 @@ function ChatSidebar({
                   currentChatId === chat.id && 'border-primary/40 bg-primary/10'
                 )}
               >
-                <button
-                  onClick={() => {
-                    onLoadChat(chat.id)
-                    onCloseMobile()
-                  }}
-                  className="w-full px-2.5 py-1.5 text-left"
-                >
-                  <p className="truncate text-xs">{chat.title || 'Untitled Chat'}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {new Date(chat.updated_at).toLocaleDateString()}
-                  </p>
-                </button>
-                <div className="-mt-6 mr-1 flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex items-start gap-1 px-1 py-1">
+                  <button
+                    onClick={() => {
+                      onLoadChat(chat.id)
+                      onCloseMobile()
+                    }}
+                    className="flex-1 rounded px-1.5 py-1 text-left hover:bg-muted/40"
+                    title={chat.title || 'Untitled Chat'}
+                  >
+                    <p className="truncate text-xs">{chat.title || 'Untitled Chat'}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {new Date(chat.updated_at).toLocaleDateString()}
+                    </p>
+                  </button>
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    className="mt-1 h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                     onClick={(e) => {
                       e.stopPropagation()
                       void onDeleteChat(chat.id)
                     }}
+                    title="Delete chat"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -1026,9 +1201,11 @@ function ChatSidebar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="px-1 text-[10px] text-muted-foreground">
-          Chat sync {isSavingChat ? 'saving...' : 'saved'}
-        </div>
+        {showSyncStatus && (
+          <div className="px-1 text-[10px] text-muted-foreground">
+            Chat sync {isSavingChat ? 'saving...' : 'saved'}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1043,9 +1220,12 @@ interface MessageBubbleProps {
     parts: Array<Record<string, unknown>>
   }
   isLoading: boolean
+  showAgentWork: boolean
+  onToggleAgentWork: () => void
+  onEditPrompt: (prompt: string) => void
 }
 
-function MessageBubble({ message, isLoading }: MessageBubbleProps) {
+function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, onEditPrompt }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false)
   const isUser = message.role === 'user'
 
@@ -1076,8 +1256,18 @@ function MessageBubble({ message, isLoading }: MessageBubbleProps) {
     renderBlocks.push({ type: 'text', content: currentText.trim() })
   }
 
+  const toolBlocks = renderBlocks.filter((block) => block.type === 'tool') as Array<{ type: 'tool'; part: Record<string, unknown> }>
+  const textBlocks = renderBlocks.filter((block) => block.type === 'text') as Array<{ type: 'text'; content: string }>
   const hasContent = renderBlocks.length > 0
-  const fullText = renderBlocks
+  const rawText = textBlocks.map((block) => block.content).join('\n').trim()
+  const fullText = isUser ? rawText : sanitizeWorkingNarration(rawText)
+  const toolImageUrls = toolBlocks.flatMap((block) => extractImageUrlsFromToolPart(block.part))
+  const hasTools = !isUser && toolBlocks.length > 0
+  const parsedPost = !isUser ? parseMarketingPost(fullText) : null
+  const activitySummary = hasTools ? buildAgentActivitySummary(toolBlocks.map((block) => block.part)) : ''
+  const stepLabel = `${toolBlocks.length} step${toolBlocks.length === 1 ? '' : 's'}`
+
+  const fallbackText = renderBlocks
     .filter((b) => b.type === 'text')
     .map((b) => (b as { type: 'text'; content: string }).content)
     .join('\n')
@@ -1086,48 +1276,73 @@ function MessageBubble({ message, isLoading }: MessageBubbleProps) {
   if (!hasContent && !isLoading) return null
 
   const handleCopy = async () => {
-    if (!fullText) return
-    await navigator.clipboard.writeText(fullText)
+    if (!fallbackText) return
+    await navigator.clipboard.writeText(fallbackText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   return (
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
-      <span className={`mt-0.5 flex-shrink-0 text-sm font-mono ${isUser ? 'text-yellow-500' : 'text-primary'}`}>
-        {isUser ? '$' : '▸'}
+      <span
+        className={`mt-0.5 flex h-6 min-w-6 items-center justify-center rounded border text-[10px] font-semibold ${
+          isUser ? 'border-primary/40 bg-primary/15 text-yellow-400' : 'border-border bg-muted text-primary'
+        }`}
+      >
+        {isUser ? '$' : 'AI'}
       </span>
 
       <div className={`flex-1 max-w-[90%] ${isUser ? 'flex flex-col items-end' : ''} space-y-3`}>
-        {renderBlocks.map((block, i) => {
-          if (block.type === 'text') {
-            return (
-              <div
-                key={`text-${i}`}
-                className={`group relative rounded-lg px-4 py-3 ${
-                  isUser ? 'border border-primary/30 bg-primary/20' : 'border border-border bg-muted'
-                }`}
+        {fullText && (
+          <div
+            className={`group relative rounded-lg px-4 py-3 ${
+              isUser ? 'border border-primary/30 bg-primary/20' : 'border border-border bg-muted'
+            }`}
+          >
+            {!isUser && parsedPost && <PostCard content={fullText} imageUrls={toolImageUrls} onEdit={onEditPrompt} />}
+            {isUser || !parsedPost ? <MessageContent content={fullText} /> : null}
+
+            {!isUser && !isLoading && (
+              <button
+                onClick={handleCopy}
+                className="absolute -right-8 top-2 hidden rounded p-1 opacity-0 transition-all hover:bg-muted sm:block group-hover:opacity-100"
               >
-                <MessageContent content={block.content} />
-
-                {!isUser && !isLoading && i === renderBlocks.length - 1 && (
-                  <button
-                    onClick={handleCopy}
-                    className="absolute -right-8 top-2 hidden rounded p-1 opacity-0 transition-all hover:bg-muted sm:block group-hover:opacity-100"
-                  >
-                    {copied ? (
-                      <Check size={12} className="text-primary" />
-                    ) : (
-                      <Copy size={12} className="text-muted-foreground" />
-                    )}
-                  </button>
+                {copied ? (
+                  <Check size={12} className="text-primary" />
+                ) : (
+                  <Copy size={12} className="text-muted-foreground" />
                 )}
-              </div>
-            )
-          }
+              </button>
+            )}
+          </div>
+        )}
 
-          return <ToolResult key={String(block.part.toolCallId) || `tool-${i}`} tool={block.part} />
-        })}
+        {hasTools && (
+          <div className="overflow-hidden rounded-lg border border-border/60 bg-card/40">
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {isLoading ? <Loader2 size={12} className="animate-spin text-primary" /> : <Check size={12} className="text-primary" />}
+                <span>Agent activity</span>
+                <span>({stepLabel})</span>
+                {activitySummary && <span className="truncate text-[11px] text-muted-foreground">· {activitySummary}</span>}
+              </div>
+              <Button variant="ghost" size="xs" className="h-6 px-2 text-[11px]" onClick={onToggleAgentWork}>
+                {showAgentWork ? 'Hide' : 'Show'} work
+              </Button>
+            </div>
+            {showAgentWork && (
+              <div className="space-y-2 border-t border-border/60 p-2.5">
+                {toolBlocks.map((block, i) => (
+                  <ToolResult
+                    key={String(block.part.toolCallId) || `tool-${i}`}
+                    tool={block.part}
+                    defaultExpanded={isLoading}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Streaming indicator for assistant with tools running */}
         {isLoading && !isUser && !hasContent && (
@@ -1151,9 +1366,19 @@ interface EmptyStateProps {
   onRunRepoCrawl: () => void
   onRunCampaign: () => void
   hasConnectedRepo: boolean
+  recentChat?: PersistedChat | null
+  onContinueChat?: () => void
 }
 
-function EmptyState({ brandName, onPromptSelect, onRunRepoCrawl, onRunCampaign, hasConnectedRepo }: EmptyStateProps) {
+function EmptyState({
+  brandName,
+  onPromptSelect,
+  onRunRepoCrawl,
+  onRunCampaign,
+  hasConnectedRepo,
+  recentChat,
+  onContinueChat,
+}: EmptyStateProps) {
   const primaryActionLabel = hasConnectedRepo ? 'Crawl connected repo' : 'Run full campaign'
   const primaryAction = hasConnectedRepo ? onRunRepoCrawl : onRunCampaign
   const PrimaryActionIcon = hasConnectedRepo ? Github : Zap
@@ -1180,6 +1405,16 @@ function EmptyState({ brandName, onPromptSelect, onRunRepoCrawl, onRunCampaign, 
         {primaryActionLabel}
       </Button>
 
+      {recentChat && onContinueChat && (
+        <button
+          onClick={onContinueChat}
+          className="mb-4 max-w-xl truncate rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          title={recentChat.title}
+        >
+          Continue last chat: {recentChat.title || 'Untitled Chat'}
+        </button>
+      )}
+
       <div className="grid w-full max-w-3xl grid-cols-1 gap-2 md:grid-cols-3">
         {quickPrompts.map((prompt) => (
           <button
@@ -1197,6 +1432,11 @@ function EmptyState({ brandName, onPromptSelect, onRunRepoCrawl, onRunCampaign, 
               <div className="min-w-0">
                 <div className="text-sm transition-colors group-hover:text-primary">{prompt.title}</div>
                 <div className="text-xs text-muted-foreground">{prompt.desc}</div>
+                {recentChat && (
+                  <div className="mt-1 truncate text-[10px] text-muted-foreground/90" title={recentChat.title}>
+                    Recent example: {recentChat.title}
+                  </div>
+                )}
               </div>
             </div>
           </button>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Image,
   Video,
@@ -21,22 +21,13 @@ import {
   GitCommit,
   Play,
   Check,
+  AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-// v6 tool part from UIMessage.parts (DynamicToolUIPart)
-interface ToolPart {
-  type: string
-  toolName: string
-  toolCallId: string
-  state: string // 'input-streaming' | 'input-available' | 'output-available' | 'error' | etc.
-  input?: unknown
-  output?: unknown
-  errorText?: string
-}
-
 interface ToolResultProps {
   tool: Record<string, unknown>
+  defaultExpanded?: boolean
 }
 
 function getToolMeta(toolName: string) {
@@ -56,30 +47,87 @@ function getToolMeta(toolName: string) {
   return meta[toolName] || { icon: Zap, color: 'hsl(var(--muted-foreground))', label: toolName, cmd: 'tool' }
 }
 
-export function ToolResult({ tool: rawTool }: ToolResultProps) {
-  const [expanded, setExpanded] = useState(true)
+function getResultSummary(toolName: string, result: Record<string, unknown> | undefined) {
+  if (!result) return null
 
-  // Normalize v6 tool part — typed tools have type "tool-{name}", dynamic tools have toolName
+  if (toolName === 'read_repo_file') {
+    const path = typeof result.path === 'string' ? result.path : 'file'
+    const entries = Array.isArray(result.entries) ? result.entries : null
+    const content = typeof result.content === 'string' ? result.content : ''
+    if (entries) return `${path}/ — ${entries.length} items`
+    const lines = content ? content.split('\n').length : 0
+    return `${path} — ${lines} lines read`
+  }
+
+  if (toolName === 'analyze_repo' || toolName === 'analyze_github_repo') {
+    const fullName = typeof result.fullName === 'string' ? result.fullName : ''
+    const language = typeof result.language === 'string' ? result.language : ''
+    return [fullName, language].filter(Boolean).join(' • ')
+  }
+
+  if (toolName === 'get_repo_activity') {
+    const prs = Array.isArray(result.mergedPRs) ? result.mergedPRs.length : 0
+    const commits = Array.isArray(result.recentCommits) ? result.recentCommits.length : 0
+    return `${prs} PRs • ${commits} commits`
+  }
+
+  if (toolName === 'generate_image' || toolName === 'edit_image') {
+    const images = Array.isArray(result.images) ? result.images.length : 0
+    return `${images} image${images === 1 ? '' : 's'}`
+  }
+
+  return null
+}
+
+function readErrorMessage(output: Record<string, unknown> | undefined, fallback?: string) {
+  if (fallback) return fallback
+  if (!output) return undefined
+  return typeof output.error === 'string' ? output.error : undefined
+}
+
+export function ToolResult({ tool: rawTool, defaultExpanded = false }: ToolResultProps) {
   const rawType = String(rawTool.type || '')
   const toolName = rawType.startsWith('tool-')
     ? rawType.slice(5) // "tool-analyze_repo" → "analyze_repo"
     : String(rawTool.toolName || '')
-  const toolCallId = String(rawTool.toolCallId || '')
   const state = String(rawTool.state || '')
   const input = rawTool.input as Record<string, unknown> | undefined
   const output = rawTool.output as Record<string, unknown> | undefined
 
-  const { icon: Icon, color, label, cmd } = getToolMeta(toolName)
   const isLoading = state === 'input-streaming' || state === 'input-available'
+  const [expanded, setExpanded] = useState(isLoading || defaultExpanded)
+  const [userToggled, setUserToggled] = useState(false)
+
+  useEffect(() => {
+    if (!userToggled) {
+      setExpanded(isLoading || defaultExpanded)
+    }
+  }, [isLoading, defaultExpanded, userToggled])
+
+  const { icon: Icon, color, label, cmd } = getToolMeta(toolName)
   const result = output
+  const errorMessage = readErrorMessage(output, typeof rawTool.errorText === 'string' ? rawTool.errorText : undefined)
+
+  if (!isLoading && errorMessage) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-200">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{label}: {errorMessage.replace(/^Error:\s*/i, '')}</span>
+      </div>
+    )
+  }
 
   // Show loading args while tool is executing
   const loadingLabel = isLoading && input ? getLoadingDescription(toolName, input) : null
+  const resultSummary = !isLoading ? getResultSummary(toolName, result) : null
 
   return (
     <div className="rounded-lg bg-card/50 border border-border overflow-hidden">
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          setUserToggled(true)
+          setExpanded((value) => !value)
+        }}
         className="w-full flex items-center justify-between p-2.5 sm:p-3 hover:bg-muted/50 transition-colors min-h-[44px]"
       >
         <div className="flex items-center gap-2.5">
@@ -98,6 +146,9 @@ export function ToolResult({ tool: rawTool }: ToolResultProps) {
             <span className="ml-2 text-xs text-muted-foreground font-mono">{cmd}</span>
             {loadingLabel && (
               <span className="ml-2 text-xs text-muted-foreground">{loadingLabel}</span>
+            )}
+            {resultSummary && (
+              <span className="ml-2 text-xs text-muted-foreground">{resultSummary}</span>
             )}
           </div>
         </div>
@@ -162,6 +213,7 @@ function getLoadingDescription(toolName: string, args: Record<string, unknown>):
 // ── Image Result ──────────────────────────────────────────────
 
 function ImageResult({ result }: { result: Record<string, unknown> }) {
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const images = (result.images as Array<{ url: string }>) || []
   const error = result.error as string | undefined
   const prompt = result.prompt as string | undefined
@@ -174,18 +226,45 @@ function ImageResult({ result }: { result: Record<string, unknown> }) {
       {prompt && <p className="text-xs text-muted-foreground mb-3 font-mono line-clamp-2"># {prompt}</p>}
       <div className={`grid gap-3 ${images.length === 1 ? 'grid-cols-1 max-w-md' : 'grid-cols-2'}`}>
         {images.map((img, i) => (
-          <div key={i} className="relative group rounded-lg overflow-hidden border border-border bg-muted">
+          <div
+            key={i}
+            className={`relative group overflow-hidden rounded-lg border bg-muted transition-all ${
+              selectedIndex === i ? 'border-primary ring-1 ring-primary/40' : 'border-border'
+            }`}
+          >
             <img
               src={img.url}
               alt={`Generated ${i + 1}`}
               className="w-full aspect-square object-cover"
               loading="lazy"
+              onClick={() => setSelectedIndex(i)}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center gap-2 p-3">
-              <a href={img.url} download={`mrkt-${i + 1}.png`} className="p-2 rounded bg-white/20 hover:bg-white/30 transition-colors">
+            <div className="absolute left-2 top-2 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
+              {selectedIndex === i ? 'Selected' : `Option ${i + 1}`}
+            </div>
+            <div className="absolute inset-0 flex items-end justify-center gap-2 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                onClick={() => setSelectedIndex(i)}
+                className="rounded bg-white/20 p-2 transition-colors hover:bg-white/30"
+                title="Select image"
+              >
+                <Check size={14} className="text-white" />
+              </button>
+              <a
+                href={img.url}
+                download={`mrkt-${i + 1}.png`}
+                className="rounded bg-white/20 p-2 transition-colors hover:bg-white/30"
+                title="Download image"
+              >
                 <Download size={14} className="text-white" />
               </a>
-              <a href={img.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded bg-white/20 hover:bg-white/30 transition-colors">
+              <a
+                href={img.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded bg-white/20 p-2 transition-colors hover:bg-white/30"
+                title="Open in new tab"
+              >
                 <ExternalLink size={14} className="text-white" />
               </a>
             </div>
@@ -343,6 +422,7 @@ function RemotionVideoResult({ result }: { result: Record<string, unknown> }) {
 // ── Repo Analysis Result ──────────────────────────────────────
 
 function RepoResult({ result }: { result: Record<string, unknown> }) {
+  const [showDetails, setShowDetails] = useState(false)
   const [showReadme, setShowReadme] = useState(false)
   const error = result.error as string | undefined
   if (error) return <ErrorDisplay error={error} />
@@ -362,85 +442,106 @@ function RepoResult({ result }: { result: Record<string, unknown> }) {
 
   return (
     <div className="space-y-3">
-      {/* Repo header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <Github size={14} className="flex-shrink-0" />
             <span className="font-medium text-sm">{fullName || name}</span>
           </div>
-          {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
-          {homepage && (
-            <a href={homepage} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-block">
-              {homepage}
-            </a>
-          )}
+          {description && <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{description}</p>}
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+            {language && (
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-primary" />
+                {language}
+              </span>
+            )}
+            {stars !== undefined && (
+              <span className="flex items-center gap-1">
+                <Star size={11} className="text-yellow-500" />
+                {stars.toLocaleString()}
+              </span>
+            )}
+            {forks !== undefined && (
+              <span className="flex items-center gap-1">
+                <GitFork size={11} />
+                {forks.toLocaleString()}
+              </span>
+            )}
+            {watchers !== undefined && (
+              <span className="flex items-center gap-1">
+                <Eye size={11} />
+                {watchers.toLocaleString()}
+              </span>
+            )}
+          </div>
         </div>
         {url && (
-          <a href={url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded hover:bg-muted transition-colors flex-shrink-0">
+          <a href={url} target="_blank" rel="noopener noreferrer" className="rounded p-1.5 transition-colors hover:bg-muted">
             <ExternalLink size={12} className="text-muted-foreground" />
           </a>
         )}
       </div>
 
-      {/* Stats */}
-      <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground">
-        {stars !== undefined && (
-          <span className="flex items-center gap-1"><Star size={11} className="text-yellow-500" />{stars.toLocaleString()}</span>
-        )}
-        {forks !== undefined && (
-          <span className="flex items-center gap-1"><GitFork size={11} />{forks.toLocaleString()}</span>
-        )}
-        {watchers !== undefined && (
-          <span className="flex items-center gap-1"><Eye size={11} />{watchers.toLocaleString()}</span>
-        )}
-        {language && (
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" />{language}</span>
-        )}
-      </div>
+      <button
+        onClick={() => setShowDetails((value) => !value)}
+        className="flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {showDetails ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        {showDetails ? 'Hide details' : 'View details'}
+      </button>
 
-      {/* Topics */}
-      {topics && topics.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {topics.slice(0, 10).map((topic) => (
-            <span key={topic} className="px-1.5 py-0.5 text-[10px] rounded bg-muted text-muted-foreground border border-border">
-              {topic}
-            </span>
-          ))}
-        </div>
-      )}
+      {showDetails && (
+        <div className="space-y-3 rounded-md border border-border/50 bg-background/40 p-3">
+          {homepage && (
+            <a href={homepage} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+              {homepage}
+            </a>
+          )}
 
-      {/* Package.json deps */}
-      {packageJson?.dependencies && packageJson.dependencies.length > 0 && (
-        <div>
-          <p className="text-[10px] text-muted-foreground font-mono mb-1"># dependencies ({packageJson.dependencies.length})</p>
-          <div className="flex flex-wrap gap-1">
-            {packageJson.dependencies.slice(0, 15).map((dep) => (
-              <span key={dep} className="px-1.5 py-0.5 text-[10px] rounded bg-primary/10 text-primary border border-primary/20 font-mono">
-                {dep}
-              </span>
-            ))}
-            {packageJson.dependencies.length > 15 && (
-              <span className="text-[10px] text-muted-foreground">+{packageJson.dependencies.length - 15} more</span>
-            )}
-          </div>
-        </div>
-      )}
+          {topics && topics.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {topics.slice(0, 10).map((topic) => (
+                <span key={topic} className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {topic}
+                </span>
+              ))}
+            </div>
+          )}
 
-      {/* README preview */}
-      {readme && (
-        <div>
-          <button
-            onClick={() => setShowReadme(!showReadme)}
-            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground font-mono"
-          >
-            {showReadme ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-            README.md
-          </button>
-          {showReadme && (
-            <pre className="mt-2 p-3 rounded bg-background border border-border text-[10px] text-muted-foreground overflow-auto max-h-[300px] whitespace-pre-wrap">
-              {readme}
-            </pre>
+          {packageJson?.dependencies && packageJson.dependencies.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] font-mono text-muted-foreground">
+                dependencies ({packageJson.dependencies.length})
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {packageJson.dependencies.slice(0, 12).map((dep) => (
+                  <span key={dep} className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
+                    {dep}
+                  </span>
+                ))}
+                {packageJson.dependencies.length > 12 && (
+                  <span className="text-[10px] text-muted-foreground">+{packageJson.dependencies.length - 12} more</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {readme && (
+            <div>
+              <button
+                onClick={() => setShowReadme((value) => !value)}
+                className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {showReadme ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                README.md
+              </button>
+              {showReadme && (
+                <pre className="mt-2 max-h-[240px] overflow-auto whitespace-pre-wrap rounded border border-border bg-background p-3 text-[10px] text-muted-foreground">
+                  {readme}
+                </pre>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -451,6 +552,7 @@ function RepoResult({ result }: { result: Record<string, unknown> }) {
 // ── Activity Result ───────────────────────────────────────────
 
 function ActivityResult({ result }: { result: Record<string, unknown> }) {
+  const [showDetails, setShowDetails] = useState(false)
   const error = result.error as string | undefined
   if (error) return <ErrorDisplay error={error} />
 
@@ -459,9 +561,24 @@ function ActivityResult({ result }: { result: Record<string, unknown> }) {
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <span>{mergedPRs.length} merged PRs</span>
+        <span>{recentCommits.length} recent commits</span>
+      </div>
+
+      <button
+        onClick={() => setShowDetails((value) => !value)}
+        className="flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {showDetails ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        {showDetails ? 'Hide details' : 'View details'}
+      </button>
+
+      {showDetails && (
+        <div className="space-y-3 rounded-md border border-border/50 bg-background/40 p-3">
       {mergedPRs.length > 0 && (
         <div>
-          <p className="text-[10px] text-muted-foreground font-mono mb-2"># merged PRs ({mergedPRs.length})</p>
+          <p className="text-[10px] text-muted-foreground font-mono mb-2">merged PRs ({mergedPRs.length})</p>
           <div className="space-y-1.5">
             {mergedPRs.map((pr) => (
               <div key={pr.number} className="flex items-start gap-2 text-xs">
@@ -480,7 +597,7 @@ function ActivityResult({ result }: { result: Record<string, unknown> }) {
 
       {recentCommits.length > 0 && (
         <div>
-          <p className="text-[10px] text-muted-foreground font-mono mb-2"># recent commits ({recentCommits.length})</p>
+          <p className="text-[10px] text-muted-foreground font-mono mb-2">recent commits ({recentCommits.length})</p>
           <div className="space-y-1.5">
             {recentCommits.slice(0, 7).map((commit) => (
               <div key={commit.sha} className="flex items-start gap-2 text-xs">
@@ -496,7 +613,9 @@ function ActivityResult({ result }: { result: Record<string, unknown> }) {
       )}
 
       {mergedPRs.length === 0 && recentCommits.length === 0 && (
-        <p className="text-xs text-muted-foreground"># no recent activity found</p>
+        <p className="text-xs text-muted-foreground">No recent activity found.</p>
+      )}
+        </div>
       )}
     </div>
   )
@@ -505,7 +624,7 @@ function ActivityResult({ result }: { result: Record<string, unknown> }) {
 // ── File/Directory Result ─────────────────────────────────────
 
 function FileResult({ result }: { result: Record<string, unknown> }) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
   const error = result.error as string | undefined
   if (error) return <ErrorDisplay error={error} />
 
@@ -517,37 +636,46 @@ function FileResult({ result }: { result: Record<string, unknown> }) {
   if (entries) {
     return (
       <div>
-        <div className="flex items-center gap-2 mb-2">
+        <button
+          onClick={() => setExpanded((value) => !value)}
+          className="mb-2 flex items-center gap-2 text-left transition-colors hover:text-primary"
+        >
           <FolderOpen size={12} className="text-primary" />
           <span className="text-xs font-mono">{path}/</span>
-          <span className="text-[10px] text-muted-foreground">({entries.length} items)</span>
-        </div>
-        <div className="grid grid-cols-2 gap-1">
-          {entries.map((entry) => (
-            <div key={entry.path} className="flex items-center gap-1.5 text-[11px] p-1 rounded hover:bg-muted/50">
-              {entry.type === 'dir' ? (
-                <FolderOpen size={10} className="text-primary flex-shrink-0" />
-              ) : (
-                <FileCode size={10} className="text-muted-foreground flex-shrink-0" />
-              )}
-              <span className="truncate font-mono">{entry.name}</span>
-            </div>
-          ))}
-        </div>
+          <span className="text-[10px] text-muted-foreground">{entries.length} items</span>
+          {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+        </button>
+        {expanded && (
+          <div className="grid grid-cols-2 gap-1">
+            {entries.map((entry) => (
+              <div key={entry.path} className="flex items-center gap-1.5 rounded p-1 text-[11px] hover:bg-muted/50">
+                {entry.type === 'dir' ? (
+                  <FolderOpen size={10} className="text-primary flex-shrink-0" />
+                ) : (
+                  <FileCode size={10} className="text-muted-foreground flex-shrink-0" />
+                )}
+                <span className="truncate font-mono">{entry.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
 
   // File content
   if (content) {
+    const lineCount = content.split('\n').length
+
     return (
       <div>
         <button
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => setExpanded((value) => !value)}
           className="flex items-center gap-2 mb-2 hover:text-primary transition-colors"
         >
           <FileCode size={12} />
           <span className="text-xs font-mono">{path}</span>
+          <span className="text-[10px] text-muted-foreground">{lineCount} lines read</span>
           {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
         </button>
         {expanded && (
