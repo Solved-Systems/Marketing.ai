@@ -14,6 +14,8 @@ import {
   Check,
   RefreshCw,
   ChevronDown,
+  ExternalLink,
+  Download,
   Loader2,
   Square,
   Plus,
@@ -162,7 +164,15 @@ function sanitizeWorkingNarration(text: string) {
     .join('\n')
     .trim()
 
-  return compact || text
+  const withoutStatusLinks = (compact || text)
+    // Remove markdown links that only provide a status-check action.
+    .replace(/\[check video status\]\([^)]+\)/gi, '')
+    // Remove plain lines that only say "Check Video Status".
+    .replace(/^\s*check video status\s*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return withoutStatusLinks || compact || text
 }
 
 function extractImageUrlsFromToolPart(part: Record<string, unknown>) {
@@ -175,6 +185,123 @@ function extractImageUrlsFromToolPart(part: Record<string, unknown>) {
   return result.images
     .map((image) => (typeof image?.url === 'string' ? image.url : null))
     .filter((url): url is string => Boolean(url))
+}
+
+function extractVideoUrlsFromToolPart(part: Record<string, unknown>) {
+  const output = part.output
+  if (!output || typeof output !== 'object') return [] as string[]
+  const result = output as Record<string, unknown>
+  const urls: string[] = []
+
+  if (typeof result.outputUrl === 'string' && result.outputUrl) urls.push(result.outputUrl)
+  if (typeof result.videoUrl === 'string' && result.videoUrl) urls.push(result.videoUrl)
+
+  if (Array.isArray(result.videos)) {
+    for (const video of result.videos) {
+      if (!video || typeof video !== 'object') continue
+      const candidate = video as Record<string, unknown>
+      if (typeof candidate.url === 'string' && candidate.url) urls.push(candidate.url)
+      if (typeof candidate.outputUrl === 'string' && candidate.outputUrl) urls.push(candidate.outputUrl)
+    }
+  }
+
+  return urls
+}
+
+function extractVideoIdsFromToolPart(part: Record<string, unknown>) {
+  const output = part.output
+  if (!output || typeof output !== 'object') return [] as string[]
+  const result = output as Record<string, unknown>
+  const ids: string[] = []
+
+  if (typeof result.videoId === 'string' && result.videoId) ids.push(result.videoId)
+  if (Array.isArray(result.videoIds)) {
+    for (const value of result.videoIds) {
+      if (typeof value === 'string' && value) ids.push(value)
+    }
+  }
+
+  return ids
+}
+
+function extractRequestIdsFromToolPart(part: Record<string, unknown>) {
+  const output = part.output
+  if (!output || typeof output !== 'object') return [] as string[]
+  const result = output as Record<string, unknown>
+  const ids: string[] = []
+
+  if (typeof result.requestId === 'string' && result.requestId) ids.push(result.requestId)
+  if (Array.isArray(result.requestIds)) {
+    for (const value of result.requestIds) {
+      if (typeof value === 'string' && value) ids.push(value)
+    }
+  }
+
+  return ids
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>()
+  const next: string[] = []
+  for (const value of values) {
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    next.push(value)
+  }
+  return next
+}
+
+function buildAssetPreviewMarkdown(params: {
+  messageText: string
+  imageUrls: string[]
+  videoUrls: string[]
+  videoIds: string[]
+  requestIds: string[]
+}) {
+  const { messageText, imageUrls, videoUrls, videoIds, requestIds } = params
+  const existingText = messageText || ''
+
+  const freshImages = uniqueStrings(imageUrls).filter((url) => !existingText.includes(url))
+  const freshVideoUrls = uniqueStrings(videoUrls).filter((url) => !existingText.includes(url))
+  const freshVideoIds = uniqueStrings(videoIds).filter((id) => !existingText.includes(id))
+  const freshRequestIds = uniqueStrings(requestIds).filter((id) => !existingText.includes(id))
+
+  if (
+    freshImages.length === 0 &&
+    freshVideoUrls.length === 0 &&
+    freshVideoIds.length === 0 &&
+    freshRequestIds.length === 0
+  ) {
+    return ''
+  }
+
+  const lines: string[] = ['### Asset Previews']
+
+  if (freshImages.length > 0) {
+    lines.push('', '#### Images')
+    freshImages.forEach((url, index) => {
+      lines.push(`![Generated image ${index + 1}](${url})`)
+    })
+  }
+
+  if (freshVideoUrls.length > 0) {
+    lines.push('', '#### Videos')
+    freshVideoUrls.forEach((url, index) => {
+      lines.push(`- [Video ${index + 1}](${url})`)
+    })
+  }
+
+  if (freshVideoIds.length > 0 || freshRequestIds.length > 0) {
+    lines.push('', '#### Video IDs')
+    freshVideoIds.forEach((id) => {
+      lines.push(`- [${id}](/video-studio?videoId=${encodeURIComponent(id)})`)
+    })
+    freshRequestIds.forEach((id) => {
+      lines.push(`- [request:${id}](/video-studio?requestId=${encodeURIComponent(id)})`)
+    })
+  }
+
+  return lines.join('\n')
 }
 
 interface RemotionLiveState {
@@ -1317,6 +1444,7 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, onEditPrompt }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false)
+  const [selectedShowcaseImage, setSelectedShowcaseImage] = useState(0)
   const [liveRemotionByVideoId, setLiveRemotionByVideoId] = useState<Record<string, RemotionLiveState>>({})
   const liveRemotionRef = useRef<Record<string, RemotionLiveState>>({})
   const isUser = message.role === 'user'
@@ -1518,6 +1646,8 @@ function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, o
   const rawText = textBlocks.map((block) => block.content).join('\n').trim()
   const fullText = isUser ? rawText : sanitizeWorkingNarration(rawText)
   const toolImageUrls = toolBlocks.flatMap((block) => extractImageUrlsFromToolPart(block.part))
+  const toolVideoIds = toolBlocks.flatMap((block) => extractVideoIdsFromToolPart(block.part))
+  const toolRequestIds = toolBlocks.flatMap((block) => extractRequestIdsFromToolPart(block.part))
   const hasTools = !isUser && toolBlocks.length > 0
   const parsedPost = !isUser ? parseMarketingPost(fullText) : null
   const activitySummary = hasTools ? buildAgentActivitySummary(toolBlocks.map((block) => block.part), liveRemotionByVideoId) : ''
@@ -1527,21 +1657,63 @@ function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, o
     .filter((value): value is NonNullable<typeof value> => Boolean(value))
   const activeRemotion = remotionStatuses.find((status) => status.status === 'rendering')
   const hasActiveRender = Boolean(activeRemotion)
-  const activeRenderLabel = hasActiveRender
-    ? `Rendering video${typeof activeRemotion.progress === 'number' ? `... ${Math.round(activeRemotion.progress)}%` : '...'}`
+  const completedRemotion = remotionStatuses.find((status) => status.status === 'completed' && Boolean(status.outputUrl))
+  const nonRemotionCompletedVideoUrl =
+    toolBlocks
+      .map((block) => {
+        const output = block.part.output
+        if (!output || typeof output !== 'object') return ''
+        return typeof (output as Record<string, unknown>).outputUrl === 'string'
+          ? ((output as Record<string, unknown>).outputUrl as string)
+          : ''
+      })
+      .find(Boolean) || ''
+  const completedVideoUrl = completedRemotion?.outputUrl || nonRemotionCompletedVideoUrl
+  const showcaseImageUrls = Array.from(new Set(toolImageUrls))
+  const remotionVideoUrls = remotionStatuses
+    .map((status) => (typeof status.outputUrl === 'string' ? status.outputUrl : ''))
+    .filter(Boolean)
+  const toolVideoUrls = uniqueStrings([...toolBlocks.flatMap((block) => extractVideoUrlsFromToolPart(block.part)), ...remotionVideoUrls])
+  const remotionVideoIds = remotionStatuses
+    .map((status) => (typeof status.videoId === 'string' ? status.videoId : ''))
+    .filter(Boolean)
+  const assetPreviewMarkdown = !isUser
+    ? buildAssetPreviewMarkdown({
+        messageText: fullText,
+        imageUrls: showcaseImageUrls,
+        videoUrls: toolVideoUrls,
+        videoIds: [...toolVideoIds, ...remotionVideoIds],
+        requestIds: toolRequestIds,
+      })
     : ''
+  const textWithAssetPreviews = !isUser && assetPreviewMarkdown
+    ? `${fullText ? `${fullText}\n\n` : ''}${assetPreviewMarkdown}`
+    : fullText
+  const copyText = isUser
+    ? fullText
+    : (parsedPost
+      ? [fullText, assetPreviewMarkdown].filter(Boolean).join('\n\n')
+      : textWithAssetPreviews)
+  const hasShowcaseContent = Boolean(completedVideoUrl || showcaseImageUrls.length > 0 || hasActiveRender)
+  const activeRenderLabel = hasActiveRender
+    ? `Rendering video${typeof activeRemotion?.progress === 'number' ? `... ${Math.round(activeRemotion.progress)}%` : '...'}`
+    : ''
+  const activeRenderProgress = typeof activeRemotion?.progress === 'number' ? Math.round(activeRemotion.progress) : undefined
+  const selectedShowcaseImageUrl =
+    showcaseImageUrls[Math.min(selectedShowcaseImage, Math.max(showcaseImageUrls.length - 1, 0))] || ''
 
-  const fallbackText = renderBlocks
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as { type: 'text'; content: string }).content)
-    .join('\n')
+  useEffect(() => {
+    if (selectedShowcaseImage > showcaseImageUrls.length - 1) {
+      setSelectedShowcaseImage(0)
+    }
+  }, [showcaseImageUrls.length, selectedShowcaseImage])
 
   // Don't render completely empty messages
   if (!hasContent && !isLoading) return null
 
   const handleCopy = async () => {
-    if (!fallbackText) return
-    await navigator.clipboard.writeText(fallbackText)
+    if (!copyText) return
+    await navigator.clipboard.writeText(copyText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -1557,14 +1729,19 @@ function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, o
       </span>
 
       <div className={`flex-1 max-w-[90%] ${isUser ? 'flex flex-col items-end' : ''} space-y-3`}>
-        {fullText && (
+        {(Boolean(textWithAssetPreviews) || Boolean(parsedPost)) && (
           <div
             className={`group relative rounded-lg px-4 py-3 ${
               isUser ? 'border border-primary/30 bg-primary/20' : 'border border-border bg-muted'
             }`}
           >
             {!isUser && parsedPost && <PostCard content={fullText} imageUrls={toolImageUrls} onEdit={onEditPrompt} />}
-            {isUser || !parsedPost ? <MessageContent content={fullText} /> : null}
+            {isUser || !parsedPost ? <MessageContent content={textWithAssetPreviews} /> : null}
+            {!isUser && parsedPost && assetPreviewMarkdown && (
+              <div className="mt-3 border-t border-border/60 pt-3">
+                <MessageContent content={assetPreviewMarkdown} />
+              </div>
+            )}
 
             {!isUser && !isLoading && (
               <button
@@ -1603,11 +1780,107 @@ function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, o
             </div>
             {showAgentWork && (
               <div className="space-y-2 border-t border-border/60 p-2.5">
+                {hasShowcaseContent && (
+                  <div className="space-y-3 rounded-md border border-border/60 bg-background/40 p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Results</p>
+
+                    {completedVideoUrl ? (
+                      <div className="space-y-2">
+                        <video
+                          controls
+                          playsInline
+                          muted
+                          src={completedVideoUrl}
+                          className="w-full max-w-md rounded-md border border-border bg-black/20"
+                        />
+                        <div className="flex gap-2">
+                          <a href={completedVideoUrl} download>
+                            <Button variant="outline" size="xs" className="h-7">
+                              <Download className="h-3.5 w-3.5" />
+                              Download
+                            </Button>
+                          </a>
+                          <a href={completedVideoUrl} target="_blank" rel="noopener noreferrer">
+                            <Button variant="outline" size="xs" className="h-7">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Open
+                            </Button>
+                          </a>
+                        </div>
+                      </div>
+                    ) : hasActiveRender ? (
+                      <div className="space-y-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2.5">
+                        <div className="flex items-center gap-2 text-xs text-purple-200">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>{activeRenderLabel}</span>
+                        </div>
+                        {typeof activeRenderProgress === 'number' && (
+                          <div className="h-1.5 w-full rounded-full bg-muted/70">
+                            <div
+                              className="h-1.5 rounded-full bg-purple-500 transition-all duration-500"
+                              style={{ width: `${Math.min(activeRenderProgress, 100)}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {showcaseImageUrls.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="overflow-hidden rounded-md border border-border bg-muted/20">
+                          <img
+                            src={selectedShowcaseImageUrl}
+                            alt="Generated result"
+                            className="max-h-44 w-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-0.5">
+                          {showcaseImageUrls.map((imageUrl, index) => (
+                            <button
+                              key={imageUrl}
+                              onClick={() => setSelectedShowcaseImage(index)}
+                              className={cn(
+                                'h-14 w-14 shrink-0 overflow-hidden rounded border transition-all',
+                                selectedShowcaseImageUrl === imageUrl
+                                  ? 'border-primary ring-1 ring-primary/40'
+                                  : 'border-border'
+                              )}
+                              title={`Image option ${index + 1}`}
+                            >
+                              <img
+                                src={imageUrl}
+                                alt={`Generated option ${index + 1}`}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <a href={selectedShowcaseImageUrl} download>
+                            <Button variant="outline" size="xs" className="h-7">
+                              <Download className="h-3.5 w-3.5" />
+                              Download image
+                            </Button>
+                          </a>
+                          <a href={selectedShowcaseImageUrl} target="_blank" rel="noopener noreferrer">
+                            <Button variant="outline" size="xs" className="h-7">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Open image
+                            </Button>
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {toolBlocks.map((block, i) => (
                   <ToolResult
                     key={String(block.part.toolCallId) || `tool-${i}`}
                     tool={block.part}
-                    defaultExpanded={isLoading}
+                    defaultExpanded={isLoading && !hasShowcaseContent}
                     liveRemotionByVideoId={liveRemotionByVideoId}
                   />
                 ))}

@@ -19,8 +19,13 @@ export function MessageContent({ content }: MessageContentProps) {
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       // Italic
       .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      // Markdown images
+      .replace(
+        /!\[([^\]]*)\]\(([^)\s]+)\)/g,
+        '<img src="$2" alt="$1" loading="lazy" class="my-2 max-h-72 w-full rounded-md border border-border object-cover" />'
+      )
       // Links
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-[var(--accent-terminal)] hover:underline">$1</a>')
+      .replace(/(?<!!)\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-[var(--accent-terminal)] hover:underline">$1</a>')
       // Line breaks
       .replace(/\n/g, '<br />')
 

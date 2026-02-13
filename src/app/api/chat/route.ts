@@ -34,6 +34,40 @@ function clampText(value: string, max: number) {
   return `${value.slice(0, max)}\n...(truncated)`
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function compactUnknownValue(value: unknown, depth = 0): unknown {
+  if (typeof value === 'string') {
+    const max = depth === 0 ? 1800 : depth === 1 ? 1200 : depth === 2 ? 700 : 450
+    return clampText(value, max)
+  }
+
+  if (Array.isArray(value)) {
+    const maxItems = depth <= 1 ? 24 : 10
+    return value.slice(0, maxItems).map((item) => compactUnknownValue(item, depth + 1))
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    const maxEntries = depth <= 1 ? 40 : 20
+    const compacted: Record<string, unknown> = {}
+
+    for (const [key, nested] of entries.slice(0, maxEntries)) {
+      compacted[key] = compactUnknownValue(nested, depth + 1)
+    }
+
+    if (entries.length > maxEntries) {
+      compacted._truncatedFields = entries.length - maxEntries
+    }
+
+    return compacted
+  }
+
+  return value
+}
+
 function compactToolOutputForContext(toolName: string, output: Record<string, unknown>) {
   if (toolName === 'analyze_repo' || toolName === 'analyze_github_repo') {
     const packageJson = output.packageJson && typeof output.packageJson === 'object'
@@ -148,16 +182,12 @@ function compactToolOutputForContext(toolName: string, output: Record<string, un
       continue
     }
     if (Array.isArray(value)) {
-      compacted[key] = value.slice(0, 5)
+      compacted[key] = value.slice(0, 5).map((entry) => compactUnknownValue(entry, 2))
       continue
     }
     if (value && typeof value === 'object') {
-      // Recursively clamp nested objects
-      const nested = JSON.stringify(value)
-      if (nested.length > 600) {
-        compacted[key] = clampText(nested, 600)
-        continue
-      }
+      compacted[key] = compactUnknownValue(value, 2)
+      continue
     }
     compacted[key] = value
   }
@@ -165,11 +195,43 @@ function compactToolOutputForContext(toolName: string, output: Record<string, un
   return compacted
 }
 
-function compactMessagesForModel(rawMessages: unknown) {
+function compactMessagePartForModel(rawPart: unknown) {
+  if (!rawPart || typeof rawPart !== 'object') return rawPart
+
+  const nextPart = { ...(rawPart as Record<string, unknown>) }
+  const rawType = typeof nextPart.type === 'string' ? nextPart.type : ''
+  const toolName = rawType.startsWith('tool-')
+    ? rawType.slice(5)
+    : (typeof nextPart.toolName === 'string' ? nextPart.toolName : '')
+
+  if (typeof nextPart.text === 'string') {
+    nextPart.text = clampText(nextPart.text, 1200)
+  }
+
+  if (typeof nextPart.errorText === 'string') {
+    nextPart.errorText = clampText(nextPart.errorText, 220)
+  }
+
+  if (typeof nextPart.input === 'string') {
+    nextPart.input = clampText(nextPart.input, 600)
+  } else if (nextPart.input && typeof nextPart.input === 'object') {
+    nextPart.input = compactToolOutputForContext(toolName, nextPart.input as Record<string, unknown>)
+  }
+
+  if (typeof nextPart.output === 'string') {
+    nextPart.output = clampText(nextPart.output, 1000)
+  } else if (nextPart.output && typeof nextPart.output === 'object') {
+    nextPart.output = compactToolOutputForContext(toolName, nextPart.output as Record<string, unknown>)
+  }
+
+  return nextPart
+}
+
+function compactMessagesForModel(rawMessages: unknown): unknown[] {
   if (!Array.isArray(rawMessages)) return []
 
   return rawMessages.map((raw) => {
-    if (!raw || typeof raw !== 'object') return raw
+    if (!isRecord(raw)) return raw
     const message = { ...(raw as Record<string, unknown>) }
 
     if (typeof message.content === 'string') {
@@ -177,87 +239,102 @@ function compactMessagesForModel(rawMessages: unknown) {
     }
 
     if (Array.isArray(message.parts)) {
-      message.parts = message.parts.map((part) => {
-        if (!part || typeof part !== 'object') return part
-        const nextPart = { ...(part as Record<string, unknown>) }
-
-        if (typeof nextPart.text === 'string') {
-          nextPart.text = clampText(nextPart.text, 1200)
-        }
-
-        if (nextPart.input && typeof nextPart.input === 'object') {
-          nextPart.input = compactToolOutputForContext('', nextPart.input as Record<string, unknown>)
-        }
-
-        const rawType = typeof nextPart.type === 'string' ? nextPart.type : ''
-        const toolName = rawType.startsWith('tool-')
-          ? rawType.slice(5)
-          : (typeof nextPart.toolName === 'string' ? nextPart.toolName : '')
-
-        if (nextPart.output && typeof nextPart.output === 'object' && toolName) {
-          nextPart.output = compactToolOutputForContext(toolName, nextPart.output as Record<string, unknown>)
-        } else if (nextPart.output && typeof nextPart.output === 'object') {
-          nextPart.output = compactToolOutputForContext('', nextPart.output as Record<string, unknown>)
-        }
-
-        if (typeof nextPart.errorText === 'string') {
-          nextPart.errorText = clampText(nextPart.errorText, 220)
-        }
-
-        return nextPart
-      })
+      message.parts = message.parts.map((part) => compactMessagePartForModel(part))
     }
 
-    return message
+    // Some SDK payloads carry content as part arrays instead of `parts`.
+    if (Array.isArray(message.content)) {
+      message.content = message.content.map((part) => compactMessagePartForModel(part))
+    }
+
+    if (Array.isArray(message.toolInvocations)) {
+      message.toolInvocations = message.toolInvocations.map((invocation) => compactUnknownValue(invocation, 1))
+    }
+
+    if (Array.isArray(message.experimental_attachments)) {
+      message.experimental_attachments = message.experimental_attachments
+        .slice(0, 6)
+        .map((attachment) => compactUnknownValue(attachment, 1))
+    }
+
+    return compactUnknownValue(message, 0)
   })
 }
 
 /**
- * Hard character budget for the messages payload.
+ * Hard character budget for UI messages payload.
  * Keep this conservative because system prompt + tool schemas add significant overhead.
- * 240K chars of compacted JSON typically leaves enough headroom for model/tool context.
+ * 180K chars of compacted JSON leaves enough room for system prompt + tool schema tokens.
  */
-const MAX_MESSAGE_CHARS = 240_000
+const MAX_RAW_MESSAGE_CHARS = 180_000
+
+/**
+ * Additional budget after convertToModelMessages(), because conversion can expand
+ * tool messages into provider-specific structures.
+ */
+const MAX_MODEL_MESSAGE_CHARS = 160_000
 
 function messageCharSize(message: Record<string, unknown>): number {
   return JSON.stringify(message).length
+}
+
+function safeJsonLength(value: unknown) {
+  try {
+    return JSON.stringify(value).length
+  } catch {
+    return 0
+  }
 }
 
 /**
  * Trims conversation history to fit within a hard character budget.
  * Keeps the most recent messages, drops oldest when over budget.
  */
-function trimMessages<T extends Record<string, unknown>>(messages: T[]): T[] {
+function trimMessages<T extends Record<string, unknown>>(messages: T[], maxChars: number): T[] {
   if (messages.length === 0) return messages
 
   // Compute sizes for each message
   const sizes = messages.map((msg) => messageCharSize(msg))
   const totalChars = sizes.reduce((sum, s) => sum + s, 0)
 
-  if (totalChars <= MAX_MESSAGE_CHARS) return messages
+  if (totalChars <= maxChars) return messages
 
   // Keep the most recent messages that fit in budget
   const trimmed: T[] = []
-  let budget = MAX_MESSAGE_CHARS
+  let budget = maxChars
 
   for (let i = messages.length - 1; i >= 0; i--) {
     if (sizes[i] > budget && trimmed.length > 0) break
     if (sizes[i] > budget && trimmed.length === 0) {
-      // Single giant message: keep it, but hard-clamp content fields.
-      const giant = { ...(messages[i] as Record<string, unknown>) }
-      if (typeof giant.content === 'string') {
-        giant.content = clampText(giant.content, Math.max(800, Math.floor(MAX_MESSAGE_CHARS * 0.3)))
-      }
-      trimmed.unshift(giant as T)
+      // Single giant message: aggressively compact it, then include it as fallback.
+      const giant = compactUnknownValue(messages[i], 0) as T
+      trimmed.unshift(giant)
       break
     }
     budget -= sizes[i]
     trimmed.unshift(messages[i])
   }
 
-  // Final safety: if even the kept messages are too large (single giant message),
-  // still return them but they'll be caught by the per-message compaction
-  return trimmed
+  // Final safety pass: aggressively compact each kept message.
+  const compacted = trimmed.map((message) => compactUnknownValue(message, 0) as T)
+  const compactedTotal = compacted.reduce((sum, message) => sum + messageCharSize(message), 0)
+  if (compactedTotal <= maxChars) return compacted
+
+  // Last-resort trim by dropping oldest compacted messages.
+  const finalTrimmed: T[] = []
+  let remaining = maxChars
+  for (let i = compacted.length - 1; i >= 0; i--) {
+    const size = messageCharSize(compacted[i])
+    if (size > remaining && finalTrimmed.length > 0) break
+    if (size > remaining && finalTrimmed.length === 0) {
+      finalTrimmed.unshift(compactUnknownValue(compacted[i], 2) as T)
+      break
+    }
+    remaining -= size
+    finalTrimmed.unshift(compacted[i])
+  }
+
+  return finalTrimmed
 }
 
 export async function POST(request: Request) {
@@ -282,13 +359,21 @@ export async function POST(request: Request) {
     const { messages: rawMessages, brandId } = await request.json()
     const rawCount = Array.isArray(rawMessages) ? rawMessages.length : 0
     const compactedRaw = compactMessagesForModel(rawMessages)
-    const trimmedRaw = trimMessages(compactedRaw as Record<string, unknown>[])
+    const compactedRawObjects = compactedRaw.filter(isRecord)
+    const trimmedRaw = trimMessages(compactedRawObjects, MAX_RAW_MESSAGE_CHARS)
 
     if (trimmedRaw.length < rawCount) {
-      console.log(`[chat] Trimmed conversation: ${rawCount} → ${trimmedRaw.length} messages (budget: ${MAX_MESSAGE_CHARS} chars)`)
+      console.log(`[chat] Trimmed conversation: ${rawCount} → ${trimmedRaw.length} messages (raw budget: ${MAX_RAW_MESSAGE_CHARS} chars)`)
     }
 
-    const messages = await convertToModelMessages(trimmedRaw)
+    const convertedMessages = await convertToModelMessages(trimmedRaw as Parameters<typeof convertToModelMessages>[0])
+    const compactedConverted = compactMessagesForModel(convertedMessages as unknown)
+    const compactedConvertedObjects = compactedConverted.filter(isRecord)
+    const messages = trimMessages(compactedConvertedObjects, MAX_MODEL_MESSAGE_CHARS) as typeof convertedMessages
+
+    console.log(
+      `[chat] Context chars raw=${safeJsonLength(rawMessages)} compacted=${safeJsonLength(compactedRaw)} trimmed=${safeJsonLength(trimmedRaw)} model=${safeJsonLength(messages)}`
+    )
 
     // Fetch brand context
     let brandContext = ''
@@ -385,6 +470,13 @@ When generating a marketing post, use this exact markdown shape so UI can render
 
 If assets were generated, include:
 - **Asset options:** short label + direct URL list.
+
+For any request where tools generated assets (images or video), always end with an inline preview section in the final assistant text:
+- Add \`### Asset Previews\`
+- For images, embed markdown images: \`![Short alt](https://...)\`
+- For videos, add clickable links: \`[Video 1](https://...)\`
+- If only a video ID/request ID is available, include clickable dashboard links using those IDs.
+- Never rely on "Show work" for asset visibility; final message must be self-contained.
 
 Keep final response concise and avoid exposing raw tool/debug output.`,
       messages,
