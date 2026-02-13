@@ -23,11 +23,21 @@ import {
   FolderCode,
   Palette,
   Sparkles,
-  PenSquare,
+  Pencil,
+  MoreHorizontal,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { MessageContent } from './MessageContent'
 import { ToolResult } from './ToolResult'
@@ -101,6 +111,9 @@ const suggestedPrompts = [
     color: 'hsl(38 92% 50%)',
   },
 ]
+
+const campaignPrompt =
+  'Build a 7-day social campaign plan for this brand with daily post hooks, one image prompt per day, and one motion-video concept at the end of the week.'
 
 function createLocalId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -250,6 +263,7 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
   const appliedWorkflowRef = useRef<string | null>(null)
 
   const [input, setInput] = useState('')
+  const [isInputFocused, setIsInputFocused] = useState(false)
   const [showScrollButton, setShowScrollButton] = useState(false)
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -539,7 +553,7 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
   }, [sendQuickPrompt])
 
   const runCampaignAction = useCallback(() => {
-    void sendQuickPrompt('Build a 7-day social campaign plan for this brand with daily post hooks, one image prompt per day, and one motion-video concept at the end of the week.')
+    void sendQuickPrompt(campaignPrompt)
   }, [sendQuickPrompt])
 
   const sidebarActions = useMemo<SidebarAction[]>(
@@ -626,7 +640,6 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
       onChatSearchChange={setChatSearch}
       repoReference={repoReference}
       onRepoReferenceChange={setRepoReference}
-      onRepoAnalyze={runRepoCrawlAction}
       onNewChat={startNewChat}
       actions={sidebarActions}
       chats={filteredChats}
@@ -673,9 +686,7 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
             <p className="truncate text-sm font-medium">{brandContext?.name || brandName || 'Brand chat'}</p>
             <p className="text-[11px] text-muted-foreground">{activeChatTitle}</p>
           </div>
-          <Button variant="ghost" size="icon-sm" onClick={startNewChat}>
-            <Plus className="h-4 w-4" />
-          </Button>
+          <div className="h-8 w-8" />
         </div>
 
         <div className="hidden items-center justify-between border-b border-border/50 px-6 py-3 lg:flex">
@@ -688,13 +699,7 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
               {brandContext?.github_repo || 'No repository connected yet'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{isSavingChat ? 'Saving…' : 'Saved'}</span>
-            <Button variant="outline" size="sm" onClick={startNewChat}>
-              <PenSquare className="h-3.5 w-3.5" />
-              New chat
-            </Button>
-          </div>
+          <span className="text-xs text-muted-foreground">{isSavingChat ? 'Saving…' : 'Saved'}</span>
         </div>
 
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-5 md:px-6 md:py-6">
@@ -703,6 +708,7 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
               brandName={brandContext?.name || brandName}
               onPromptSelect={handlePromptSelect}
               onRunRepoCrawl={runRepoCrawlAction}
+              onRunCampaign={runCampaignAction}
               hasConnectedRepo={Boolean(brandContext?.github_repo || repoReference.trim())}
             />
           ) : (
@@ -765,6 +771,8 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
                   value={input}
                   onChange={handleTextareaInput}
                   onKeyDown={handleKeyDown}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
                   placeholder="Ask the agent to create posts, generate visuals, or crawl your repo..."
                   rows={1}
                   className="min-h-[56px] w-full resize-none bg-transparent py-4 pl-10 pr-14 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
@@ -796,23 +804,11 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
                 </div>
               </div>
 
-              <div className="mt-2 hidden items-center justify-between px-1 text-[10px] text-muted-foreground sm:flex">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1">
-                    <span className="text-primary">./</span>images
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-green-500">./</span>videos
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-muted-foreground">./</span>repos
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-yellow-500">./</span>posts
-                  </span>
+              {isInputFocused && (
+                <div className="mt-2 hidden justify-end px-1 text-[10px] text-muted-foreground sm:flex">
+                  <span>enter to send • shift+enter for new line</span>
                 </div>
-                <span>enter to send • shift+enter for new line</span>
-              </div>
+              )}
             </form>
           </div>
         </div>
@@ -827,7 +823,6 @@ interface ChatSidebarProps {
   onChatSearchChange: (value: string) => void
   repoReference: string
   onRepoReferenceChange: (value: string) => void
-  onRepoAnalyze: () => void
   onNewChat: () => void
   actions: SidebarAction[]
   chats: PersistedChat[]
@@ -846,7 +841,6 @@ function ChatSidebar({
   onChatSearchChange,
   repoReference,
   onRepoReferenceChange,
-  onRepoAnalyze,
   onNewChat,
   actions,
   chats,
@@ -858,9 +852,20 @@ function ChatSidebar({
   connectedRepo,
   onCloseMobile,
 }: ChatSidebarProps) {
+  const [isEditingRepo, setIsEditingRepo] = useState(false)
+  const [repoDraft, setRepoDraft] = useState(repoReference)
+
+  useEffect(() => {
+    if (!isEditingRepo) {
+      setRepoDraft(repoReference)
+    }
+  }, [repoReference, isEditingRepo])
+
+  const activeRepo = repoReference.trim() || connectedRepo || ''
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="border-b border-border/40 px-4 pb-4 pt-5">
+      <div className="border-b border-border/40 px-4 pb-3 pt-4">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-md border border-primary/30 bg-primary/10">
             <Terminal className="h-4 w-4 text-primary" />
@@ -873,77 +878,31 @@ function ChatSidebar({
 
         <Button
           variant="outline"
-          className="mt-4 h-9 w-full justify-start border-border/60 bg-transparent font-medium hover:bg-muted/70"
+          className="mt-3 h-8 w-full justify-start border-border/60 bg-transparent text-xs font-medium hover:bg-muted/70"
           onClick={() => {
             onNewChat()
             onCloseMobile()
           }}
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
           New chat
         </Button>
       </div>
 
-      <div className="space-y-3 border-b border-border/40 px-3 py-3">
+      <div className="border-b border-border/40 px-3 py-3">
+        <p className="px-1 text-[11px] uppercase tracking-wide text-muted-foreground">Chats</p>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             value={chatSearch}
             onChange={(e) => onChatSearchChange(e.target.value)}
             placeholder="Search chats"
-            className="h-9 border-border/50 bg-muted/30 pl-9 text-sm"
+            className="mt-2 h-8 border-border/50 bg-muted/30 pl-8 text-xs"
           />
         </div>
-
-        <div className="rounded-md border border-border/50 bg-muted/20 p-2.5">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Repo Reference</p>
-            {connectedRepo && (
-              <span className="truncate text-[10px] text-primary" title={connectedRepo}>
-                connected
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Input
-              value={repoReference}
-              onChange={(e) => onRepoReferenceChange(e.target.value)}
-              placeholder="owner/repo"
-              className="h-8 border-border/50 bg-background/70 text-xs"
-            />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="h-8 w-8 border border-border/50"
-              onClick={onRepoAnalyze}
-            >
-              <FolderCode className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          {actions.map((action) => (
-            <button
-              key={action.id}
-              onClick={action.onClick}
-              className="flex w-full items-start gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-left transition-all hover:border-border/50 hover:bg-muted/40"
-            >
-              <action.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium">{action.title}</p>
-                <p className="line-clamp-2 text-[11px] text-muted-foreground">{action.description}</p>
-              </div>
-            </button>
-          ))}
-        </div>
       </div>
 
-      <div className="px-4 pb-1 pt-3">
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Your chats</p>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 overflow-y-auto px-2 py-2">
         {isLoadingChats ? (
           <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -966,14 +925,14 @@ function ChatSidebar({
                     onLoadChat(chat.id)
                     onCloseMobile()
                   }}
-                  className="w-full px-2.5 py-2 text-left"
+                  className="w-full px-2.5 py-1.5 text-left"
                 >
-                  <p className="truncate text-sm">{chat.title || 'Untitled Chat'}</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  <p className="truncate text-xs">{chat.title || 'Untitled Chat'}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
                     {new Date(chat.updated_at).toLocaleDateString()}
                   </p>
                 </button>
-                <div className="-mt-7 mr-1 flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="-mt-6 mr-1 flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
                   <Button
                     variant="ghost"
                     size="icon-xs"
@@ -992,10 +951,83 @@ function ChatSidebar({
         )}
       </div>
 
-      <div className="border-t border-border/40 px-4 py-3">
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>Chat sync</span>
-          <span>{isSavingChat ? 'saving...' : 'saved'}</span>
+      <div className="space-y-2.5 border-t border-border/40 px-3 py-3">
+        <p className="px-1 text-[11px] uppercase tracking-wide text-muted-foreground">More</p>
+
+        <div className="rounded-md border border-border/50 bg-muted/20 p-2">
+          <div className="flex items-center justify-between gap-2">
+            {activeRepo ? (
+              <Badge
+                variant="outline"
+                className="max-w-[200px] justify-start truncate border-border/60 bg-background/70 px-2 py-0.5 font-mono text-[10px]"
+                title={activeRepo}
+              >
+                {activeRepo}
+              </Badge>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">No repo connected</span>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="h-6 w-6"
+              onClick={() => setIsEditingRepo((value) => !value)}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          </div>
+
+          {isEditingRepo && (
+            <div className="mt-2 flex items-center gap-2">
+              <Input
+                value={repoDraft}
+                onChange={(e) => setRepoDraft(e.target.value)}
+                placeholder="owner/repo"
+                className="h-8 border-border/50 bg-background/80 text-xs"
+              />
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={!repoDraft.trim()}
+                onClick={() => {
+                  onRepoReferenceChange(repoDraft.trim())
+                  setIsEditingRepo(false)
+                }}
+              >
+                Save
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 w-full justify-between text-xs">
+              Quick actions
+              <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-60">
+            <DropdownMenuLabel className="text-xs">Quick actions</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {actions.map((action) => (
+              <DropdownMenuItem
+                key={action.id}
+                onClick={() => {
+                  action.onClick()
+                  onCloseMobile()
+                }}
+                className="gap-2 text-xs"
+              >
+                <action.icon className="h-3.5 w-3.5 text-primary" />
+                <span>{action.title}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <div className="px-1 text-[10px] text-muted-foreground">
+          Chat sync {isSavingChat ? 'saving...' : 'saved'}
         </div>
       </div>
     </div>
@@ -1117,15 +1149,21 @@ interface EmptyStateProps {
   brandName?: string
   onPromptSelect: (prompt: string) => void
   onRunRepoCrawl: () => void
+  onRunCampaign: () => void
   hasConnectedRepo: boolean
 }
 
-function EmptyState({ brandName, onPromptSelect, onRunRepoCrawl, hasConnectedRepo }: EmptyStateProps) {
+function EmptyState({ brandName, onPromptSelect, onRunRepoCrawl, onRunCampaign, hasConnectedRepo }: EmptyStateProps) {
+  const primaryActionLabel = hasConnectedRepo ? 'Crawl connected repo' : 'Run full campaign'
+  const primaryAction = hasConnectedRepo ? onRunRepoCrawl : onRunCampaign
+  const PrimaryActionIcon = hasConnectedRepo ? Github : Zap
+  const quickPrompts = suggestedPrompts.filter((prompt) => prompt.title !== 'Run full campaign').slice(0, 3)
+
   return (
     <div className="flex h-full flex-col items-center justify-center px-4">
-      <div className="mb-8">
-        <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-primary/30 bg-primary/10">
-          <Terminal size={28} className="text-primary" />
+      <div className="mb-6">
+        <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-primary/30 bg-primary/10">
+          <Terminal size={24} className="text-primary" />
         </div>
       </div>
 
@@ -1133,21 +1171,17 @@ function EmptyState({ brandName, onPromptSelect, onRunRepoCrawl, hasConnectedRep
         <span className="font-mono text-primary">$</span> studio
         {brandName && <span className="ml-2 text-lg font-normal text-muted-foreground">/ {brandName}</span>}
       </h1>
-      <p className="mb-8 max-w-md text-center text-muted-foreground">
-        One workspace for repo-aware social content.
-        <br />
-        Generate post copy, images, and motion-ready video ideas in sequence.
+      <p className="mb-6 max-w-md text-center text-sm text-muted-foreground">
+        One workspace for repo-aware social content, from post copy to visuals and video concepts.
       </p>
 
-      {hasConnectedRepo && (
-        <Button variant="outline" className="mb-6" onClick={onRunRepoCrawl}>
-          <Github className="h-4 w-4" />
-          Crawl Connected Repo
-        </Button>
-      )}
+      <Button variant="outline" className="mb-6 h-9" onClick={primaryAction}>
+        <PrimaryActionIcon className="h-4 w-4" />
+        {primaryActionLabel}
+      </Button>
 
-      <div className="grid w-full max-w-3xl grid-cols-1 gap-2 sm:grid-cols-2">
-        {suggestedPrompts.map((prompt) => (
+      <div className="grid w-full max-w-3xl grid-cols-1 gap-2 md:grid-cols-3">
+        {quickPrompts.map((prompt) => (
           <button
             key={prompt.title}
             onClick={() => onPromptSelect(prompt.prompt)}
@@ -1166,24 +1200,6 @@ function EmptyState({ brandName, onPromptSelect, onRunRepoCrawl, hasConnectedRep
               </div>
             </div>
           </button>
-        ))}
-      </div>
-
-      <div className="mt-10 grid w-full max-w-2xl grid-cols-2 gap-3 md:grid-cols-4">
-        {[
-          { icon: Image, name: 'Images', desc: 'OpenAI + Grok', color: 'hsl(var(--primary))' },
-          { icon: Zap, name: 'Creative', desc: 'Prompt chains', color: 'hsl(38 92% 50%)' },
-          { icon: Video, name: 'Videos', desc: 'Grok + Remotion', color: 'hsl(142 76% 36%)' },
-          { icon: Github, name: 'Repos', desc: 'Code-aware copy', color: 'hsl(var(--muted-foreground))' },
-        ].map((cap) => (
-          <div
-            key={cap.name}
-            className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-card p-3 text-center"
-          >
-            <cap.icon size={18} style={{ color: cap.color }} />
-            <span className="text-xs">{cap.name}</span>
-            <span className="text-[10px] text-muted-foreground">{cap.desc}</span>
-          </div>
         ))}
       </div>
     </div>
