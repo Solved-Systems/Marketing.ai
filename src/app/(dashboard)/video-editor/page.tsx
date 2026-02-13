@@ -11,9 +11,6 @@ export default function VideoEditorPage() {
           <Video className="h-4 w-4 text-primary" />
           <h1 className="text-lg font-semibold tracking-tight">Video Studio</h1>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Record your screen or another Chrome tab, then trim, crop, speed up, zoom, and export.
-        </p>
       </div>
 
       <VideoStudioTab brandName="Workspace" />

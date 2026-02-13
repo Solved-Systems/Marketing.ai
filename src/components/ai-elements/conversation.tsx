@@ -73,13 +73,10 @@ export function ConversationContent({
   const childCount = React.Children.count(children)
 
   React.useEffect(() => {
-    const el = scrollerRef.current
-    if (!el) return
-
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    if (distanceFromBottom < 140) {
-      scrollToBottom("smooth")
-    }
+    const frame = requestAnimationFrame(() => {
+      scrollToBottom("auto")
+    })
+    return () => cancelAnimationFrame(frame)
   }, [childCount, scrollerRef, scrollToBottom])
 
   return (

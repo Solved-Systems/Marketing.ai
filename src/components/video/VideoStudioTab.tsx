@@ -1,27 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import {
-  Camera,
-  ChevronDown,
-  Clapperboard,
-  Loader2,
-  Monitor,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Pause,
-  Play,
-  Scissors,
-  Sparkles,
-  Square,
-  Upload,
-  Video,
-} from "lucide-react"
+import { Loader2, PanelRightClose, PanelRightOpen, Sparkles, WandSparkles } from "lucide-react"
 
 import {
   Conversation,
   ConversationContent,
-  ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation"
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message"
@@ -34,277 +18,179 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import {
+  useVideoEditorStore,
+  SHOT_PRESETS,
+  CLIP_COLORS,
+  ASSISTANT_QUICK_ACTIONS,
+  createId,
+  clamp,
+  createBaseClip,
+  getClipOutputDuration,
+  drawClipFrame,
+  selectMimeType,
+  parseNumber,
+} from "@/stores/video-editor"
+import type { AssistantMessage } from "@/stores/video-editor"
+import { importVideoFile } from "@/lib/video-editor/media-import"
+import { executeActions } from "@/lib/video-editor/action-executor"
+import type { EditorAction } from "@/lib/video-editor/action-types"
+
+import { AnimationPanel } from "./AnimationPanel"
+import { EditorToolbar } from "./EditorToolbar"
+import { VideoPreviewCanvas } from "./VideoPreviewCanvas"
+import { MediaDropZone } from "./MediaDropZone"
+import { TimelinePanel } from "./TimelinePanel"
+import { ClipInspector } from "./ClipInspector"
 
 interface VideoStudioTabProps {
   brandId?: string
   brandName?: string | null
 }
 
-type CaptureMode = "screen" | "tab"
+const ACTION_CODE_BLOCK_REGEX = /```json\s*[\s\S]*?```/gi
+const GENERIC_CODE_BLOCK_REGEX = /```(?:\w+)?\s*([\s\S]*?)```/g
 
-interface ShotPreset {
-  id: string
-  title: string
-  description: string
-  duration: number
-  zoom: number
-  rotate: number
-  panX: number
-  panY: number
+function formatAssistantSeconds(seconds: number) {
+  if (!Number.isFinite(seconds)) return "0s"
+  const rounded = Number(seconds.toFixed(1))
+  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}s`
 }
 
-interface TimelineClip {
-  id: string
-  name: string
-  start: number
-  end: number
-  presetId: string
-  color: string
-  speed: number
-  zoom: number
-  cropX: number
-  cropY: number
-  cropWidth: number
-  cropHeight: number
-}
+function summarizeAssistantActions(payload: Record<string, unknown> | null) {
+  if (!payload) return null
+  const rawActions = Array.isArray(payload.actions) ? payload.actions : []
+  const actions = rawActions.filter(
+    (action): action is Record<string, unknown> => !!action && typeof action === "object"
+  )
+  if (actions.length === 0) return null
 
-interface AssistantMessage {
-  id: string
-  role: "user" | "assistant"
-  content: string
-}
+  const addClipActions = actions
+    .map((action) => {
+      const type = String(action.type ?? "").toLowerCase().trim()
+      if (type !== "add_clip") return null
 
-const SHOT_PRESETS: ShotPreset[] = [
-  { id: "close-up-1", title: "Close up 1", description: "Subtle close-up on top", duration: 3, zoom: 1.08, rotate: 0.2, panX: 0, panY: -0.04 },
-  { id: "close-up-2", title: "Close up 2", description: "Tilted close-up on side", duration: 3, zoom: 1.13, rotate: -3.2, panX: -0.03, panY: 0 },
-  { id: "close-up-3", title: "Close up 3", description: "Subtle motion at corner", duration: 3, zoom: 1.11, rotate: 1.2, panX: 0.04, panY: -0.02 },
-  { id: "close-up-4", title: "Close up 4", description: "Very subtle motion at center", duration: 2, zoom: 1.05, rotate: 0, panX: 0, panY: 0 },
-  { id: "close-up-5", title: "Close up 5", description: "Top to bottom at center", duration: 4, zoom: 1.06, rotate: 0, panX: 0, panY: 0.06 },
-  { id: "close-up-6", title: "Close up 6", description: "Extreme tilt close-up on top", duration: 8, zoom: 1.22, rotate: -8, panX: 0, panY: -0.08 },
-  { id: "close-up-7", title: "Close up 7", description: "Zoomed-in close-up on a side", duration: 3, zoom: 1.26, rotate: 0, panX: 0.1, panY: 0 },
-  { id: "close-up-8", title: "Close up 8", description: "Extreme top to bottom tilt", duration: 8, zoom: 1.2, rotate: -6, panX: 0, panY: 0.08 },
-  { id: "close-up-9", title: "Close up 9", description: "Extreme tilt close-up on bottom", duration: 8, zoom: 1.2, rotate: 7, panX: 0, panY: 0.09 },
-  { id: "close-up-10", title: "Close up 10", description: "Subtle rotation at center", duration: 4, zoom: 1.1, rotate: 2.5, panX: 0, panY: 0 },
-  { id: "close-up-11", title: "Close up 11", description: "Very subtle motion at center", duration: 3, zoom: 1.07, rotate: -1, panX: 0, panY: 0 },
-  { id: "close-up-12", title: "Close up 12", description: "Subtle rotation around center", duration: 2, zoom: 1.08, rotate: 1.5, panX: 0, panY: 0 },
-  { id: "close-up-13", title: "Close up 13", description: "Top to bottom at a side", duration: 2, zoom: 1.12, rotate: 0, panX: 0.08, panY: 0.07 },
-  { id: "close-up-14", title: "Close up 14", description: "Extreme tilt at a side", duration: 2.5, zoom: 1.22, rotate: 9, panX: 0.09, panY: 0 },
-  { id: "close-up-15", title: "Close up 15", description: "Diagonal close-up sweep", duration: 3, zoom: 1.18, rotate: -10, panX: -0.06, panY: 0.04 },
-]
+      const start = parseNumber(action.start)
+      const endFromAction = parseNumber(action.end)
+      const duration = parseNumber(action.duration)
+      const end = endFromAction ?? (start !== null && duration !== null ? start + duration : null)
+      if (start === null || end === null) return null
 
-const CLIP_COLORS = ["#3ABFF8", "#8B5CF6", "#F97316", "#22C55E", "#EAB308", "#EC4899", "#6366F1"]
+      const name = String(action.name ?? "").trim()
+      return `${name || "Scene"} (${formatAssistantSeconds(start)} to ${formatAssistantSeconds(end)})`
+    })
+    .filter((detail): detail is string => Boolean(detail))
 
-function createId(prefix: string) {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `${prefix}-${crypto.randomUUID()}`
+  const countByType = actions.reduce<Record<string, number>>((acc, action) => {
+    const type = String(action.type ?? "").toLowerCase().trim()
+    if (!type) return acc
+    acc[type] = (acc[type] ?? 0) + 1
+    return acc
+  }, {})
+
+  const summaryBits: string[] = []
+  if (addClipActions.length > 0) {
+    summaryBits.push(
+      `Created ${addClipActions.length} clip${addClipActions.length === 1 ? "" : "s"}: ${addClipActions.join(", ")}`
+    )
   }
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max)
-}
-
-function getClipDuration(clip: TimelineClip) {
-  return Math.max(0.2, clip.end - clip.start)
-}
-
-function getClipOutputDuration(clip: TimelineClip) {
-  return getClipDuration(clip) / Math.max(0.25, clip.speed)
-}
-
-function getPresetById(presetId: string) {
-  return SHOT_PRESETS.find((preset) => preset.id === presetId) ?? SHOT_PRESETS[0]
-}
-
-function getClipAtTime(clips: TimelineClip[], time: number) {
-  return clips.find((clip) => time >= clip.start && time <= clip.end) ?? null
-}
-
-function createBaseClip(
-  partial: Pick<TimelineClip, "id" | "name" | "start" | "end" | "presetId" | "color">
-): TimelineClip {
-  return {
-    ...partial,
-    speed: 1,
-    zoom: 1,
-    cropX: 0,
-    cropY: 0,
-    cropWidth: 100,
-    cropHeight: 100,
+  if (countByType.trim_clip) summaryBits.push(`Trimmed ${countByType.trim_clip} clip${countByType.trim_clip === 1 ? "" : "s"}`)
+  if (countByType.split_clip) summaryBits.push(`Split ${countByType.split_clip} clip${countByType.split_clip === 1 ? "" : "s"}`)
+  if (countByType.set_preset || countByType.select_preset || countByType.set_selected_preset) {
+    const presetUpdates = (countByType.set_preset ?? 0) + (countByType.select_preset ?? 0) + (countByType.set_selected_preset ?? 0)
+    summaryBits.push(`Updated preset ${presetUpdates === 1 ? "selection" : "selections"}`)
   }
-}
-
-function getPreviewTransform(clip: TimelineClip | null) {
-  if (!clip) return "scale(1)"
-  const preset = getPresetById(clip.presetId)
-  const zoom = preset.zoom * clip.zoom
-  return `scale(${zoom}) translate(${preset.panX * 100}%, ${preset.panY * 100}%) rotate(${preset.rotate}deg)`
-}
-
-function getCropRect(clip: TimelineClip, sourceWidth: number, sourceHeight: number) {
-  const cropX = clamp(clip.cropX, 0, 100)
-  const cropY = clamp(clip.cropY, 0, 100)
-  const cropWidth = clamp(clip.cropWidth, 1, 100 - cropX)
-  const cropHeight = clamp(clip.cropHeight, 1, 100 - cropY)
-
-  return {
-    x: (cropX / 100) * sourceWidth,
-    y: (cropY / 100) * sourceHeight,
-    width: (cropWidth / 100) * sourceWidth,
-    height: (cropHeight / 100) * sourceHeight,
+  if (countByType.set_clip_speed || countByType.speed_clip) {
+    const speedUpdates = (countByType.set_clip_speed ?? 0) + (countByType.speed_clip ?? 0)
+    summaryBits.push(`Adjusted speed on ${speedUpdates} clip${speedUpdates === 1 ? "" : "s"}`)
   }
-}
+  if (countByType.export_video) summaryBits.push("Started export")
 
-function drawClipFrame(
-  ctx: CanvasRenderingContext2D,
-  video: HTMLVideoElement,
-  clip: TimelineClip,
-  canvasWidth: number,
-  canvasHeight: number
-) {
-  const preset = getPresetById(clip.presetId)
-  const crop = getCropRect(clip, video.videoWidth, video.videoHeight)
-  const zoom = preset.zoom * clip.zoom
-  const rotation = (preset.rotate * Math.PI) / 180
-
-  const coverScale = Math.max(canvasWidth / crop.width, canvasHeight / crop.height)
-  const drawWidth = crop.width * coverScale * zoom
-  const drawHeight = crop.height * coverScale * zoom
-  const x = (canvasWidth - drawWidth) / 2 + preset.panX * canvasWidth
-  const y = (canvasHeight - drawHeight) / 2 + preset.panY * canvasHeight
-
-  ctx.save()
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
-  ctx.fillStyle = "black"
-  ctx.fillRect(0, 0, canvasWidth, canvasHeight)
-  ctx.translate(canvasWidth / 2, canvasHeight / 2)
-  ctx.rotate(rotation)
-  ctx.translate(-canvasWidth / 2, -canvasHeight / 2)
-  ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, x, y, drawWidth, drawHeight)
-  ctx.restore()
-}
-
-function parseNumber(value: unknown): number | null {
-  const number = Number(value)
-  return Number.isFinite(number) ? number : null
-}
-
-function formatTime(seconds: number) {
-  if (!Number.isFinite(seconds)) return "00:00.0"
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  const tenth = Math.floor((seconds % 1) * 10)
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${tenth}`
-}
-
-function selectMimeType() {
-  if (typeof MediaRecorder === "undefined") return ""
-  const preferred = [
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
-  ]
-  return preferred.find((type) => MediaRecorder.isTypeSupported(type)) ?? ""
-}
-
-function parseAssistantJSON(content: string): Record<string, unknown> | null {
-  const blockMatch = content.match(/```json\s*([\s\S]*?)\s*```/i)
-  const candidate = blockMatch?.[1] ?? content
-
-  try {
-    const parsed = JSON.parse(candidate)
-    if (parsed && typeof parsed === "object") {
-      return parsed as Record<string, unknown>
-    }
-    return null
-  } catch {
-    return null
+  if (summaryBits.length === 0) {
+    return `Applied ${actions.length} edit action${actions.length === 1 ? "" : "s"}.`
   }
+  return `Applied: ${summaryBits.join(" | ")}`
+}
+
+function buildAssistantMessageContent(content: string, payload: Record<string, unknown> | null) {
+  const cleaned = content
+    .replace(ACTION_CODE_BLOCK_REGEX, "")
+    .replace(GENERIC_CODE_BLOCK_REGEX, (_match, code: string) => code.trim())
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+
+  const summary = summarizeAssistantActions(payload)
+  if (cleaned && summary) return `${cleaned}\n\n${summary}`
+  if (cleaned) return cleaned
+  if (summary) return summary
+  return "Applied the requested edits."
 }
 
 export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
   const effectiveBrandId = brandId ?? "video-editor"
+
+  // ── Refs (non-serializable, stay local) ──────────
   const videoRef = useRef<HTMLVideoElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const captureStreamRef = useRef<MediaStream | null>(null)
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
+  const assistantComposerRef = useRef<HTMLDivElement>(null)
+  const assistantMessageEndRef = useRef<HTMLDivElement>(null)
 
-  const [selectedPresetId, setSelectedPresetId] = useState(SHOT_PRESETS[0].id)
-  const [isAnimationsCollapsed, setIsAnimationsCollapsed] = useState(false)
-  const [selectedCaptureMode, setSelectedCaptureMode] = useState<CaptureMode>("screen")
-  const [recordCountdown, setRecordCountdown] = useState<number | null>(null)
+  // ── Store selectors (only what this component needs) ──
+  const clips = useVideoEditorStore((s) => s.clips)
+  const selectedClipId = useVideoEditorStore((s) => s.selectedClipId)
+  const selectedPresetId = useVideoEditorStore((s) => s.selectedPresetId)
+  const isAnimationsCollapsed = useVideoEditorStore((s) => s.isAnimationsCollapsed)
+  const isAssistantCollapsed = useVideoEditorStore((s) => s.isAssistantCollapsed)
+  const isRecording = useVideoEditorStore((s) => s.isRecording)
+  const recordCountdown = useVideoEditorStore((s) => s.recordCountdown)
+  const recordingUrl = useVideoEditorStore((s) => s.recordingUrl)
+  const videoDuration = useVideoEditorStore((s) => s.videoDuration)
+  const isExporting = useVideoEditorStore((s) => s.isExporting)
+  const exportedUrl = useVideoEditorStore((s) => s.exportedUrl)
+  const store = useVideoEditorStore
 
-  const [isRecording, setIsRecording] = useState(false)
-  const [recordingSeconds, setRecordingSeconds] = useState(0)
-  const [captureError, setCaptureError] = useState<string | null>(null)
-  const [livePreviewStream, setLivePreviewStream] = useState<MediaStream | null>(null)
-
-  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null)
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
-  const [videoDuration, setVideoDuration] = useState(0)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [exportedBlob, setExportedBlob] = useState<Blob | null>(null)
-  const [exportedUrl, setExportedUrl] = useState<string | null>(null)
-  const [isExporting, setIsExporting] = useState(false)
-  const [exportProgress, setExportProgress] = useState(0)
-  const [exportStatus, setExportStatus] = useState<string | null>(null)
-  const [previewThumbnail, setPreviewThumbnail] = useState<string | null>(null)
-
-  const [clips, setClips] = useState<TimelineClip[]>([])
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
-  const [selectedClipName, setSelectedClipName] = useState("")
-  const [loopSelectedClip, setLoopSelectedClip] = useState(true)
-
-  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([
-    {
-      id: createId("assistant"),
-      role: "assistant",
-      content:
-        "Describe the edit you want. Example: trim the first scene to 4 seconds, set close-up-7, and split at 2.5s.",
-    },
-  ])
+  // ── AI assistant local state ──
+  const [assistantMessages, setAssistantMessages] = useState<AssistantMessage[]>([])
   const [assistantInput, setAssistantInput] = useState("")
   const [assistantStatus, setAssistantStatus] = useState<PromptInputStatus>("ready")
-
-  const selectedPreset = useMemo(
-    () => SHOT_PRESETS.find((preset) => preset.id === selectedPresetId) ?? SHOT_PRESETS[0],
-    [selectedPresetId]
+  const [assistantComposerHeight, setAssistantComposerHeight] = useState(188)
+  const hasUserMessage = useMemo(
+    () => assistantMessages.some((message) => message.role === "user"),
+    [assistantMessages]
   )
 
-  const selectedClip = useMemo(
-    () => clips.find((clip) => clip.id === selectedClipId) ?? null,
-    [clips, selectedClipId]
-  )
-  const currentTimelineClip = useMemo(() => getClipAtTime(clips, currentTime), [clips, currentTime])
-  const previewClip = selectedClip ?? currentTimelineClip
-  const outputDuration = useMemo(
-    () => clips.reduce((total, clip) => total + getClipOutputDuration(clip), 0),
-    [clips]
-  )
+  // ── Layout ─────────────────────────────────────────
+  const workspaceGridClass = useMemo(() => {
+    if (isAnimationsCollapsed && isAssistantCollapsed) return "xl:grid-cols-[74px_minmax(0,1fr)_74px]"
+    if (isAnimationsCollapsed) return "xl:grid-cols-[74px_minmax(0,1fr)_360px]"
+    if (isAssistantCollapsed) return "xl:grid-cols-[280px_minmax(0,1fr)_74px]"
+    return "xl:grid-cols-[280px_minmax(0,1fr)_360px]"
+  }, [isAnimationsCollapsed, isAssistantCollapsed])
 
+  // ── Undo / Redo keyboard shortcuts ─────────────────
   useEffect(() => {
-    setSelectedClipName(selectedClip?.name ?? "")
-  }, [selectedClip?.id, selectedClip?.name])
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
+        e.preventDefault()
+        if (e.shiftKey) {
+          useVideoEditorStore.temporal.getState().redo()
+        } else {
+          useVideoEditorStore.temporal.getState().undo()
+        }
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [])
 
+  // ── Capture helpers ────────────────────────────────
   const clearRecordingTimer = useCallback(() => {
     if (!recordingTimerRef.current) return
     clearInterval(recordingTimerRef.current)
@@ -322,32 +208,31 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
     if (!stream) return
     stream.getTracks().forEach((track) => track.stop())
     captureStreamRef.current = null
-    setLivePreviewStream(null)
+    store.getState().setLivePreviewStream(null)
   }, [])
 
   const stopRecording = useCallback(() => {
     clearCountdownTimer()
-    setRecordCountdown(null)
+    store.getState().setRecordCountdown(null)
     const recorder = mediaRecorderRef.current
     if (recorder && recorder.state !== "inactive") {
       recorder.stop()
       return
     }
-
     clearRecordingTimer()
     stopCaptureTracks()
-    setIsRecording(false)
+    store.getState().setIsRecording(false)
   }, [clearCountdownTimer, clearRecordingTimer, stopCaptureTracks])
 
   const startCapture = useCallback(
-    async (mode: CaptureMode) => {
+    async (mode: string) => {
       if (isRecording) return
-
-      setCaptureError(null)
-      setRecordCountdown(null)
+      const s = store.getState()
+      s.setCaptureError(null)
+      s.setRecordCountdown(null)
 
       if (!navigator.mediaDevices?.getDisplayMedia) {
-        setCaptureError("Screen recording is not supported in this browser.")
+        s.setCaptureError("Screen recording is not supported in this browser.")
         return
       }
 
@@ -364,21 +249,19 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
           displaySurface: mode === "tab" ? "browser" : "monitor",
         },
         audio: true,
-        preferCurrentTab: mode === "tab",
-        selfBrowserSurface: "exclude",
         surfaceSwitching: "include",
         systemAudio: "include",
+        ...(mode === "tab"
+          ? { preferCurrentTab: true }
+          : { selfBrowserSurface: "exclude" }),
       }
 
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia(displayOptions)
         captureStreamRef.current = stream
-        setLivePreviewStream(stream)
-        setRecordingBlob(null)
-        setRecordingUrl((previous) => {
-          if (previous) URL.revokeObjectURL(previous)
-          return null
-        })
+        s.setLivePreviewStream(stream)
+        s.setRecordingBlob(null)
+        s.setRecordingUrl(null)
 
         const mimeType = selectMimeType()
         const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
@@ -386,37 +269,26 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
         recordedChunksRef.current = []
 
         recorder.ondataavailable = (event: BlobEvent) => {
-          if (event.data.size > 0) {
-            recordedChunksRef.current.push(event.data)
-          }
+          if (event.data.size > 0) recordedChunksRef.current.push(event.data)
         }
 
         recorder.onstop = () => {
-          const blob = new Blob(recordedChunksRef.current, {
-            type: mimeType || "video/webm",
-          })
-
-          setRecordingBlob(blob)
-          setRecordingUrl((previous) => {
-            if (previous) URL.revokeObjectURL(previous)
-            return URL.createObjectURL(blob)
-          })
-
-          setVideoDuration(0)
-          setCurrentTime(0)
-          setIsPlaying(false)
-          setClips([])
-          setSelectedClipId(null)
-          setSelectedClipName("")
-          setExportedBlob(null)
-          setExportedUrl((previous) => {
-            if (previous) URL.revokeObjectURL(previous)
-            return null
-          })
-          setExportProgress(0)
-          setExportStatus(null)
-
-          setIsRecording(false)
+          const blob = new Blob(recordedChunksRef.current, { type: mimeType || "video/webm" })
+          const url = URL.createObjectURL(blob)
+          const st = store.getState()
+          const fallbackDuration = Math.max(0, st.recordingSeconds)
+          st.setRecordingBlob(blob)
+          st.setRecordingUrl(url)
+          st.setVideoDuration(fallbackDuration)
+          st.setCurrentTime(0)
+          st.setIsPlaying(false)
+          st.setClips([])
+          st.selectClip(null)
+          st.setExportedBlob(null)
+          st.setExportedUrl(null)
+          st.setExportProgress(0)
+          st.setExportStatus(null)
+          st.setIsRecording(false)
           clearRecordingTimer()
           stopCaptureTracks()
         }
@@ -434,18 +306,19 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
           )
         }
 
-        setRecordingSeconds(0)
+        s.setRecordingSeconds(0)
         clearRecordingTimer()
         recordingTimerRef.current = setInterval(() => {
-          setRecordingSeconds((seconds) => seconds + 1)
+          store.getState().setRecordingSeconds(store.getState().recordingSeconds + 1)
         }, 1000)
 
         recorder.start(250)
-        setIsRecording(true)
+        s.setIsRecording(true)
       } catch (error) {
-        setCaptureError(error instanceof Error ? error.message : "Could not start screen capture.")
-        setIsRecording(false)
-        setLivePreviewStream(null)
+        const st = store.getState()
+        st.setCaptureError(error instanceof Error ? error.message : "Could not start screen capture.")
+        st.setIsRecording(false)
+        st.setLivePreviewStream(null)
         clearRecordingTimer()
         stopCaptureTracks()
       }
@@ -458,53 +331,49 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
       stopRecording()
       return
     }
-
     if (recordCountdown !== null) {
       clearCountdownTimer()
-      setRecordCountdown(null)
+      store.getState().setRecordCountdown(null)
       return
     }
 
-    setCaptureError(null)
-    setRecordCountdown(3)
+    store.getState().setCaptureError(null)
+    store.getState().setRecordCountdown(3)
     clearCountdownTimer()
     countdownTimerRef.current = setInterval(() => {
-      setRecordCountdown((previous) => {
-        if (previous === null) return null
-        if (previous <= 1) {
-          clearCountdownTimer()
-          void startCapture(selectedCaptureMode)
-          return null
-        }
-        return previous - 1
-      })
+      const current = store.getState().recordCountdown
+      if (current === null) return
+      if (current <= 1) {
+        clearCountdownTimer()
+        void startCapture(store.getState().selectedCaptureMode)
+        store.getState().setRecordCountdown(null)
+      } else {
+        store.getState().setRecordCountdown(current - 1)
+      }
     }, 1000)
-  }, [clearCountdownTimer, isRecording, recordCountdown, selectedCaptureMode, startCapture, stopRecording])
+  }, [clearCountdownTimer, isRecording, recordCountdown, startCapture, stopRecording])
 
+  // ── Initialize clips when video loads ──────────────
   useEffect(() => {
-    if (videoDuration <= 0) return
-
-    setClips((previous) => {
-      if (previous.length > 0) return previous
-
-      return [
-        createBaseClip({
-          id: createId("clip"),
-          name: "Scene 1",
-          start: 0,
-          end: Number(videoDuration.toFixed(2)),
-          presetId: selectedPresetId,
-          color: CLIP_COLORS[0],
-        }),
-      ]
-    })
-  }, [videoDuration, selectedPresetId])
+    if (videoDuration <= 0 || clips.length > 0) return
+    store.getState().setClips([
+      createBaseClip({
+        id: createId("clip"),
+        name: "Scene 1",
+        start: 0,
+        end: Number(videoDuration.toFixed(2)),
+        presetId: selectedPresetId,
+        color: CLIP_COLORS[0],
+      }),
+    ])
+  }, [videoDuration, selectedPresetId, clips.length])
 
   useEffect(() => {
     if (selectedClipId || clips.length === 0) return
-    setSelectedClipId(clips[0].id)
+    store.getState().selectClip(clips[0].id)
   }, [clips, selectedClipId])
 
+  // ── Cleanup ────────────────────────────────────────
   useEffect(() => {
     return () => {
       clearCountdownTimer()
@@ -513,21 +382,10 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
     }
   }, [clearCountdownTimer, clearRecordingTimer, stopCaptureTracks])
 
-  useEffect(() => {
-    return () => {
-      if (recordingUrl) URL.revokeObjectURL(recordingUrl)
-    }
-  }, [recordingUrl])
-
-  useEffect(() => {
-    return () => {
-      if (exportedUrl) URL.revokeObjectURL(exportedUrl)
-    }
-  }, [exportedUrl])
-
+  // ── Thumbnail generation ───────────────────────────
   useEffect(() => {
     if (!recordingUrl) {
-      setPreviewThumbnail(null)
+      store.getState().setPreviewThumbnail(null)
       return
     }
 
@@ -547,7 +405,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
         const ctx = canvas.getContext("2d")
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-          setPreviewThumbnail(canvas.toDataURL("image/jpeg", 0.7))
+          store.getState().setPreviewThumbnail(canvas.toDataURL("image/jpeg", 0.7))
         }
       } finally {
         video.pause()
@@ -572,63 +430,45 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
     }
   }, [recordingUrl])
 
-  useEffect(() => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
+  // ── Media import handler ───────────────────────────
+  const handleFilesAccepted = useCallback(
+    async (files: File[]) => {
+      const file = files[0]
+      if (!file) return
 
-    if (livePreviewStream) {
-      videoElement.srcObject = livePreviewStream
-      const playPromise = videoElement.play()
-      if (playPromise) {
-        void playPromise.catch(() => {
-          // Ignore autoplay restrictions for live preview.
-        })
+      try {
+        const mediaSource = await importVideoFile(file)
+        const s = store.getState()
+        s.addMediaSource(mediaSource)
+        s.setRecordingBlob(mediaSource.blob)
+        s.setRecordingUrl(mediaSource.url)
+        s.setVideoDuration(mediaSource.duration)
+        s.setRecordingSeconds(Math.max(0, Math.round(mediaSource.duration)))
+        s.setCurrentTime(0)
+        s.setIsPlaying(false)
+        s.setClips([])
+        s.selectClip(null)
+        s.setExportedBlob(null)
+        s.setExportedUrl(null)
+        s.setExportProgress(0)
+        s.setExportStatus(null)
+      } catch (error) {
+        store.getState().setCaptureError(
+          error instanceof Error ? error.message : "Failed to import video file."
+        )
       }
-    } else if (videoElement.srcObject) {
-      videoElement.pause()
-      videoElement.srcObject = null
-    }
-
-    return () => {
-      if (videoElement.srcObject) {
-        videoElement.pause()
-        videoElement.srcObject = null
-      }
-    }
-  }, [livePreviewStream])
-
-  const splitClipById = useCallback(
-    (clipId: string, at: number) => {
-      setClips((previous) => {
-        const target = previous.find((clip) => clip.id === clipId)
-        if (!target) return previous
-
-        const splitAt = clamp(at, target.start + 0.2, target.end - 0.2)
-        if (splitAt <= target.start || splitAt >= target.end) return previous
-
-        const firstId = createId("clip")
-        const secondId = createId("clip")
-        setSelectedClipId(firstId)
-
-        return previous.flatMap((clip) => {
-          if (clip.id !== clipId) return [clip]
-
-          return [
-            { ...clip, id: firstId, name: `${clip.name} A`, end: Number(splitAt.toFixed(2)) },
-            { ...clip, id: secondId, name: `${clip.name} B`, start: Number(splitAt.toFixed(2)) },
-          ]
-        })
-      })
     },
     []
   )
 
+  // ── Export ─────────────────────────────────────────
   const exportEditedVideo = useCallback(async () => {
     if (!recordingUrl || clips.length === 0 || isExporting) return
 
-    setIsExporting(true)
-    setExportProgress(0)
-    setExportStatus("Preparing export...")
+    const s = store.getState()
+    s.setIsExporting(true)
+    s.setExportProgress(0)
+    s.setExportStatus("Preparing export...")
 
     const sourceVideo = document.createElement("video")
     sourceVideo.src = recordingUrl
@@ -646,9 +486,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
       const exportClips = [...clips].sort((a, b) => a.start - b.start)
       const totalFrames = Math.max(
         1,
-        Math.ceil(
-          exportClips.reduce((sum, clip) => sum + getClipOutputDuration(clip) * 30, 0)
-        )
+        Math.ceil(exportClips.reduce((sum, clip) => sum + getClipOutputDuration(clip) * 30, 0))
       )
       const width = sourceVideo.videoWidth || 1280
       const height = sourceVideo.videoHeight || 720
@@ -682,7 +520,6 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
             resolve()
             return
           }
-
           const onSeeked = () => {
             sourceVideo.removeEventListener("seeked", onSeeked)
             sourceVideo.removeEventListener("error", onError)
@@ -706,13 +543,10 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
           const sourceTime = clip.start + outTime * clip.speed
           await waitForSeek(sourceTime)
           drawClipFrame(ctx, sourceVideo, clip, width, height)
-
           renderedFrames += 1
           if (renderedFrames % 4 === 0 || renderedFrames === totalFrames) {
-            setExportProgress(Math.round((renderedFrames / totalFrames) * 100))
+            store.getState().setExportProgress(Math.round((renderedFrames / totalFrames) * 100))
           }
-
-          // Give the media encoder time to consume frames.
           await new Promise((resolve) => setTimeout(resolve, 0))
         }
       }
@@ -721,24 +555,30 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
       await stopped
 
       const blob = new Blob(chunks, { type: outputMimeType })
-      setExportedBlob(blob)
-      setExportedUrl((previous) => {
-        if (previous) URL.revokeObjectURL(previous)
-        return URL.createObjectURL(blob)
-      })
-      setExportProgress(100)
-      setExportStatus("Export complete.")
+      const st = store.getState()
+      st.setExportedBlob(blob)
+      st.setExportedUrl(URL.createObjectURL(blob))
+      st.setExportProgress(100)
+      st.setExportStatus("Export complete.")
     } catch (error) {
-      setExportStatus(
+      store.getState().setExportStatus(
         error instanceof Error ? `Export failed: ${error.message}` : "Export failed."
       )
     } finally {
       sourceVideo.pause()
       sourceVideo.removeAttribute("src")
       sourceVideo.load()
-      setIsExporting(false)
+      store.getState().setIsExporting(false)
     }
   }, [clips, isExporting, recordingUrl])
+
+  const downloadRecording = useCallback(() => {
+    if (!recordingUrl) return
+    const anchor = document.createElement("a")
+    anchor.href = recordingUrl
+    anchor.download = `${(brandName || "recording").replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.webm`
+    anchor.click()
+  }, [brandName, recordingUrl])
 
   const downloadEditedExport = useCallback(() => {
     if (!exportedUrl) return
@@ -748,170 +588,13 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
     anchor.click()
   }, [brandName, exportedUrl])
 
+  // ── AI Assistant ───────────────────────────────────
   const applyAssistantActions = useCallback(
-    (payload: Record<string, unknown> | null) => {
-      if (!payload) return
-      const actions = Array.isArray(payload.actions) ? payload.actions : []
-
-      for (const rawAction of actions) {
-        if (!rawAction || typeof rawAction !== "object") continue
-        const action = rawAction as Record<string, unknown>
-        const actionType = String(action.type ?? "").toLowerCase().trim()
-        const clipId = typeof action.clipId === "string" ? action.clipId : selectedClipId
-
-        if (actionType === "set_preset" || actionType === "set_selected_preset" || actionType === "select_preset") {
-          const presetId = String(action.presetId ?? action.preset ?? "").trim()
-          if (SHOT_PRESETS.some((preset) => preset.id === presetId)) {
-            setSelectedPresetId(presetId)
-          }
-          continue
-        }
-
-        if (actionType === "trim_clip" && clipId) {
-          setClips((previous) =>
-            previous.map((clip) => {
-              if (clip.id !== clipId) return clip
-
-              const rawStart = parseNumber(action.start)
-              const rawEnd = parseNumber(action.end)
-              const nextStart = clamp(rawStart ?? clip.start, 0, clip.end - 0.2)
-              const nextEnd = clamp(rawEnd ?? clip.end, nextStart + 0.2, videoDuration || clip.end)
-              return {
-                ...clip,
-                start: Number(nextStart.toFixed(2)),
-                end: Number(nextEnd.toFixed(2)),
-              }
-            })
-          )
-          continue
-        }
-
-        if ((actionType === "set_clip_speed" || actionType === "speed_clip") && clipId) {
-          const speed = parseNumber(action.speed)
-          if (speed !== null) {
-            setClips((previous) =>
-              previous.map((clip) =>
-                clip.id === clipId
-                  ? { ...clip, speed: Number(clamp(speed, 0.25, 3).toFixed(2)) }
-                  : clip
-              )
-            )
-          }
-          continue
-        }
-
-        if ((actionType === "set_clip_zoom" || actionType === "zoom_clip") && clipId) {
-          const zoom = parseNumber(action.zoom)
-          if (zoom !== null) {
-            setClips((previous) =>
-              previous.map((clip) =>
-                clip.id === clipId
-                  ? { ...clip, zoom: Number(clamp(zoom, 1, 3).toFixed(2)) }
-                  : clip
-              )
-            )
-          }
-          continue
-        }
-
-        if ((actionType === "crop_clip" || actionType === "set_crop") && clipId) {
-          const cropX = parseNumber(action.cropX ?? action.x)
-          const cropY = parseNumber(action.cropY ?? action.y)
-          const cropWidth = parseNumber(action.cropWidth ?? action.width)
-          const cropHeight = parseNumber(action.cropHeight ?? action.height)
-          setClips((previous) =>
-            previous.map((clip) => {
-              if (clip.id !== clipId) return clip
-
-              const nextX = clamp(cropX ?? clip.cropX, 0, 100)
-              const nextY = clamp(cropY ?? clip.cropY, 0, 100)
-              const nextWidth = clamp(cropWidth ?? clip.cropWidth, 1, 100 - nextX)
-              const nextHeight = clamp(cropHeight ?? clip.cropHeight, 1, 100 - nextY)
-
-              return {
-                ...clip,
-                cropX: Number(nextX.toFixed(2)),
-                cropY: Number(nextY.toFixed(2)),
-                cropWidth: Number(nextWidth.toFixed(2)),
-                cropHeight: Number(nextHeight.toFixed(2)),
-              }
-            })
-          )
-          continue
-        }
-
-        if (actionType === "rename_clip" && clipId) {
-          const name = String(action.name ?? "").trim()
-          if (name) {
-            setClips((previous) =>
-              previous.map((clip) => (clip.id === clipId ? { ...clip, name } : clip))
-            )
-          }
-          continue
-        }
-
-        if (actionType === "split_clip" && clipId) {
-          const at = parseNumber(action.at ?? action.time)
-          if (at !== null) {
-            splitClipById(clipId, at)
-          }
-          continue
-        }
-
-        if (actionType === "add_clip") {
-          const startCandidate = parseNumber(action.start) ?? currentTime
-          const durationCandidate = parseNumber(action.duration) ?? selectedPreset.duration
-          const endCandidate = parseNumber(action.end) ?? startCandidate + durationCandidate
-          if ((videoDuration || 0) <= 0) continue
-
-          const start = clamp(startCandidate, 0, videoDuration - 0.2)
-          const end = clamp(endCandidate, start + 0.2, videoDuration)
-          const presetId = String(action.presetId ?? selectedPresetId)
-          const nextClipId = createId("clip")
-
-          setClips((previous) => [
-            ...previous,
-            {
-              ...createBaseClip({
-                id: nextClipId,
-                name: String(action.name ?? `Scene ${previous.length + 1}`),
-                start: Number(start.toFixed(2)),
-                end: Number(end.toFixed(2)),
-                presetId: SHOT_PRESETS.some((preset) => preset.id === presetId) ? presetId : selectedPresetId,
-                color: CLIP_COLORS[previous.length % CLIP_COLORS.length],
-              }),
-              speed: Number(clamp(parseNumber(action.speed) ?? 1, 0.25, 3).toFixed(2)),
-              zoom: Number(clamp(parseNumber(action.zoom) ?? 1, 1, 3).toFixed(2)),
-            },
-          ])
-          setSelectedClipId(nextClipId)
-          continue
-        }
-
-        if (actionType === "toggle_loop") {
-          const value = action.value
-          if (typeof value === "boolean") {
-            setLoopSelectedClip(value)
-          } else if (typeof value === "string") {
-            setLoopSelectedClip(value.toLowerCase() === "true")
-          }
-          continue
-        }
-
-        if (actionType === "export_video") {
-          void exportEditedVideo()
-        }
-      }
+    (actions: EditorAction[]) => {
+      if (!actions || actions.length === 0) return
+      executeActions(actions, { exportCallback: exportEditedVideo })
     },
-    [
-      currentTime,
-      exportEditedVideo,
-      selectedClipId,
-      selectedPreset.duration,
-      selectedPresetId,
-      splitClipById,
-      videoDuration,
-    ]
+    [exportEditedVideo]
   )
 
   const runAssistantPrompt = useCallback(
@@ -921,116 +604,74 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
 
       const userMessage: AssistantMessage = { id: createId("assistant"), role: "user", content: text }
       const nextHistory = [...assistantMessages, userMessage]
-
       setAssistantMessages(nextHistory)
       setAssistantStatus("streaming")
       setAssistantInput("")
 
+      const s = store.getState()
       const editorSnapshot = {
         brandId: effectiveBrandId,
         brandName: brandName || "Brand",
-        selectedPresetId,
-        selectedClipId,
-        loopSelectedClip,
-        currentTime: Number(currentTime.toFixed(2)),
-        videoDuration: Number(videoDuration.toFixed(2)),
-        clips: clips.map((clip) => ({
-          id: clip.id,
-          name: clip.name,
-          start: clip.start,
-          end: clip.end,
-          presetId: clip.presetId,
-          speed: clip.speed,
-          zoom: clip.zoom,
-          cropX: clip.cropX,
-          cropY: clip.cropY,
-          cropWidth: clip.cropWidth,
-          cropHeight: clip.cropHeight,
+        selectedPresetId: s.selectedPresetId,
+        selectedClipId: s.selectedClipId,
+        loopSelectedClip: s.loopSelectedClip,
+        currentTime: Number(s.currentTime.toFixed(2)),
+        videoDuration: Number(s.videoDuration.toFixed(2)),
+        clips: s.clips.map((clip) => ({
+          id: clip.id, name: clip.name, start: clip.start, end: clip.end,
+          presetId: clip.presetId, speed: clip.speed, zoom: clip.zoom,
+          cropX: clip.cropX, cropY: clip.cropY, cropWidth: clip.cropWidth, cropHeight: clip.cropHeight,
+          animation: clip.animation,
         })),
       }
 
-      const systemPrompt = `You are a video editing copilot.
-Keep responses brief and specific.
-
-When edits are requested, include one JSON code block with this shape:
-\`\`\`json
-{
-  "actions": [
-    { "type": "set_preset", "presetId": "close-up-7" },
-    { "type": "trim_clip", "clipId": "clip-id", "start": 0.4, "end": 3.8 },
-    { "type": "set_clip_speed", "clipId": "clip-id", "speed": 1.35 },
-    { "type": "set_clip_zoom", "clipId": "clip-id", "zoom": 1.45 },
-    { "type": "crop_clip", "clipId": "clip-id", "x": 8, "y": 4, "width": 86, "height": 88 },
-    { "type": "split_clip", "clipId": "clip-id", "at": 2.5 },
-    { "type": "rename_clip", "clipId": "clip-id", "name": "Intro Beat" },
-    { "type": "add_clip", "start": 4, "end": 7.5, "name": "Hook", "presetId": "close-up-3" },
-    { "type": "toggle_loop", "value": true },
-    { "type": "export_video" }
-  ]
-}
-\`\`\`
-
-Rules:
-- Use only these preset IDs: ${SHOT_PRESETS.map((preset) => preset.id).join(", ")}
-- Times are seconds as numbers.
-- Never reference unknown clip IDs.
-- If no concrete edits are needed, do not include JSON.
-
-Current editor state:
-${JSON.stringify(editorSnapshot, null, 2)}`
-
       try {
-        const response = await fetch("/api/ai/chat", {
+        const response = await fetch("/api/video-editor/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: nextHistory.map(({ role, content }) => ({ role, content })),
-            system: systemPrompt,
+            editorState: editorSnapshot,
           }),
         })
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null)
+          throw new Error(errorData?.error || `Request failed (${response.status})`)
+        }
 
         const data = await response.json()
         const content =
           typeof data?.content === "string" && data.content.trim().length > 0
             ? data.content
-            : "I could not complete that edit request."
+            : "Applied the requested edits."
+        const actions: EditorAction[] = Array.isArray(data?.actions) ? data.actions : []
+
+        // Build display message with action summary
+        const actionsPayload = actions.length > 0 ? { actions } : null
+        const displayContent = buildAssistantMessageContent(content, actionsPayload)
 
         const assistantMessage: AssistantMessage = {
           id: createId("assistant"),
           role: "assistant",
-          content,
+          content: displayContent,
         }
-        setAssistantMessages((previous) => [...previous, assistantMessage])
-        applyAssistantActions(parseAssistantJSON(content))
+        setAssistantMessages((prev) => [...prev, assistantMessage])
+        applyAssistantActions(actions)
         setAssistantStatus("ready")
       } catch (error) {
-        setAssistantMessages((previous) => [
-          ...previous,
+        setAssistantMessages((prev) => [
+          ...prev,
           {
             id: createId("assistant"),
             role: "assistant",
-            content:
-              error instanceof Error
-                ? `Edit assistant failed: ${error.message}`
-                : "Edit assistant failed due to a network error.",
+            content: error instanceof Error ? `Edit assistant failed: ${error.message}` : "Edit assistant failed due to a network error.",
           },
         ])
         setAssistantStatus("error")
       }
     },
-    [
-      applyAssistantActions,
-      assistantMessages,
-      assistantStatus,
-      effectiveBrandId,
-      brandName,
-      clips,
-      currentTime,
-      loopSelectedClip,
-      selectedClipId,
-      selectedPresetId,
-      videoDuration,
-    ]
+    [applyAssistantActions, assistantMessages, assistantStatus, effectiveBrandId, brandName]
   )
 
   const handleAssistantSubmit = useCallback(
@@ -1041,803 +682,165 @@ ${JSON.stringify(editorSnapshot, null, 2)}`
     [assistantInput, runAssistantPrompt]
   )
 
-  const handleLoadedMetadata = useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    const nextDuration = event.currentTarget.duration
-    if (!Number.isFinite(nextDuration) || nextDuration <= 0) return
-    setVideoDuration(nextDuration)
-  }, [])
+  useEffect(() => {
+    const composerElement = assistantComposerRef.current
+    if (!composerElement) return
 
-  const handleTimeUpdate = useCallback(() => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
-
-    let nextTime = videoElement.currentTime
-    const clipAtTime = getClipAtTime(clips, nextTime)
-    videoElement.playbackRate = clipAtTime?.speed ?? 1
-    if (loopSelectedClip && selectedClip && nextTime >= selectedClip.end - 0.04) {
-      videoElement.currentTime = selectedClip.start
-      nextTime = selectedClip.start
+    const updateComposerHeight = () => {
+      setAssistantComposerHeight(composerElement.offsetHeight)
     }
 
-    setCurrentTime(nextTime)
-  }, [clips, loopSelectedClip, selectedClip])
+    updateComposerHeight()
+    if (typeof ResizeObserver === "undefined") return
+
+    const observer = new ResizeObserver(() => updateComposerHeight())
+    observer.observe(composerElement)
+    return () => observer.disconnect()
+  }, [assistantStatus, hasUserMessage])
 
   useEffect(() => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
-    videoElement.playbackRate = previewClip?.speed ?? 1
-  }, [previewClip?.id, previewClip?.speed])
+    if (isAssistantCollapsed) return
+    assistantMessageEndRef.current?.scrollIntoView({ block: "end", behavior: "auto" })
+  }, [assistantComposerHeight, assistantMessages.length, assistantStatus, isAssistantCollapsed])
 
-  const handleSeek = useCallback(
-    (value: number) => {
-      const videoElement = videoRef.current
-      if (!videoElement) return
-      const nextValue = clamp(value, 0, videoDuration || 0)
-      videoElement.currentTime = nextValue
-      setCurrentTime(nextValue)
-    },
-    [videoDuration]
-  )
-
-  const togglePlayback = useCallback(async () => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
-
-    if (videoElement.paused) {
-      await videoElement.play()
-      setIsPlaying(true)
-    } else {
-      videoElement.pause()
-      setIsPlaying(false)
-    }
-  }, [])
-
-  const handleTrimStart = useCallback(
-    (value: number) => {
-      if (!selectedClipId) return
-      setClips((previous) =>
-        previous.map((clip) => {
-          if (clip.id !== selectedClipId) return clip
-          const start = clamp(value, 0, clip.end - 0.2)
-          return { ...clip, start: Number(start.toFixed(2)) }
-        })
-      )
-    },
-    [selectedClipId]
-  )
-
-  const handleTrimEnd = useCallback(
-    (value: number) => {
-      if (!selectedClipId) return
-      setClips((previous) =>
-        previous.map((clip) => {
-          if (clip.id !== selectedClipId) return clip
-          const end = clamp(value, clip.start + 0.2, videoDuration || clip.end)
-          return { ...clip, end: Number(end.toFixed(2)) }
-        })
-      )
-    },
-    [selectedClipId, videoDuration]
-  )
-
-  const handleClipSpeedChange = useCallback(
-    (value: number) => {
-      if (!selectedClipId) return
-      setClips((previous) =>
-        previous.map((clip) =>
-          clip.id === selectedClipId
-            ? { ...clip, speed: Number(clamp(value, 0.25, 3).toFixed(2)) }
-            : clip
-        )
-      )
-    },
-    [selectedClipId]
-  )
-
-  const handleClipZoomChange = useCallback(
-    (value: number) => {
-      if (!selectedClipId) return
-      setClips((previous) =>
-        previous.map((clip) =>
-          clip.id === selectedClipId
-            ? { ...clip, zoom: Number(clamp(value, 1, 3).toFixed(2)) }
-            : clip
-        )
-      )
-    },
-    [selectedClipId]
-  )
-
-  const handleClipCropChange = useCallback(
-    (field: "cropX" | "cropY" | "cropWidth" | "cropHeight", value: number) => {
-      if (!selectedClipId) return
-      setClips((previous) =>
-        previous.map((clip) => {
-          if (clip.id !== selectedClipId) return clip
-
-          let cropX = clip.cropX
-          let cropY = clip.cropY
-          let cropWidth = clip.cropWidth
-          let cropHeight = clip.cropHeight
-
-          if (field === "cropX") cropX = clamp(value, 0, 99)
-          if (field === "cropY") cropY = clamp(value, 0, 99)
-          if (field === "cropWidth") cropWidth = clamp(value, 1, 100)
-          if (field === "cropHeight") cropHeight = clamp(value, 1, 100)
-
-          cropWidth = clamp(cropWidth, 1, 100 - cropX)
-          cropHeight = clamp(cropHeight, 1, 100 - cropY)
-
-          return {
-            ...clip,
-            cropX: Number(cropX.toFixed(2)),
-            cropY: Number(cropY.toFixed(2)),
-            cropWidth: Number(cropWidth.toFixed(2)),
-            cropHeight: Number(cropHeight.toFixed(2)),
-          }
-        })
-      )
-    },
-    [selectedClipId]
-  )
-
-  const addClipAtPlayhead = useCallback(() => {
-    if (videoDuration <= 0) return
-    const baseDuration = selectedPreset.duration
-    const start = clamp(currentTime, 0, videoDuration - 0.2)
-    const end = clamp(start + baseDuration, start + 0.2, videoDuration)
-
-    const nextClip: TimelineClip = {
-      ...createBaseClip({
-        id: createId("clip"),
-        name: `Scene ${clips.length + 1}`,
-        start: Number(start.toFixed(2)),
-        end: Number(end.toFixed(2)),
-        presetId: selectedPresetId,
-        color: CLIP_COLORS[clips.length % CLIP_COLORS.length],
-      }),
-    }
-
-    setClips((previous) => [...previous, nextClip])
-    setSelectedClipId(nextClip.id)
-  }, [clips.length, currentTime, selectedPreset.duration, selectedPresetId, videoDuration])
-
-  const splitSelectedClip = useCallback(() => {
-    if (!selectedClip) return
-    splitClipById(selectedClip.id, currentTime)
-  }, [currentTime, selectedClip, splitClipById])
-
-  const applyPresetToSelectedClip = useCallback(() => {
-    if (!selectedClipId) return
-    setClips((previous) =>
-      previous.map((clip) => (clip.id === selectedClipId ? { ...clip, presetId: selectedPresetId } : clip))
-    )
-  }, [selectedClipId, selectedPresetId])
-
-  const saveSelectedClipName = useCallback(() => {
-    if (!selectedClipId) return
-    const nextName = selectedClipName.trim()
-    if (!nextName) return
-    setClips((previous) =>
-      previous.map((clip) => (clip.id === selectedClipId ? { ...clip, name: nextName } : clip))
-    )
-  }, [selectedClipId, selectedClipName])
-
-  const downloadRecording = useCallback(() => {
-    if (!recordingUrl) return
-    const anchor = document.createElement("a")
-    anchor.href = recordingUrl
-    anchor.download = `${(brandName || "recording").replace(/\s+/g, "-").toLowerCase()}-${Date.now()}.webm`
-    anchor.click()
-  }, [brandName, recordingUrl])
-
-  const activeClipPreset = previewClip ? getPresetById(previewClip.presetId) : selectedPreset
-  const previewObjectPosition = previewClip
-    ? `${previewClip.cropX + previewClip.cropWidth / 2}% ${previewClip.cropY + previewClip.cropHeight / 2}%`
-    : "50% 50%"
-  const captureModeLabel = selectedCaptureMode === "tab" ? "Browser tab" : "Entire screen"
-  const hasVideoPreview = Boolean(recordingUrl || livePreviewStream)
-  const canPreviewAnimations = Boolean(recordingUrl)
-
+  // ── Render ─────────────────────────────────────────
   return (
-    <div
-      className={cn(
-        "grid h-full min-h-0 grid-cols-1",
-        isAnimationsCollapsed
-          ? "xl:grid-cols-[74px_minmax(0,1fr)_360px]"
-          : "xl:grid-cols-[280px_minmax(0,1fr)_360px]"
-      )}
-    >
-      <section className="order-2 flex min-h-0 flex-col border-y border-border/50 bg-card/20 xl:order-1 xl:border-y-0 xl:border-r">
+    <div className={cn("grid h-full min-h-0 grid-cols-1 gap-3 p-3", workspaceGridClass)}>
+      {/* Animations Panel */}
+      <AnimationPanel />
+
+      {/* Main Editor */}
+      <section className="order-1 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card/20 xl:order-2">
+        <EditorToolbar
+          onStartRecording={startRecordingWithCountdown}
+          onStartCapture={startCapture}
+          onExport={() => void exportEditedVideo()}
+          onDownloadOriginal={downloadRecording}
+          onDownloadExport={downloadEditedExport}
+          clearCountdownTimer={clearCountdownTimer}
+        />
+
+        <div className="flex-1 overflow-y-auto p-4 md:p-5">
+          <div className="mx-auto max-w-5xl space-y-4">
+            <MediaDropZone onFilesAccepted={handleFilesAccepted} disabled={isRecording}>
+              <VideoPreviewCanvas
+                brandName={brandName}
+                videoRef={videoRef}
+                onStartRecording={startRecordingWithCountdown}
+              />
+            </MediaDropZone>
+            <TimelinePanel />
+            <ClipInspector />
+          </div>
+        </div>
+      </section>
+
+      {/* AI Assistant Panel */}
+      <section className="order-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-gradient-to-b from-card/35 via-card/20 to-card/8">
         <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-          {isAnimationsCollapsed ? (
+          {isAssistantCollapsed ? (
             <Sparkles className="h-4 w-4 text-primary" />
           ) : (
-            <>
-              <p className="text-sm font-semibold">Animations</p>
-              <Badge variant="secondary" className="font-mono text-[10px]">
-                {SHOT_PRESETS.length}
-              </Badge>
-            </>
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <p className="text-sm font-semibold">AI Video Editor</p>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tell the AI what to edit.
+              </p>
+            </div>
           )}
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
-            className="ml-2"
-            onClick={() => setIsAnimationsCollapsed((value) => !value)}
-            aria-label={isAnimationsCollapsed ? "Expand animations panel" : "Collapse animations panel"}
-            title={isAnimationsCollapsed ? "Expand animations panel" : "Collapse animations panel"}
+            onClick={() => store.getState().setIsAssistantCollapsed(!isAssistantCollapsed)}
+            aria-label={isAssistantCollapsed ? "Expand AI panel" : "Collapse AI panel"}
+            title={isAssistantCollapsed ? "Expand AI panel" : "Collapse AI panel"}
           >
-            {isAnimationsCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {isAssistantCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
           </Button>
         </div>
-        {!isAnimationsCollapsed && !canPreviewAnimations ? (
-          <div className="border-b border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-            Record once to unlock live animation previews for each preset.
+
+        {isAssistantCollapsed ? (
+          <div className="flex flex-1 items-center justify-center p-3">
+            <div className="rounded-lg border border-border/60 bg-background/70 px-2 py-4 text-center">
+              <WandSparkles className="mx-auto h-4 w-4 text-primary" />
+              <p className="mt-2 text-[10px] text-muted-foreground">AI Tools</p>
+            </div>
           </div>
-        ) : null}
-        <ScrollArea className="flex-1">
-          <div className={cn("space-y-2 p-3", isAnimationsCollapsed && "space-y-1.5 p-2")}>
-            {SHOT_PRESETS.map((preset, index) => (
-              <button
-                key={preset.id}
-                onClick={() => setSelectedPresetId(preset.id)}
-                aria-label={`${preset.title}: ${preset.description}`}
-                className={cn(
-                  "flex w-full items-center rounded-lg border transition-colors",
-                  isAnimationsCollapsed ? "justify-center px-1.5 py-1.5" : "gap-3 px-2.5 py-2 text-left",
-                  selectedPresetId === preset.id
-                    ? "border-primary/60 bg-primary/10"
-                    : "border-border/40 bg-card/40 hover:bg-muted/50"
-                )}
+        ) : (
+          <div className="relative flex-1 min-h-0">
+            <Conversation className="h-full">
+              <ConversationContent
+                className="space-y-3"
+                style={{ paddingBottom: `${assistantComposerHeight + 16}px` }}
               >
-                <div
-                  className={cn(
-                    "relative shrink-0 overflow-hidden rounded-md border border-border/30",
-                    isAnimationsCollapsed ? "h-10 w-10" : "h-14 w-20"
-                  )}
-                >
-                  {canPreviewAnimations && selectedPresetId === preset.id ? (
-                    <video
-                      src={recordingUrl ?? undefined}
-                      className="h-full w-full object-cover"
-                      style={{
-                        transform: `scale(${preset.zoom}) translate(${preset.panX * 45}%, ${preset.panY * 45}%) rotate(${preset.rotate}deg)`,
-                      }}
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      preload="metadata"
-                    />
-                  ) : canPreviewAnimations && previewThumbnail ? (
-                    <img
-                      src={previewThumbnail}
-                      alt={preset.title}
-                      className="h-full w-full object-cover"
-                      style={{
-                        transform: `scale(${preset.zoom}) translate(${preset.panX * 45}%, ${preset.panY * 45}%) rotate(${preset.rotate}deg)`,
-                      }}
-                    />
-                  ) : (
-                    <div
-                      className={cn(
-                        "h-full w-full bg-gradient-to-br",
-                        index % 3 === 0 && "from-cyan-300 via-indigo-500 to-pink-500",
-                        index % 3 === 1 && "from-sky-400 via-blue-500 to-violet-600",
-                        index % 3 === 2 && "from-indigo-400 via-fuchsia-500 to-rose-400"
-                      )}
-                    />
-                  )}
-                </div>
-                {!isAnimationsCollapsed ? (
-                  <>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{preset.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{preset.description}</p>
-                    </div>
-                    <span className="ml-auto text-xs text-muted-foreground">{preset.duration}s</span>
-                  </>
-                ) : null}
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
-      </section>
-
-      <section className="order-1 flex min-h-0 flex-col xl:order-2">
-        <div className="border-b border-border/50 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={startRecordingWithCountdown}
-              variant={isRecording ? "destructive" : recordCountdown !== null ? "secondary" : "default"}
-            >
-              {isRecording ? <Square className="h-4 w-4" /> : <Video className="h-4 w-4" />}
-              {isRecording
-                ? "Stop Recording"
-                : recordCountdown !== null
-                  ? `Starting in ${recordCountdown}`
-                  : "Record"}
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" disabled={isRecording || recordCountdown !== null}>
-                  Record Options
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuLabel>Capture source</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={selectedCaptureMode}
-                  onValueChange={(value) => setSelectedCaptureMode(value as CaptureMode)}
-                >
-                  <DropdownMenuRadioItem value="screen">
-                    <Monitor className="h-4 w-4" />
-                    Entire screen
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="tab">
-                    <Camera className="h-4 w-4" />
-                    Browser tab
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (!isRecording && recordCountdown === null) {
-                      setCaptureError(null)
-                      clearCountdownTimer()
-                      void startCapture(selectedCaptureMode)
-                    }
-                  }}
-                >
-                  Start immediately
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Badge variant="outline" className="text-[11px]">
-              {captureModeLabel}
-            </Badge>
-
-            <Button onClick={downloadRecording} disabled={!recordingBlob} variant="ghost" size="sm">
-              <Upload className="h-4 w-4" />
-              Download
-            </Button>
-            <Button
-              onClick={() => void exportEditedVideo()}
-              disabled={!recordingUrl || clips.length === 0 || isExporting}
-              variant="default"
-              size="sm"
-            >
-              {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              Export
-            </Button>
-            <Button onClick={downloadEditedExport} disabled={!exportedBlob} variant="ghost" size="sm">
-              <Upload className="h-4 w-4" />
-              Download Edited
-            </Button>
-            {isRecording && (
-              <Badge variant="destructive" className="font-mono text-xs">
-                REC {formatTime(recordingSeconds)}
-              </Badge>
-            )}
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            One record button controls the full flow. Use <strong>Record Options</strong> to switch between
-            entire screen and browser tab capture.
-          </p>
-          {captureError ? (
-            <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
-              {captureError}
-            </p>
-          ) : null}
-          {isExporting ? (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Exporting edited video... {exportProgress}%
-            </p>
-          ) : null}
-          {exportStatus ? (
-            <p className="mt-1 text-xs text-muted-foreground">{exportStatus}</p>
-          ) : null}
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 md:p-5">
-          <div className="mx-auto max-w-5xl space-y-4">
-            <div className="overflow-hidden rounded-xl border border-border/60 bg-card/20">
-              <div className="border-b border-border/50 px-4 py-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">
-                    {brandName ? `${brandName} Video Studio` : "Video Studio"}
-                  </p>
-                  <Badge variant="outline" className="text-[11px]">
-                    {activeClipPreset.title}
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="p-3">
-                <div className="relative mx-auto aspect-video w-full overflow-hidden rounded-lg bg-black">
-                  {hasVideoPreview ? (
-                    <>
-                      <video
-                        ref={videoRef}
-                        src={recordingUrl ?? undefined}
-                        className="h-full w-full object-cover transition-transform duration-500"
-                        style={
-                          recordingUrl
-                            ? {
-                                transform: getPreviewTransform(previewClip),
-                                objectPosition: previewObjectPosition,
-                              }
-                            : undefined
-                        }
-                        onLoadedMetadata={recordingUrl ? handleLoadedMetadata : undefined}
-                        onTimeUpdate={recordingUrl ? handleTimeUpdate : undefined}
-                        onEnded={() => setIsPlaying(false)}
-                        playsInline
-                        muted
-                      />
-                      {recordingUrl && !isRecording && !isPlaying ? (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Button
-                            type="button"
-                            size="icon-lg"
-                            variant="secondary"
-                            onClick={() => void togglePlayback()}
-                            className="h-14 w-14 rounded-full border border-border/60 bg-background/70 backdrop-blur"
-                            aria-label="Play recording"
-                          >
-                            <Play className="h-6 w-6" />
-                          </Button>
-                        </div>
-                      ) : null}
-                      {isRecording ? (
-                        <Badge variant="destructive" className="absolute left-3 top-3 font-mono text-[10px]">
-                          REC {formatTime(recordingSeconds)}
-                        </Badge>
-                      ) : null}
-                      <div className="pointer-events-none absolute inset-0 border border-white/10" />
-                    </>
-                  ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
-                      {recordCountdown !== null ? (
-                        <>
-                          <div className="flex h-16 w-16 items-center justify-center rounded-full border border-primary/40 bg-primary/15 text-2xl font-semibold text-primary">
-                            {recordCountdown}
-                          </div>
-                          <p className="text-sm">Get ready. Recording will start automatically.</p>
-                        </>
-                      ) : (
-                        <>
-                          <Video className="h-8 w-8" />
-                          <p className="text-sm">Press Record to capture your screen or browser tab.</p>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-3 flex items-center gap-2">
-                  <Button size="icon-sm" variant="outline" onClick={togglePlayback} disabled={!recordingUrl}>
-                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  </Button>
-                  <div className="flex-1">
-                    <input
-                      type="range"
-                      min={0}
-                      max={videoDuration || 0}
-                      step={0.05}
-                      value={currentTime}
-                      onChange={(event) => handleSeek(parseFloat(event.target.value))}
-                      disabled={!recordingUrl}
-                      className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                    />
-                  </div>
-                  <p className="w-28 text-right font-mono text-xs text-muted-foreground">
-                    {formatTime(currentTime)} / {formatTime(videoDuration)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border/60 bg-card/20 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold">Timeline</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Output length: {formatTime(outputDuration)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={addClipAtPlayhead} disabled={!recordingUrl}>
-                    <Clapperboard className="h-3.5 w-3.5" />
-                    Add Clip
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={splitSelectedClip} disabled={!selectedClip}>
-                    <Scissors className="h-3.5 w-3.5" />
-                    Split
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={applyPresetToSelectedClip} disabled={!selectedClip}>
-                    Apply Preset
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={loopSelectedClip ? "default" : "outline"}
-                    onClick={() => setLoopSelectedClip((value) => !value)}
-                    disabled={!selectedClip}
-                  >
-                    Loop Clip
-                  </Button>
-                </div>
-              </div>
-
-              <div className="relative h-14 overflow-hidden rounded-lg border border-border/50 bg-muted/30">
-                {videoDuration > 0 && clips.length > 0 ? (
-                  clips.map((clip) => {
-                    const left = `${(clip.start / videoDuration) * 100}%`
-                    const width = `${Math.max(((clip.end - clip.start) / videoDuration) * 100, 1.2)}%`
-                    const isActive = clip.id === selectedClipId
-
-                    return (
-                      <button
-                        key={clip.id}
-                        onClick={() => setSelectedClipId(clip.id)}
-                        className={cn(
-                          "absolute top-1.5 h-10 overflow-hidden rounded-md border text-left text-[11px] font-medium text-white shadow-sm transition",
-                          isActive ? "border-white/90 ring-2 ring-primary/60" : "border-white/20"
-                        )}
-                        style={{ left, width, backgroundColor: clip.color }}
-                      >
-                        <span className="block truncate px-2 py-2">{clip.name}</span>
-                      </button>
-                    )
-                  })
-                ) : (
-                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                    Timeline appears after recording.
-                  </div>
-                )}
-              </div>
-
-              {selectedClip ? (
-                <div className="mt-4 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      value={selectedClipName}
-                      onChange={(event) => setSelectedClipName(event.target.value)}
-                      onBlur={saveSelectedClipName}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault()
-                          saveSelectedClipName()
-                        }
-                      }}
-                      className="h-9 max-w-xs"
-                    />
-                    <Badge variant="secondary">{selectedClip.presetId}</Badge>
-                    <Badge variant="outline">Speed {selectedClip.speed.toFixed(2)}x</Badge>
-                    <Badge variant="outline">Zoom {selectedClip.zoom.toFixed(2)}x</Badge>
-                    <Badge variant="outline">
-                      Out {formatTime(getClipOutputDuration(selectedClip))}
-                    </Badge>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="text-xs text-muted-foreground">
-                      Clip Start: {formatTime(selectedClip.start)}
-                      <input
-                        type="range"
-                        min={0}
-                        max={videoDuration || 0}
-                        step={0.05}
-                        value={selectedClip.start}
-                        onChange={(event) => handleTrimStart(parseFloat(event.target.value))}
-                        className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                      />
-                    </label>
-                    <label className="text-xs text-muted-foreground">
-                      Clip End: {formatTime(selectedClip.end)}
-                      <input
-                        type="range"
-                        min={0}
-                        max={videoDuration || 0}
-                        step={0.05}
-                        value={selectedClip.end}
-                        onChange={(event) => handleTrimEnd(parseFloat(event.target.value))}
-                        className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="text-xs text-muted-foreground">
-                      Speed: {selectedClip.speed.toFixed(2)}x
-                      <input
-                        type="range"
-                        min={0.25}
-                        max={3}
-                        step={0.05}
-                        value={selectedClip.speed}
-                        onChange={(event) => handleClipSpeedChange(parseFloat(event.target.value))}
-                        className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                      />
-                    </label>
-                    <label className="text-xs text-muted-foreground">
-                      Zoom: {selectedClip.zoom.toFixed(2)}x
-                      <input
-                        type="range"
-                        min={1}
-                        max={3}
-                        step={0.05}
-                        value={selectedClip.zoom}
-                        onChange={(event) => handleClipZoomChange(parseFloat(event.target.value))}
-                        className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-xs font-medium">Crop</p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-[11px]"
-                        onClick={() => {
-                          handleClipCropChange("cropX", 0)
-                          handleClipCropChange("cropY", 0)
-                          handleClipCropChange("cropWidth", 100)
-                          handleClipCropChange("cropHeight", 100)
-                        }}
-                      >
-                        Reset Crop
-                      </Button>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <label className="text-xs text-muted-foreground">
-                        X: {selectedClip.cropX.toFixed(1)}%
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          step={0.5}
-                          value={selectedClip.cropX}
-                          onChange={(event) => handleClipCropChange("cropX", parseFloat(event.target.value))}
-                          className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                        />
-                      </label>
-                      <label className="text-xs text-muted-foreground">
-                        Y: {selectedClip.cropY.toFixed(1)}%
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          step={0.5}
-                          value={selectedClip.cropY}
-                          onChange={(event) => handleClipCropChange("cropY", parseFloat(event.target.value))}
-                          className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                        />
-                      </label>
-                      <label className="text-xs text-muted-foreground">
-                        Width: {selectedClip.cropWidth.toFixed(1)}%
-                        <input
-                          type="range"
-                          min={1}
-                          max={100}
-                          step={0.5}
-                          value={selectedClip.cropWidth}
-                          onChange={(event) => handleClipCropChange("cropWidth", parseFloat(event.target.value))}
-                          className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                        />
-                      </label>
-                      <label className="text-xs text-muted-foreground">
-                        Height: {selectedClip.cropHeight.toFixed(1)}%
-                        <input
-                          type="range"
-                          min={1}
-                          max={100}
-                          step={0.5}
-                          value={selectedClip.cropHeight}
-                          onChange={(event) => handleClipCropChange("cropHeight", parseFloat(event.target.value))}
-                          className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="order-3 flex min-h-0 flex-col border-t border-border/50 bg-card/10 xl:border-t-0 xl:border-l">
-        <div className="border-b border-border/50 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold">AI Video Editor</p>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Chat-edit clips, presets, and timing using natural language.
-          </p>
-        </div>
-
-        <div className="flex-1 min-h-0">
-          <Conversation>
-            <ConversationContent className="space-y-3">
-              {assistantMessages.length === 0 ? (
-                <ConversationEmptyState
-                  title="Edit with AI"
-                  description="Ask for trims, splits, timing changes, and close-up preset swaps."
-                  icon={<Sparkles className="h-6 w-6" />}
-                />
-              ) : (
-                assistantMessages.map((message) => (
+                {assistantMessages.map((message) => (
                   <Message from={message.role} key={message.id}>
                     <MessageContent>
                       <MessageResponse>{message.content}</MessageResponse>
                     </MessageContent>
                   </Message>
-                ))
-              )}
-            </ConversationContent>
-            <ConversationScrollButton />
-          </Conversation>
-        </div>
+                ))}
+                <div ref={assistantMessageEndRef} className="h-px w-full" />
+              </ConversationContent>
+              <ConversationScrollButton
+                style={{ bottom: `${assistantComposerHeight + 12}px` }}
+              />
+            </Conversation>
 
-        <div className="border-t border-border/50 p-3">
-          <PromptInput onSubmit={handleAssistantSubmit}>
-            <PromptInputBody>
-              <PromptInputTextarea
-                value={assistantInput}
-                onChange={(event) => setAssistantInput(event.target.value)}
-                placeholder="e.g. Split at 2.2s, crop to center, speed up to 1.5x, zoom to 1.4x, then export"
-              />
-            </PromptInputBody>
-            <PromptInputFooter>
-              <PromptInputTools>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => void runAssistantPrompt("Tighten pacing and create 3 clips of 3 to 4 seconds each.")}
-                >
-                  Tighten
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => void runAssistantPrompt("Apply subtle close-up presets across the existing clips.")}
-                >
-                  Presets
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => void runAssistantPrompt("Speed up quiet parts to 1.35x, add gentle zoom, and export.")}
-                >
-                  Speed + Export
-                </Button>
-              </PromptInputTools>
-              <PromptInputSubmit
-                status={assistantStatus}
-                disabled={!assistantInput.trim() || assistantStatus === "streaming" || assistantStatus === "submitted"}
-              />
-            </PromptInputFooter>
-          </PromptInput>
-          {assistantStatus === "streaming" ? (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Applying edit suggestions...
-            </p>
-          ) : null}
-        </div>
+            <div
+              ref={assistantComposerRef}
+              className="absolute inset-x-0 bottom-0 border-t border-border/50 bg-card/95 p-3 backdrop-blur"
+            >
+              {!hasUserMessage ? (
+                <p className="mb-2 text-[11px] text-muted-foreground">
+                  Tip: Trim scene 1 to 4s, split at 2.5s, then apply close-up-7.
+                </p>
+              ) : null}
+              <PromptInput onSubmit={handleAssistantSubmit}>
+                <PromptInputBody>
+                  <PromptInputTextarea
+                    value={assistantInput}
+                    onChange={(event) => setAssistantInput(event.target.value)}
+                    placeholder="Describe the edit you want..."
+                  />
+                </PromptInputBody>
+                <PromptInputFooter>
+                  <PromptInputTools>
+                    {ASSISTANT_QUICK_ACTIONS.map((action, index) => (
+                      <Button
+                        key={`quick-action-${action.id}`}
+                        type="button"
+                        size="sm"
+                        variant={index === 0 ? "secondary" : "ghost"}
+                        onClick={() => void runAssistantPrompt(action.prompt)}
+                        title={action.description}
+                        aria-label={action.label}
+                      >
+                        {action.label}
+                      </Button>
+                    ))}
+                  </PromptInputTools>
+                  <PromptInputSubmit
+                    status={assistantStatus}
+                    disabled={!assistantInput.trim() || assistantStatus === "streaming" || assistantStatus === "submitted"}
+                    title="Send"
+                    aria-label="Send"
+                  />
+                </PromptInputFooter>
+              </PromptInput>
+              {assistantStatus === "streaming" ? (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Applying edit suggestions...
+                </p>
+              ) : null}
+            </div>
+          </div>
+        )}
       </section>
     </div>
   )
