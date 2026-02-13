@@ -177,6 +177,64 @@ function extractImageUrlsFromToolPart(part: Record<string, unknown>) {
     .filter((url): url is string => Boolean(url))
 }
 
+interface RemotionLiveState {
+  status: string
+  progress?: number
+  outputUrl?: string
+  message?: string
+  error?: string
+}
+
+function isRemotionTool(toolName: string) {
+  return toolName === 'generate_remotion_video' || toolName === 'check_remotion_status'
+}
+
+function getRemotionVideoIdFromPart(part: Record<string, unknown>) {
+  const output = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : undefined
+  const input = part.input && typeof part.input === 'object' ? (part.input as Record<string, unknown>) : undefined
+
+  if (output && typeof output.videoId === 'string' && output.videoId) return output.videoId
+  if (input && typeof input.videoId === 'string' && input.videoId) return input.videoId
+  return ''
+}
+
+function normalizeRemotionStatus(status: string | undefined) {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'completed') return 'completed'
+  if (normalized === 'failed' || normalized === 'error') return 'failed'
+  if (normalized === 'rendering' || normalized === 'processing' || normalized === 'queued' || normalized === 'starting') {
+    return 'rendering'
+  }
+  return normalized || 'rendering'
+}
+
+function remotionStatusFromPart(part: Record<string, unknown>, liveByVideoId?: Record<string, RemotionLiveState>) {
+  const toolName = getToolNameFromPart(part)
+  if (!isRemotionTool(toolName)) return null
+
+  const output = part.output && typeof part.output === 'object' ? (part.output as Record<string, unknown>) : undefined
+  const videoId = getRemotionVideoIdFromPart(part)
+  const live = videoId ? liveByVideoId?.[videoId] : undefined
+
+  const rawStatus = typeof live?.status === 'string'
+    ? live.status
+    : (typeof output?.status === 'string' ? output.status : undefined)
+
+  const rawProgress = typeof live?.progress === 'number'
+    ? live.progress
+    : (typeof output?.progress === 'number' ? output.progress : undefined)
+
+  return {
+    videoId,
+    status: normalizeRemotionStatus(rawStatus),
+    progress: typeof rawProgress === 'number' ? Math.max(0, Math.min(rawProgress, 100)) : undefined,
+    outputUrl:
+      typeof live?.outputUrl === 'string'
+        ? live.outputUrl
+        : (typeof output?.outputUrl === 'string' ? output.outputUrl : undefined),
+  }
+}
+
 function getToolNameFromPart(part: Record<string, unknown>) {
   const rawType = typeof part.type === 'string' ? part.type : ''
   if (rawType.startsWith('tool-')) return rawType.slice(5)
@@ -184,12 +242,17 @@ function getToolNameFromPart(part: Record<string, unknown>) {
   return ''
 }
 
-function buildAgentActivitySummary(toolParts: Array<Record<string, unknown>>) {
+function buildAgentActivitySummary(
+  toolParts: Array<Record<string, unknown>>,
+  liveRemotionByVideoId?: Record<string, RemotionLiveState>
+) {
   let repoName = ''
   let analyzedRepo = false
   let readFileCount = 0
   let generatedImages = 0
   let mergedPrs = 0
+  let activeRenderProgress: number | undefined
+  let videoReady = false
 
   for (const part of toolParts) {
     const toolName = getToolNameFromPart(part)
@@ -225,6 +288,15 @@ function buildAgentActivitySummary(toolParts: Array<Record<string, unknown>>) {
       const imageCount = Array.isArray(result?.images) ? result.images.length : 0
       generatedImages += imageCount
     }
+
+    const remotion = remotionStatusFromPart(part, liveRemotionByVideoId)
+    if (remotion) {
+      if (remotion.status === 'completed') {
+        videoReady = true
+      } else if (remotion.status === 'rendering') {
+        activeRenderProgress = typeof remotion.progress === 'number' ? remotion.progress : activeRenderProgress
+      }
+    }
   }
 
   const parts: string[] = []
@@ -247,7 +319,25 @@ function buildAgentActivitySummary(toolParts: Array<Record<string, unknown>>) {
     parts.push(`generated ${generatedImages} image${generatedImages === 1 ? '' : 's'}`)
   }
 
-  return parts.slice(0, 3).join(' · ')
+  let videoStatusPart: string | null = null
+  if (typeof activeRenderProgress === 'number') {
+    videoStatusPart = `rendering video (${Math.round(activeRenderProgress)}%)`
+    parts.push(videoStatusPart)
+  } else if (videoReady) {
+    videoStatusPart = 'video ready'
+    parts.push(videoStatusPart)
+  }
+
+  const summaryParts = parts.slice(0, 3)
+  if (videoStatusPart && !summaryParts.some((part) => part.includes('video'))) {
+    if (summaryParts.length === 3) {
+      summaryParts[2] = videoStatusPart
+    } else {
+      summaryParts.push(videoStatusPart)
+    }
+  }
+
+  return summaryParts.join(' · ')
 }
 
 function normalizeLoadedMessages(rawMessages: unknown): UIMessage[] {
@@ -1227,6 +1317,8 @@ interface MessageBubbleProps {
 
 function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, onEditPrompt }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false)
+  const [liveRemotionByVideoId, setLiveRemotionByVideoId] = useState<Record<string, RemotionLiveState>>({})
+  const liveRemotionRef = useRef<Record<string, RemotionLiveState>>({})
   const isUser = message.role === 'user'
 
   // Build ordered render blocks from parts (interleave text + tools)
@@ -1258,14 +1350,186 @@ function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, o
 
   const toolBlocks = renderBlocks.filter((block) => block.type === 'tool') as Array<{ type: 'tool'; part: Record<string, unknown> }>
   const textBlocks = renderBlocks.filter((block) => block.type === 'text') as Array<{ type: 'text'; content: string }>
+  const remotionSeeds = useMemo(
+    () =>
+      toolBlocks.reduce<Record<string, RemotionLiveState>>((acc, block) => {
+        const remotion = remotionStatusFromPart(block.part)
+        if (remotion?.videoId) {
+          acc[remotion.videoId] = {
+            status: remotion.status,
+            progress: remotion.progress,
+            outputUrl: remotion.outputUrl,
+          }
+        }
+        return acc
+      }, {}),
+    [toolBlocks]
+  )
+
+  const remotionSeedSignature = useMemo(
+    () =>
+      Object.entries(remotionSeeds)
+        .map(([videoId, state]) => `${videoId}:${state.status}:${state.progress ?? ''}:${state.outputUrl ? '1' : '0'}`)
+        .sort()
+        .join('|'),
+    [remotionSeeds]
+  )
+
+  useEffect(() => {
+    setLiveRemotionByVideoId((prev) => {
+      const next: Record<string, RemotionLiveState> = {}
+      let changed = false
+
+      for (const [videoId, seed] of Object.entries(remotionSeeds)) {
+        const existing = prev[videoId]
+        if (!existing) {
+          next[videoId] = seed
+          changed = true
+          continue
+        }
+
+        const existingStatus = normalizeRemotionStatus(existing.status)
+        const seedStatus = normalizeRemotionStatus(seed.status)
+        if (existingStatus === 'completed' || existingStatus === 'failed') {
+          next[videoId] = existing
+          continue
+        }
+
+        next[videoId] = {
+          status: seedStatus || existing.status,
+          progress: typeof seed.progress === 'number' ? seed.progress : existing.progress,
+          outputUrl: seed.outputUrl || existing.outputUrl,
+          message: seed.message || existing.message,
+          error: seed.error || existing.error,
+        }
+
+        if (
+          next[videoId].status !== existing.status ||
+          next[videoId].progress !== existing.progress ||
+          next[videoId].outputUrl !== existing.outputUrl
+        ) {
+          changed = true
+        }
+      }
+
+      if (Object.keys(prev).some((videoId) => !remotionSeeds[videoId])) {
+        changed = true
+      }
+
+      return changed ? next : prev
+    })
+  }, [remotionSeedSignature, remotionSeeds])
+
+  useEffect(() => {
+    liveRemotionRef.current = liveRemotionByVideoId
+  }, [liveRemotionByVideoId])
+
+  useEffect(() => {
+    const remotionIds = Object.keys(remotionSeeds)
+    if (remotionIds.length === 0) return
+
+    let cancelled = false
+
+    const pollOnce = async () => {
+      const currentLive = liveRemotionRef.current
+      const pendingIds = remotionIds.filter((videoId) => {
+        const currentStatus = normalizeRemotionStatus(currentLive[videoId]?.status || remotionSeeds[videoId]?.status)
+        return currentStatus !== 'completed' && currentStatus !== 'failed'
+      })
+
+      if (pendingIds.length === 0) return
+
+      const updates: Record<string, RemotionLiveState> = {}
+      await Promise.all(
+        pendingIds.map(async (videoId) => {
+          try {
+            const response = await fetch(`/api/videos/generate?id=${encodeURIComponent(videoId)}`)
+            if (!response.ok) return
+
+            const data = await response.json()
+            const status = normalizeRemotionStatus(typeof data.status === 'string' ? data.status : undefined)
+            updates[videoId] = {
+              status,
+              progress:
+                typeof data.render_progress === 'number'
+                  ? data.render_progress
+                  : (typeof data.progress === 'number' ? data.progress : undefined),
+              outputUrl:
+                typeof data.output_url === 'string'
+                  ? data.output_url
+                  : (typeof data.outputUrl === 'string' ? data.outputUrl : undefined),
+              message: typeof data.message === 'string' ? data.message : undefined,
+              error:
+                typeof data.error_message === 'string'
+                  ? data.error_message
+                  : (typeof data.error === 'string' ? data.error : undefined),
+            }
+          } catch {
+            // Keep existing status on transient poll failures.
+          }
+        })
+      )
+
+      if (cancelled || Object.keys(updates).length === 0) return
+
+      setLiveRemotionByVideoId((prev) => {
+        const next = { ...prev }
+        let changed = false
+
+        for (const [videoId, update] of Object.entries(updates)) {
+          const previous = next[videoId]
+          const merged: RemotionLiveState = {
+            ...previous,
+            ...update,
+            progress:
+              typeof update.progress === 'number'
+                ? update.progress
+                : previous?.progress,
+          }
+          next[videoId] = merged
+
+          if (
+            !previous ||
+            previous.status !== merged.status ||
+            previous.progress !== merged.progress ||
+            previous.outputUrl !== merged.outputUrl ||
+            previous.error !== merged.error
+          ) {
+            changed = true
+          }
+        }
+
+        return changed ? next : prev
+      })
+    }
+
+    void pollOnce()
+    const interval = window.setInterval(() => {
+      void pollOnce()
+    }, 4000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [remotionSeedSignature, remotionSeeds])
+
   const hasContent = renderBlocks.length > 0
   const rawText = textBlocks.map((block) => block.content).join('\n').trim()
   const fullText = isUser ? rawText : sanitizeWorkingNarration(rawText)
   const toolImageUrls = toolBlocks.flatMap((block) => extractImageUrlsFromToolPart(block.part))
   const hasTools = !isUser && toolBlocks.length > 0
   const parsedPost = !isUser ? parseMarketingPost(fullText) : null
-  const activitySummary = hasTools ? buildAgentActivitySummary(toolBlocks.map((block) => block.part)) : ''
+  const activitySummary = hasTools ? buildAgentActivitySummary(toolBlocks.map((block) => block.part), liveRemotionByVideoId) : ''
   const stepLabel = `${toolBlocks.length} step${toolBlocks.length === 1 ? '' : 's'}`
+  const remotionStatuses = toolBlocks
+    .map((block) => remotionStatusFromPart(block.part, liveRemotionByVideoId))
+    .filter((value): value is NonNullable<typeof value> => Boolean(value))
+  const activeRemotion = remotionStatuses.find((status) => status.status === 'rendering')
+  const hasActiveRender = Boolean(activeRemotion)
+  const activeRenderLabel = hasActiveRender
+    ? `Rendering video${typeof activeRemotion.progress === 'number' ? `... ${Math.round(activeRemotion.progress)}%` : '...'}`
+    : ''
 
   const fallbackText = renderBlocks
     .filter((b) => b.type === 'text')
@@ -1321,10 +1585,17 @@ function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, o
           <div className="overflow-hidden rounded-lg border border-border/60 bg-card/40">
             <div className="flex items-center justify-between gap-2 px-3 py-2">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                {isLoading ? <Loader2 size={12} className="animate-spin text-primary" /> : <Check size={12} className="text-primary" />}
+                {isLoading || hasActiveRender ? (
+                  <Loader2 size={12} className="animate-spin text-primary" />
+                ) : (
+                  <Check size={12} className="text-primary" />
+                )}
                 <span>Agent activity</span>
                 <span>({stepLabel})</span>
                 {activitySummary && <span className="truncate text-[11px] text-muted-foreground">· {activitySummary}</span>}
+                {hasActiveRender && !/rendering video/i.test(activitySummary) && (
+                  <span className="truncate text-[11px] text-purple-300">· {activeRenderLabel}</span>
+                )}
               </div>
               <Button variant="ghost" size="xs" className="h-6 px-2 text-[11px]" onClick={onToggleAgentWork}>
                 {showAgentWork ? 'Hide' : 'Show'} work
@@ -1337,6 +1608,7 @@ function MessageBubble({ message, isLoading, showAgentWork, onToggleAgentWork, o
                     key={String(block.part.toolCallId) || `tool-${i}`}
                     tool={block.part}
                     defaultExpanded={isLoading}
+                    liveRemotionByVideoId={liveRemotionByVideoId}
                   />
                 ))}
               </div>

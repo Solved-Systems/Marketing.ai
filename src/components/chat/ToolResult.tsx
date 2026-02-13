@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button'
 interface ToolResultProps {
   tool: Record<string, unknown>
   defaultExpanded?: boolean
+  liveRemotionByVideoId?: Record<string, { status: string; progress?: number; outputUrl?: string; message?: string; error?: string }>
 }
 
 function getToolMeta(toolName: string) {
@@ -76,6 +77,17 @@ function getResultSummary(toolName: string, result: Record<string, unknown> | un
     return `${images} image${images === 1 ? '' : 's'}`
   }
 
+  if (toolName === 'generate_remotion_video' || toolName === 'check_remotion_status') {
+    const status = typeof result.status === 'string' ? result.status.toLowerCase() : ''
+    const progress = typeof result.progress === 'number' ? Math.round(result.progress) : null
+    if (status === 'completed') return 'video ready'
+    if (status === 'failed') return 'render failed'
+    if ((status === 'rendering' || status === 'processing' || status === 'queued') && progress !== null) {
+      return `rendering ${progress}%`
+    }
+    if (status === 'rendering' || status === 'processing' || status === 'queued') return 'rendering'
+  }
+
   return null
 }
 
@@ -85,7 +97,7 @@ function readErrorMessage(output: Record<string, unknown> | undefined, fallback?
   return typeof output.error === 'string' ? output.error : undefined
 }
 
-export function ToolResult({ tool: rawTool, defaultExpanded = false }: ToolResultProps) {
+export function ToolResult({ tool: rawTool, defaultExpanded = false, liveRemotionByVideoId }: ToolResultProps) {
   const rawType = String(rawTool.type || '')
   const toolName = rawType.startsWith('tool-')
     ? rawType.slice(5) // "tool-analyze_repo" → "analyze_repo"
@@ -93,6 +105,11 @@ export function ToolResult({ tool: rawTool, defaultExpanded = false }: ToolResul
   const state = String(rawTool.state || '')
   const input = rawTool.input as Record<string, unknown> | undefined
   const output = rawTool.output as Record<string, unknown> | undefined
+  const isRemotionStatusTool = toolName === 'generate_remotion_video' || toolName === 'check_remotion_status'
+  const videoIdFromOutput = typeof output?.videoId === 'string' ? output.videoId : ''
+  const videoIdFromInput = typeof input?.videoId === 'string' ? input.videoId : ''
+  const remotionVideoId = videoIdFromOutput || videoIdFromInput
+  const liveRemotion = isRemotionStatusTool && remotionVideoId ? liveRemotionByVideoId?.[remotionVideoId] : undefined
 
   const isLoading = state === 'input-streaming' || state === 'input-available'
   const [expanded, setExpanded] = useState(isLoading || defaultExpanded)
@@ -105,8 +122,24 @@ export function ToolResult({ tool: rawTool, defaultExpanded = false }: ToolResul
   }, [isLoading, defaultExpanded, userToggled])
 
   const { icon: Icon, color, label, cmd } = getToolMeta(toolName)
-  const result = output
-  const errorMessage = readErrorMessage(output, typeof rawTool.errorText === 'string' ? rawTool.errorText : undefined)
+  const result = liveRemotion
+    ? {
+        ...(output || {}),
+        status: liveRemotion.status,
+        progress: typeof liveRemotion.progress === 'number' ? liveRemotion.progress : output?.progress,
+        outputUrl: liveRemotion.outputUrl || output?.outputUrl,
+        message: liveRemotion.message || output?.message,
+        error: liveRemotion.error || output?.error,
+        videoId: remotionVideoId || output?.videoId,
+      }
+    : output
+
+  const normalizedStatus = typeof result?.status === 'string' ? result.status.toLowerCase() : ''
+  const remotionDone = isRemotionStatusTool && normalizedStatus === 'completed'
+  const remotionActive =
+    isRemotionStatusTool && ['rendering', 'processing', 'queued', 'starting'].includes(normalizedStatus)
+  const remotionProgress = typeof result?.progress === 'number' ? Math.round(result.progress) : null
+  const errorMessage = readErrorMessage(result, typeof rawTool.errorText === 'string' ? rawTool.errorText : undefined)
 
   if (!isLoading && errorMessage) {
     return (
@@ -153,7 +186,13 @@ export function ToolResult({ tool: rawTool, defaultExpanded = false }: ToolResul
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!isLoading && result && (
+          {remotionActive && (
+            <span className="text-[10px] text-purple-300 font-mono flex items-center gap-1">
+              <Loader2 size={10} className="animate-spin" />
+              {remotionProgress !== null ? `rendering ${remotionProgress}%` : 'rendering'}
+            </span>
+          )}
+          {!isLoading && result && (!isRemotionStatusTool || remotionDone) && (
             <span className="text-[10px] text-primary font-mono flex items-center gap-1">
               <Check size={10} /> done
             </span>
@@ -275,27 +314,104 @@ function ImageResult({ result }: { result: Record<string, unknown> }) {
   )
 }
 
-// ── Video Start Result ────────────────────────────────────────
+// ── Video Start Result (with auto-poll) ──────────────────────
 
 function VideoStartResult({ result }: { result: Record<string, unknown> }) {
-  const status = result.status as string | undefined
   const requestId = result.requestId as string | undefined
-  const message = result.message as string | undefined
+  const videoId = result.videoId as string | undefined
   const error = result.error as string | undefined
 
+  const [pollStatus, setPollStatus] = useState<'processing' | 'completed' | 'failed'>('processing')
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [pollError, setPollError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!requestId || error) return
+
+    let cancelled = false
+    let attempts = 0
+    const maxAttempts = 60 // ~2 minutes at 2s intervals
+
+    const poll = async () => {
+      while (!cancelled && attempts < maxAttempts) {
+        attempts++
+        await new Promise((r) => setTimeout(r, 3000))
+        if (cancelled) break
+
+        try {
+          const res = await fetch(`/api/video/status?requestId=${encodeURIComponent(requestId)}${videoId ? `&videoId=${encodeURIComponent(videoId)}` : ''}`)
+          if (!res.ok) continue
+
+          const data = await res.json()
+
+          if (data.status === 'completed' && data.outputUrl) {
+            if (!cancelled) {
+              setVideoUrl(data.outputUrl)
+              setPollStatus('completed')
+            }
+            return
+          }
+
+          if (data.status === 'failed') {
+            if (!cancelled) {
+              setPollError(data.error || 'Video generation failed')
+              setPollStatus('failed')
+            }
+            return
+          }
+        } catch {
+          // Retry on network errors
+        }
+      }
+
+      if (!cancelled && attempts >= maxAttempts) {
+        setPollError('Video generation timed out. Check Video Studio for results.')
+        setPollStatus('failed')
+      }
+    }
+
+    void poll()
+    return () => { cancelled = true }
+  }, [requestId, videoId, error])
+
   if (error) return <ErrorDisplay error={error} />
+
+  if (pollStatus === 'failed' && pollError) {
+    return <ErrorDisplay error={pollError} />
+  }
+
+  if (pollStatus === 'completed' && videoUrl) {
+    return (
+      <div>
+        <video
+          controls
+          autoPlay
+          muted
+          playsInline
+          src={videoUrl}
+          className="w-full max-w-lg rounded-lg border border-border"
+        />
+        <div className="flex gap-2 mt-3">
+          <a href={videoUrl} download className="flex-1">
+            <Button variant="outline" size="sm" className="w-full gap-1.5">
+              <Download size={14} /> Download
+            </Button>
+          </a>
+          <a href={videoUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button variant="outline" size="sm" className="w-full gap-1.5">
+              <ExternalLink size={14} /> Open
+            </Button>
+          </a>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-3 rounded bg-muted/50 border border-border">
       <div className="flex items-center gap-2 text-sm">
-        {status === 'processing' ? (
-          <>
-            <Loader2 size={14} className="animate-spin text-green-500" />
-            <span>{message || 'Video generation started...'}</span>
-          </>
-        ) : (
-          <span>{message || JSON.stringify(result)}</span>
-        )}
+        <Loader2 size={14} className="animate-spin text-green-500" />
+        <span>Generating video... this typically takes 1-2 minutes</span>
       </div>
       {requestId && (
         <p className="text-[10px] text-muted-foreground mt-2 font-mono">request_id: {requestId}</p>
