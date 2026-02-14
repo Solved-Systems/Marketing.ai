@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
   useVideoEditorStore,
-  SHOT_PRESETS,
   CLIP_COLORS,
   ASSISTANT_QUICK_ACTIONS,
   createId,
@@ -369,8 +368,19 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
   }, [videoDuration, selectedPresetId, clips.length])
 
   useEffect(() => {
-    if (selectedClipId || clips.length === 0) return
-    store.getState().selectClip(clips[0].id)
+    if (clips.length === 0) {
+      if (selectedClipId !== null) {
+        store.getState().selectClip(null)
+      }
+      return
+    }
+
+    const hasSelectedClip = selectedClipId
+      ? clips.some((clip) => clip.id === selectedClipId)
+      : false
+    if (!hasSelectedClip) {
+      store.getState().selectClip(clips[0].id)
+    }
   }, [clips, selectedClipId])
 
   // ── Cleanup ────────────────────────────────────────
@@ -483,7 +493,8 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
         sourceVideo.onerror = () => reject(new Error("Failed to load source video for export."))
       })
 
-      const exportClips = [...clips].sort((a, b) => a.start - b.start)
+      // Preserve timeline order instead of forcing source-time order.
+      const exportClips = [...clips]
       const totalFrames = Math.max(
         1,
         Math.ceil(exportClips.reduce((sum, clip) => sum + getClipOutputDuration(clip) * 30, 0))
@@ -560,6 +571,36 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
       st.setExportedUrl(URL.createObjectURL(blob))
       st.setExportProgress(100)
       st.setExportStatus("Export complete.")
+
+      // Auto-save to database (requires a real brand)
+      if (brandId) {
+        st.setIsSaving(true)
+        st.setSaveError(null)
+        st.setSavedContentUrl(null)
+
+        const formData = new FormData()
+        formData.append("file", blob, `export-${Date.now()}.${outputMimeType === "video/mp4" ? "mp4" : "webm"}`)
+        formData.append("brandId", brandId)
+
+        fetch("/api/video-editor/save", { method: "POST", body: formData })
+          .then(async (res) => {
+            if (!res.ok) {
+              const data = await res.json().catch(() => null)
+              throw new Error(data?.error || `Save failed (${res.status})`)
+            }
+            return res.json()
+          })
+          .then((data) => {
+            const s2 = store.getState()
+            s2.setSavedContentUrl(data.url)
+            s2.setIsSaving(false)
+          })
+          .catch((err) => {
+            const s2 = store.getState()
+            s2.setSaveError(err instanceof Error ? err.message : "Failed to save video")
+            s2.setIsSaving(false)
+          })
+      }
     } catch (error) {
       store.getState().setExportStatus(
         error instanceof Error ? `Export failed: ${error.message}` : "Export failed."
@@ -570,7 +611,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
       sourceVideo.load()
       store.getState().setIsExporting(false)
     }
-  }, [clips, isExporting, recordingUrl])
+  }, [brandId, clips, isExporting, recordingUrl])
 
   const downloadRecording = useCallback(() => {
     if (!recordingUrl) return
@@ -682,6 +723,16 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
     [assistantInput, runAssistantPrompt]
   )
 
+  const handleAssistantTextareaKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return
+      event.preventDefault()
+      if (!assistantInput.trim() || assistantStatus === "streaming" || assistantStatus === "submitted") return
+      void runAssistantPrompt(assistantInput)
+    },
+    [assistantInput, assistantStatus, runAssistantPrompt]
+  )
+
   useEffect(() => {
     const composerElement = assistantComposerRef.current
     if (!composerElement) return
@@ -705,7 +756,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
 
   // ── Render ─────────────────────────────────────────
   return (
-    <div className={cn("grid h-full min-h-0 grid-cols-1 gap-3 p-3", workspaceGridClass)}>
+    <div className={cn("grid h-full min-h-0 grid-cols-1 gap-2 p-2.5", workspaceGridClass)}>
       {/* Animations Panel */}
       <AnimationPanel />
 
@@ -720,8 +771,8 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
           clearCountdownTimer={clearCountdownTimer}
         />
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-5">
-          <div className="mx-auto max-w-5xl space-y-4">
+        <div className="flex-1 overflow-y-auto p-3 md:p-4">
+          <div className="mx-auto max-w-5xl space-y-3">
             <MediaDropZone onFilesAccepted={handleFilesAccepted} disabled={isRecording}>
               <VideoPreviewCanvas
                 brandName={brandName}
@@ -737,7 +788,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
 
       {/* AI Assistant Panel */}
       <section className="order-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-gradient-to-b from-card/35 via-card/20 to-card/8">
-        <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border/50 px-3.5 py-2.5">
           {isAssistantCollapsed ? (
             <Sparkles className="h-4 w-4 text-primary" />
           ) : (
@@ -793,23 +844,25 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
 
             <div
               ref={assistantComposerRef}
-              className="absolute inset-x-0 bottom-0 border-t border-border/50 bg-card/95 p-3 backdrop-blur"
+              className="absolute inset-x-0 bottom-0 border-t border-border/50 bg-card/95 p-2.5 backdrop-blur"
             >
               {!hasUserMessage ? (
                 <p className="mb-2 text-[11px] text-muted-foreground">
                   Tip: Trim scene 1 to 4s, split at 2.5s, then apply close-up-7.
                 </p>
               ) : null}
-              <PromptInput onSubmit={handleAssistantSubmit}>
+              <PromptInput onSubmit={handleAssistantSubmit} className="max-w-full">
                 <PromptInputBody>
                   <PromptInputTextarea
                     value={assistantInput}
                     onChange={(event) => setAssistantInput(event.target.value)}
+                    onKeyDown={handleAssistantTextareaKeyDown}
                     placeholder="Describe the edit you want..."
+                    maxHeight={140}
                   />
                 </PromptInputBody>
-                <PromptInputFooter>
-                  <PromptInputTools>
+                <PromptInputFooter className="items-end gap-2">
+                  <PromptInputTools className="overflow-x-auto whitespace-nowrap pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {ASSISTANT_QUICK_ACTIONS.map((action, index) => (
                       <Button
                         key={`quick-action-${action.id}`}
@@ -819,6 +872,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
                         onClick={() => void runAssistantPrompt(action.prompt)}
                         title={action.description}
                         aria-label={action.label}
+                        className="h-8 shrink-0 px-2.5 text-xs"
                       >
                         {action.label}
                       </Button>
@@ -829,6 +883,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
                     disabled={!assistantInput.trim() || assistantStatus === "streaming" || assistantStatus === "submitted"}
                     title="Send"
                     aria-label="Send"
+                    className="shrink-0"
                   />
                 </PromptInputFooter>
               </PromptInput>

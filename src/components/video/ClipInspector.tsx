@@ -1,16 +1,72 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { ChevronDown } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   useVideoEditorStore,
   clamp,
+  getPresetById,
+  getClipDuration,
   getClipOutputDuration,
   formatTime,
 } from "@/stores/video-editor"
+import { getAnimationFactoryList, getAnimationFromFactory, legacyPresetToAnimation } from "@/lib/video-editor/animation-presets"
 import { KeyframeEditor } from "./KeyframeEditor"
+
+interface SliderNumberFieldProps {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  suffix?: string
+  onChange: (value: number) => void
+}
+
+function SliderNumberField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix = "",
+  onChange,
+}: SliderNumberFieldProps) {
+  return (
+    <div className="rounded-md border border-border/50 bg-background/40 p-2.5">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        <Input
+          type="number"
+          value={Number(value.toFixed(2))}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(event) => {
+            const parsed = Number(event.target.value)
+            if (Number.isFinite(parsed)) onChange(parsed)
+          }}
+          className="h-8 w-24 text-right font-mono text-xs"
+        />
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(parseFloat(event.target.value))}
+        className="h-2.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
+      />
+      <p className="mt-1 text-right font-mono text-[11px] text-muted-foreground">
+        {value.toFixed(2)}{suffix}
+      </p>
+    </div>
+  )
+}
 
 export function ClipInspector() {
   const clips = useVideoEditorStore((s) => s.clips)
@@ -24,10 +80,13 @@ export function ClipInspector() {
   )
 
   const [clipName, setClipName] = useState("")
+  const animationFactories = useMemo(() => getAnimationFactoryList(), [])
 
   useEffect(() => {
     setClipName(selectedClip?.name ?? "")
   }, [selectedClip?.id, selectedClip?.name])
+
+  const selectedPreset = selectedClip ? getPresetById(selectedClip.presetId) : null
 
   const saveClipName = useCallback(() => {
     if (!selectedClipId) return
@@ -97,6 +156,27 @@ export function ClipInspector() {
     [selectedClipId, selectedClip]
   )
 
+  const handleApplyAnimationFactory = useCallback(
+    (factoryId: string) => {
+      if (!selectedClip) return
+      const duration = getClipDuration(selectedClip)
+      const animation = getAnimationFromFactory(factoryId, duration)
+      if (animation) {
+        store.getState().setClipAnimation(selectedClip.id, animation)
+      }
+    },
+    [selectedClip]
+  )
+
+  const handleApplyPresetAsKeyframes = useCallback(() => {
+    if (!selectedClip) return
+    const duration = getClipDuration(selectedClip)
+    const animation = legacyPresetToAnimation(selectedClip.presetId, duration)
+    if (animation) {
+      store.getState().setClipAnimation(selectedClip.id, animation)
+    }
+  }, [selectedClip])
+
   if (!selectedClip) return null
 
   return (
@@ -114,7 +194,7 @@ export function ClipInspector() {
           }}
           className="h-9 max-w-xs"
         />
-        <Badge variant="secondary">{selectedClip.presetId}</Badge>
+        <Badge variant="secondary">{selectedPreset?.title ?? "Unknown preset"}</Badge>
         <Badge variant="outline">Speed {selectedClip.speed.toFixed(2)}x</Badge>
         <Badge variant="outline">Zoom {selectedClip.zoom.toFixed(2)}x</Badge>
         <Badge variant="outline">
@@ -122,123 +202,156 @@ export function ClipInspector() {
         </Badge>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="text-xs text-muted-foreground">
-          Clip Start: {formatTime(selectedClip.start)}
-          <input
-            type="range"
-            min={0}
-            max={videoDuration || 0}
-            step={0.05}
+      <details open className="rounded-lg border border-border/50 bg-muted/20 p-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold">
+          Trim
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </summary>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <SliderNumberField
+            label={`Clip Start (${formatTime(selectedClip.start)})`}
             value={selectedClip.start}
-            onChange={(event) => handleTrimStart(parseFloat(event.target.value))}
-            className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
-          />
-        </label>
-        <label className="text-xs text-muted-foreground">
-          Clip End: {formatTime(selectedClip.end)}
-          <input
-            type="range"
             min={0}
-            max={videoDuration || 0}
+            max={videoDuration || selectedClip.end}
             step={0.05}
-            value={selectedClip.end}
-            onChange={(event) => handleTrimEnd(parseFloat(event.target.value))}
-            className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
+            onChange={handleTrimStart}
           />
-        </label>
-      </div>
+          <SliderNumberField
+            label={`Clip End (${formatTime(selectedClip.end)})`}
+            value={selectedClip.end}
+            min={0}
+            max={videoDuration || selectedClip.end}
+            step={0.05}
+            onChange={handleTrimEnd}
+          />
+        </div>
+      </details>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="text-xs text-muted-foreground">
-          Speed: {selectedClip.speed.toFixed(2)}x
-          <input
-            type="range"
+      <details open className="rounded-lg border border-border/50 bg-muted/20 p-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold">
+          Speed & Zoom
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </summary>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <SliderNumberField
+            label="Speed"
+            value={selectedClip.speed}
             min={0.25}
             max={3}
             step={0.05}
-            value={selectedClip.speed}
-            onChange={(event) => handleSpeedChange(parseFloat(event.target.value))}
-            className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
+            suffix="x"
+            onChange={handleSpeedChange}
           />
-        </label>
-        <label className="text-xs text-muted-foreground">
-          Zoom: {selectedClip.zoom.toFixed(2)}x
-          <input
-            type="range"
+          <SliderNumberField
+            label="Zoom"
+            value={selectedClip.zoom}
             min={1}
             max={3}
             step={0.05}
-            value={selectedClip.zoom}
-            onChange={(event) => handleZoomChange(parseFloat(event.target.value))}
-            className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
+            suffix="x"
+            onChange={handleZoomChange}
           />
-        </label>
-      </div>
-
-      {/* Crop controls */}
-      <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-medium">Crop</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-[11px]"
-            onClick={() => {
-              store.getState().updateClip(selectedClipId!, {
-                cropX: 0,
-                cropY: 0,
-                cropWidth: 100,
-                cropHeight: 100,
-              })
-            }}
-          >
-            Reset Crop
-          </Button>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="text-xs text-muted-foreground">
-            X: {selectedClip.cropX.toFixed(1)}%
-            <input
-              type="range" min={0} max={100} step={0.5}
+      </details>
+
+      <details open className="rounded-lg border border-border/50 bg-muted/20 p-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold">
+          Crop
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </summary>
+        <div className="mt-3">
+          <div className="mb-3 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-[11px]"
+              onClick={() => {
+                store.getState().updateClip(selectedClipId!, {
+                  cropX: 0,
+                  cropY: 0,
+                  cropWidth: 100,
+                  cropHeight: 100,
+                })
+              }}
+            >
+              Reset Crop
+            </Button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <SliderNumberField
+              label="Crop X"
               value={selectedClip.cropX}
-              onChange={(event) => handleCropChange("cropX", parseFloat(event.target.value))}
-              className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
+              min={0}
+              max={100}
+              step={0.5}
+              suffix="%"
+              onChange={(value) => handleCropChange("cropX", value)}
             />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            Y: {selectedClip.cropY.toFixed(1)}%
-            <input
-              type="range" min={0} max={100} step={0.5}
+            <SliderNumberField
+              label="Crop Y"
               value={selectedClip.cropY}
-              onChange={(event) => handleCropChange("cropY", parseFloat(event.target.value))}
-              className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
+              min={0}
+              max={100}
+              step={0.5}
+              suffix="%"
+              onChange={(value) => handleCropChange("cropY", value)}
             />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            Width: {selectedClip.cropWidth.toFixed(1)}%
-            <input
-              type="range" min={1} max={100} step={0.5}
+            <SliderNumberField
+              label="Crop Width"
               value={selectedClip.cropWidth}
-              onChange={(event) => handleCropChange("cropWidth", parseFloat(event.target.value))}
-              className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
+              min={1}
+              max={100}
+              step={0.5}
+              suffix="%"
+              onChange={(value) => handleCropChange("cropWidth", value)}
             />
-          </label>
-          <label className="text-xs text-muted-foreground">
-            Height: {selectedClip.cropHeight.toFixed(1)}%
-            <input
-              type="range" min={1} max={100} step={0.5}
+            <SliderNumberField
+              label="Crop Height"
               value={selectedClip.cropHeight}
-              onChange={(event) => handleCropChange("cropHeight", parseFloat(event.target.value))}
-              className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted"
+              min={1}
+              max={100}
+              step={0.5}
+              suffix="%"
+              onChange={(value) => handleCropChange("cropHeight", value)}
             />
-          </label>
+          </div>
         </div>
-      </div>
+      </details>
 
-      {/* Keyframe Editor */}
-      <KeyframeEditor clipId={selectedClip.id} animation={selectedClip.animation} />
+      <details open className="rounded-lg border border-border/50 bg-muted/20 p-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-semibold">
+          Animation
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </summary>
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleApplyPresetAsKeyframes}
+            >
+              Convert Preset To Keyframes
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3">
+            {animationFactories.map((factory) => (
+              <Button
+                key={factory.id}
+                type="button"
+                size="xs"
+                variant="outline"
+                className="h-7 justify-start text-[10px]"
+                onClick={() => handleApplyAnimationFactory(factory.id)}
+              >
+                {factory.name}
+              </Button>
+            ))}
+          </div>
+          <KeyframeEditor clipId={selectedClip.id} animation={selectedClip.animation} />
+        </div>
+      </details>
     </div>
   )
 }

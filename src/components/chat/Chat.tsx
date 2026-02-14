@@ -517,12 +517,44 @@ function normalizeLoadedMessages(rawMessages: unknown): UIMessage[] {
     .filter((msg): msg is UIMessage => Boolean(msg))
 }
 
+function extractMediaFromMessage(message: UIMessage) {
+  const parts = Array.isArray((message as unknown as Record<string, unknown>).parts)
+    ? ((message as unknown as Record<string, unknown>).parts as Array<Record<string, unknown>>)
+    : []
+
+  const generatedImages: string[] = []
+  let generatedVideo = ''
+
+  for (const part of parts) {
+    if (!part || typeof part !== 'object') continue
+    if (!isToolPart(part)) continue
+
+    const imageUrls = extractImageUrlsFromToolPart(part)
+    generatedImages.push(...imageUrls)
+
+    const videoUrls = extractVideoUrlsFromToolPart(part)
+    if (videoUrls.length > 0 && !generatedVideo) {
+      generatedVideo = videoUrls[0]
+    }
+  }
+
+  return {
+    generatedImages: uniqueStrings(generatedImages),
+    generatedVideo,
+  }
+}
+
 function serializeMessages(messages: UIMessage[]) {
-  return messages.map((message) => ({
-    ...message,
-    content: extractTextFromMessage(message as unknown as Record<string, unknown>),
-    timestamp: new Date().toISOString(),
-  }))
+  return messages.map((message) => {
+    const media = extractMediaFromMessage(message)
+    return {
+      ...message,
+      content: extractTextFromMessage(message as unknown as Record<string, unknown>),
+      generatedImages: media.generatedImages.length > 0 ? media.generatedImages : undefined,
+      generatedVideo: media.generatedVideo || undefined,
+      timestamp: new Date().toISOString(),
+    }
+  })
 }
 
 function deriveChatTitle(messages: UIMessage[]) {
@@ -792,6 +824,61 @@ export function Chat({ brandId, brandName, initialWorkflow }: ChatProps) {
       }
     }
   }, [])
+
+  // ── Auto-archive generated media to content table ──
+  const archivedMediaRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!brandId || messages.length === 0) return
+
+    const newMediaUrls: Array<{ url: string; type: 'image' | 'video' }> = []
+
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue
+      const parts = Array.isArray((message as unknown as Record<string, unknown>).parts)
+        ? ((message as unknown as Record<string, unknown>).parts as Array<Record<string, unknown>>)
+        : []
+
+      for (const part of parts) {
+        if (!part || typeof part !== 'object' || !isToolPart(part)) continue
+
+        for (const url of extractImageUrlsFromToolPart(part)) {
+          if (!archivedMediaRef.current.has(url)) {
+            newMediaUrls.push({ url, type: 'image' })
+          }
+        }
+        for (const url of extractVideoUrlsFromToolPart(part)) {
+          if (!archivedMediaRef.current.has(url)) {
+            newMediaUrls.push({ url, type: 'video' })
+          }
+        }
+      }
+    }
+
+    if (newMediaUrls.length === 0) return
+
+    // Mark as archived immediately to avoid duplicates
+    for (const { url } of newMediaUrls) {
+      archivedMediaRef.current.add(url)
+    }
+
+    // Fire-and-forget archival
+    for (const { url, type } of newMediaUrls) {
+      fetch('/api/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brandId,
+          type,
+          url,
+          engine: 'chat',
+          chatId: currentChatId || undefined,
+        }),
+      }).catch(() => {
+        // Archival failure should not block the chat experience
+      })
+    }
+  }, [brandId, currentChatId, messages])
 
   const startNewChat = useCallback(() => {
     if (saveTimerRef.current) {

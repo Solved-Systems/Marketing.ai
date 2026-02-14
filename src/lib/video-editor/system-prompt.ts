@@ -43,6 +43,8 @@ Example:
 
 Rules:
 - Use only these preset IDs: ${presetIds}
+- The "none" preset means no visual transform. Use it as default when creating clips unless the user specifically requests a visual style or animation.
+- Only apply presets (set_preset, apply_preset_all) or animations (add_keyframe) when the user explicitly asks for them. Do not add visual transforms to clips that don't need them.
 - Times are seconds as numbers.
 - Never reference unknown clip IDs.
 - If no concrete edits are needed, do not include a JSON block.

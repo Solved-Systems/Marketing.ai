@@ -52,6 +52,9 @@ function executeSingleAction(
     case "set_preset": {
       if (!SHOT_PRESETS.some((p) => p.id === action.presetId)) return false
       s.setSelectedPresetId(action.presetId)
+      if (s.selectedClipId) {
+        s.applyPresetToClip(s.selectedClipId, action.presetId)
+      }
       return true
     }
 

@@ -1,6 +1,7 @@
 import type { ShotPreset, AssistantQuickAction, PresetCategory } from "./types"
 
 export const SHOT_PRESETS: ShotPreset[] = [
+  { id: "none", title: "None", description: "No transform applied", duration: 3, zoom: 1, rotate: 0, panX: 0, panY: 0 },
   { id: "close-up-1", title: "Close up 1", description: "Subtle close-up on top", duration: 3, zoom: 1.08, rotate: 0.2, panX: 0, panY: -0.04 },
   { id: "close-up-2", title: "Close up 2", description: "Tilted close-up on side", duration: 3, zoom: 1.13, rotate: -3.2, panX: -0.03, panY: 0 },
   { id: "close-up-3", title: "Close up 3", description: "Subtle motion at corner", duration: 3, zoom: 1.11, rotate: 1.2, panX: 0.04, panY: -0.02 },

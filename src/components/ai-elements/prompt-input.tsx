@@ -17,7 +17,7 @@ export function PromptInput({ className, onSubmit, children, ...props }: PromptI
     <form
       onSubmit={onSubmit}
       className={cn(
-        "rounded-xl border border-border/70 bg-card/60 p-2.5 shadow-sm backdrop-blur",
+        "overflow-hidden rounded-xl border border-border/70 bg-card/60 p-2.5 shadow-sm backdrop-blur",
         className
       )}
       {...props}
@@ -40,7 +40,7 @@ export function PromptInputFooter({
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("mt-2 flex items-center justify-between gap-2 border-t border-border/40 pt-2", className)}
+      className={cn("mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-border/40 pt-2", className)}
       {...props}
     />
   )
@@ -50,7 +50,7 @@ export function PromptInputTools({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex items-center gap-1.5", className)} {...props} />
+  return <div className={cn("flex min-w-0 flex-1 items-center gap-1.5", className)} {...props} />
 }
 
 interface PromptInputTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {

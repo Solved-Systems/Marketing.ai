@@ -1,6 +1,5 @@
 import type { EditorAction } from "./action-types"
 import type { TimelineClip } from "@/stores/video-editor"
-import { SHOT_PRESETS, CLIP_COLORS, createId } from "@/stores/video-editor"
 
 interface AutoCutOptions {
   strategy: "even" | "proportional"
@@ -30,13 +29,12 @@ export function generateAutoCutActions(
     for (let i = 0; i < count; i++) {
       const start = i * clipDuration
       const end = Math.min((i + 1) * clipDuration, videoDuration)
-      const preset = SHOT_PRESETS[i % SHOT_PRESETS.length]
       actions.push({
         type: "add_clip",
         start: Number(start.toFixed(2)),
         end: Number(end.toFixed(2)),
         name: `Scene ${i + 1}`,
-        presetId: preset.id,
+        presetId: "none",
       })
     }
   } else if (strategy === "proportional") {
@@ -46,13 +44,12 @@ export function generateAutoCutActions(
     for (let i = 0; i < count; i++) {
       const start = (i / count) * videoDuration
       const end = Math.min(start + clipTarget, videoDuration)
-      const preset = SHOT_PRESETS[i % SHOT_PRESETS.length]
       actions.push({
         type: "add_clip",
         start: Number(start.toFixed(2)),
         end: Number(end.toFixed(2)),
         name: `Scene ${i + 1}`,
-        presetId: preset.id,
+        presetId: "none",
       })
     }
   }

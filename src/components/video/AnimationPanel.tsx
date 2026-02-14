@@ -20,7 +20,7 @@ import {
   PRESET_CATEGORIES,
   getPresetCategory,
 } from "@/stores/video-editor"
-import { getAnimationFactoryList, getAnimationFromFactory, legacyPresetToAnimation } from "@/lib/video-editor/animation-presets"
+import { legacyPresetToAnimation } from "@/lib/video-editor/animation-presets"
 import { getClipDuration } from "@/stores/video-editor"
 
 export function AnimationPanel() {
@@ -64,21 +64,11 @@ export function AnimationPanel() {
     []
   )
 
-  const animationFactories = useMemo(() => getAnimationFactoryList(), [])
   const matchingPresetCount = visiblePresets.length
   const presetBadgeLabel =
     presetCategory === "all" && presetSearch.trim().length === 0
       ? `${SHOT_PRESETS.length}`
       : `${matchingPresetCount}/${SHOT_PRESETS.length}`
-
-  const handleApplyAnimationFactory = (factoryId: string) => {
-    if (!selectedClip) return
-    const duration = getClipDuration(selectedClip)
-    const animation = getAnimationFromFactory(factoryId, duration)
-    if (animation) {
-      store.getState().setClipAnimation(selectedClip.id, animation)
-    }
-  }
 
   const handleApplyPresetAsKeyframes = (presetId: string) => {
     if (!selectedClip) return
@@ -91,7 +81,7 @@ export function AnimationPanel() {
 
   return (
     <section className="order-2 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card/30 xl:order-1">
-      <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border/50 px-3.5 py-2.5">
         {isAnimationsCollapsed ? (
           <Sparkles className="h-4 w-4 text-primary" />
         ) : (
@@ -116,7 +106,7 @@ export function AnimationPanel() {
       </div>
 
       {!isAnimationsCollapsed ? (
-        <div className="space-y-2 border-b border-border/50 px-3 py-3">
+        <div className="space-y-2 border-b border-border/50 px-3 py-2.5">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -151,29 +141,6 @@ export function AnimationPanel() {
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
-        {/* Custom Animation Factories */}
-        {!isAnimationsCollapsed && selectedClip && (
-          <div className="border-b border-border/50 p-3">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              Keyframe Animations
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {animationFactories.map((factory) => (
-                <Button
-                  key={factory.id}
-                  type="button"
-                  size="xs"
-                  variant="outline"
-                  className="h-7 justify-start text-[10px]"
-                  onClick={() => handleApplyAnimationFactory(factory.id)}
-                >
-                  {factory.name}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Static Presets Grid */}
         <div
           className={cn(

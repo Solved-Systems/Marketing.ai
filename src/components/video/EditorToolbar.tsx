@@ -3,7 +3,9 @@
 import { useCallback } from "react"
 import {
   Camera,
+  Check,
   ChevronDown,
+  Cloud,
   Loader2,
   Monitor,
   Redo2,
@@ -57,6 +59,9 @@ export function EditorToolbar({
   const isExporting = useVideoEditorStore((s) => s.isExporting)
   const exportProgress = useVideoEditorStore((s) => s.exportProgress)
   const exportStatus = useVideoEditorStore((s) => s.exportStatus)
+  const isSaving = useVideoEditorStore((s) => s.isSaving)
+  const savedContentUrl = useVideoEditorStore((s) => s.savedContentUrl)
+  const saveError = useVideoEditorStore((s) => s.saveError)
   const store = useVideoEditorStore
 
   const captureModeLabel = selectedCaptureMode === "tab" ? "Browser tab" : "Entire screen"
@@ -166,7 +171,7 @@ export function EditorToolbar({
         {exportedBlob ? (
           <Button
             onClick={onDownloadExport}
-            variant="outline"
+            variant="secondary"
             size="sm"
             title="Download the edited file after export completes."
           >
@@ -213,6 +218,23 @@ export function EditorToolbar({
       ) : null}
       {exportStatus ? (
         <p className="mt-1 text-xs text-muted-foreground">{exportStatus}</p>
+      ) : null}
+      {isSaving ? (
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Cloud className="h-3.5 w-3.5 animate-pulse" />
+          Saving to library...
+        </p>
+      ) : null}
+      {savedContentUrl ? (
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-primary">
+          <Check className="h-3.5 w-3.5" />
+          Saved to content library.
+        </p>
+      ) : null}
+      {saveError ? (
+        <p className="mt-1 text-xs text-destructive">
+          Save failed: {saveError}
+        </p>
       ) : null}
     </div>
   )

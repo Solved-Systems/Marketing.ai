@@ -16,8 +16,67 @@ import type {
 import { SHOT_PRESETS, CLIP_COLORS } from "./constants"
 import { createId, clamp } from "./utils"
 
+function areAnimationsEqual(a: ClipAnimation | null, b: ClipAnimation | null) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.id !== b.id || a.name !== b.name) return false
+  if (a.tracks.length !== b.tracks.length) return false
+
+  for (let i = 0; i < a.tracks.length; i += 1) {
+    const trackA = a.tracks[i]
+    const trackB = b.tracks[i]
+    if (trackA.property !== trackB.property) return false
+    if (trackA.keyframes.length !== trackB.keyframes.length) return false
+
+    for (let j = 0; j < trackA.keyframes.length; j += 1) {
+      const kfA = trackA.keyframes[j]
+      const kfB = trackB.keyframes[j]
+      if (
+        kfA.id !== kfB.id ||
+        kfA.time !== kfB.time ||
+        kfA.value !== kfB.value ||
+        kfA.easing !== kfB.easing
+      ) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+function areClipsEqual(a: TimelineClip[], b: TimelineClip[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+
+  for (let i = 0; i < a.length; i += 1) {
+    const clipA = a[i]
+    const clipB = b[i]
+    if (
+      clipA.id !== clipB.id ||
+      clipA.name !== clipB.name ||
+      clipA.start !== clipB.start ||
+      clipA.end !== clipB.end ||
+      clipA.presetId !== clipB.presetId ||
+      clipA.color !== clipB.color ||
+      clipA.speed !== clipB.speed ||
+      clipA.zoom !== clipB.zoom ||
+      clipA.cropX !== clipB.cropX ||
+      clipA.cropY !== clipB.cropY ||
+      clipA.cropWidth !== clipB.cropWidth ||
+      clipA.cropHeight !== clipB.cropHeight ||
+      clipA.mediaSourceId !== clipB.mediaSourceId ||
+      !areAnimationsEqual(clipA.animation, clipB.animation)
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
 const initialState: VideoEditorState = {
-  // Temporal-tracked state
+  // Timeline state
   clips: [],
   selectedClipId: null,
   selectedPresetId: SHOT_PRESETS[0].id,
@@ -52,13 +111,18 @@ const initialState: VideoEditorState = {
   exportProgress: 0,
   exportStatus: null,
 
+  // Save state
+  isSaving: false,
+  savedContentUrl: null,
+  saveError: null,
+
   // Media sources
   mediaSources: [],
 }
 
 export const useVideoEditorStore = create<VideoEditorState & VideoEditorActions>()(
   temporal(
-    immer((set, get) => ({
+    immer((set) => ({
       ...initialState,
 
       // ── Clip actions ──────────────────────────────────
@@ -91,18 +155,24 @@ export const useVideoEditorStore = create<VideoEditorState & VideoEditorActions>
 
           const firstId = createId("clip")
           const secondId = createId("clip")
+          const colorIndex = CLIP_COLORS.indexOf(target.color)
+          const firstColor = target.color
+          const secondColor =
+            CLIP_COLORS[(colorIndex >= 0 ? colorIndex + 1 : index + 1) % CLIP_COLORS.length]
 
           const first: TimelineClip = {
             ...target,
             id: firstId,
             name: `${target.name} A`,
             end: Number(splitAt.toFixed(2)),
+            color: firstColor,
           }
           const second: TimelineClip = {
             ...target,
             id: secondId,
             name: `${target.name} B`,
             start: Number(splitAt.toFixed(2)),
+            color: secondColor,
           }
 
           state.clips.splice(index, 1, first, second)
@@ -252,6 +322,22 @@ export const useVideoEditorStore = create<VideoEditorState & VideoEditorActions>
           state.exportStatus = status
         }),
 
+      // ── Save state ──────────────────────────────────
+      setIsSaving: (saving: boolean) =>
+        set((state) => {
+          state.isSaving = saving
+        }),
+
+      setSavedContentUrl: (url: string | null) =>
+        set((state) => {
+          state.savedContentUrl = url
+        }),
+
+      setSaveError: (error: string | null) =>
+        set((state) => {
+          state.saveError = error
+        }),
+
       // ── UI toggles ──────────────────────────────────
       setIsAnimationsCollapsed: (collapsed: boolean) =>
         set((state) => {
@@ -381,10 +467,8 @@ export const useVideoEditorStore = create<VideoEditorState & VideoEditorActions>
       // Only track timeline-relevant state for undo/redo
       partialize: (state): TemporalState => ({
         clips: state.clips,
-        selectedClipId: state.selectedClipId,
-        selectedPresetId: state.selectedPresetId,
-        loopSelectedClip: state.loopSelectedClip,
       }),
+      equality: (pastState, currentState) => areClipsEqual(pastState.clips, currentState.clips),
       limit: 50,
     }
   )

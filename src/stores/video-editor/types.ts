@@ -111,12 +111,13 @@ export interface EditorSnapshot {
 /** Temporal (undo/redo) tracks only this subset. */
 export interface TemporalState {
   clips: TimelineClip[]
-  selectedClipId: string | null
-  selectedPresetId: string
-  loopSelectedClip: boolean
 }
 
 export interface VideoEditorState extends TemporalState {
+  selectedClipId: string | null
+  selectedPresetId: string
+  loopSelectedClip: boolean
+
   // UI panel state
   isAnimationsCollapsed: boolean
   isAssistantCollapsed: boolean
@@ -145,6 +146,11 @@ export interface VideoEditorState extends TemporalState {
   isExporting: boolean
   exportProgress: number
   exportStatus: string | null
+
+  // Save state (persisting exported video to database)
+  isSaving: boolean
+  savedContentUrl: string | null
+  saveError: string | null
 
   // Media sources
   mediaSources: MediaSource[]
@@ -189,6 +195,11 @@ export interface VideoEditorActions {
   setIsExporting: (exporting: boolean) => void
   setExportProgress: (progress: number) => void
   setExportStatus: (status: string | null) => void
+
+  // Save state
+  setIsSaving: (saving: boolean) => void
+  setSavedContentUrl: (url: string | null) => void
+  setSaveError: (error: string | null) => void
 
   // UI toggles
   setIsAnimationsCollapsed: (collapsed: boolean) => void
