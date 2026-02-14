@@ -13,7 +13,9 @@ export default function VideoEditorPage() {
         </div>
       </div>
 
-      <VideoStudioTab brandName="Workspace" />
+      <div className="min-h-0 flex-1">
+        <VideoStudioTab brandName="Workspace" />
+      </div>
     </div>
   )
 }

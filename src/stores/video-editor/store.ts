@@ -83,7 +83,7 @@ const initialState: VideoEditorState = {
   loopSelectedClip: true,
 
   // UI panel state
-  isAnimationsCollapsed: false,
+  isAnimationsCollapsed: true,
   isAssistantCollapsed: false,
   presetSearch: "",
   presetCategory: "all" as PresetCategory,
@@ -286,7 +286,12 @@ export const useVideoEditorStore = create<VideoEditorState & VideoEditorActions>
 
       setRecordingUrl: (url: string | null) =>
         set((state) => {
-          if (state.recordingUrl) URL.revokeObjectURL(state.recordingUrl)
+          if (state.recordingUrl && state.recordingUrl !== url) {
+            const isTrackedMediaSource = state.mediaSources.some((source) => source.url === state.recordingUrl)
+            if (!isTrackedMediaSource) {
+              URL.revokeObjectURL(state.recordingUrl)
+            }
+          }
           state.recordingUrl = url
         }),
 

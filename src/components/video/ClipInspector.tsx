@@ -180,7 +180,7 @@ export function ClipInspector() {
   if (!selectedClip) return null
 
   return (
-    <div className="mt-4 space-y-3">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           value={clipName}

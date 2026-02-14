@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeftRight, Clapperboard, Scissors, StepBack, StepForward, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,12 @@ import {
   formatTime,
 } from "@/stores/video-editor"
 
-const RULER_STOPS = [0, 0.25, 0.5, 0.75, 1]
+interface OutputSegment {
+  clipId: string
+  outputStart: number
+  outputEnd: number
+  outputDuration: number
+}
 
 export function TimelinePanel() {
   const clips = useVideoEditorStore((s) => s.clips)
@@ -25,7 +30,13 @@ export function TimelinePanel() {
   const loopSelectedClip = useVideoEditorStore((s) => s.loopSelectedClip)
   const videoDuration = useVideoEditorStore((s) => s.videoDuration)
   const currentTime = useVideoEditorStore((s) => s.currentTime)
+  const previewThumbnail = useVideoEditorStore((s) => s.previewThumbnail)
   const store = useVideoEditorStore
+
+  const [dragClipId, setDragClipId] = useState<string | null>(null)
+  const [dropClipId, setDropClipId] = useState<string | null>(null)
+  const [isScrubbing, setIsScrubbing] = useState(false)
+  const timelineSurfaceRef = useRef<HTMLDivElement | null>(null)
 
   const selectedClip = useMemo(
     () => clips.find((c) => c.id === selectedClipId) ?? null,
@@ -37,11 +48,27 @@ export function TimelinePanel() {
     [selectedPresetId]
   )
 
-  const outputDuration = useMemo(() => {
-    if (clips.length === 0) return videoDuration
-    return clips.reduce((total, clip) => total + getClipOutputDuration(clip), 0)
-  }, [clips, videoDuration])
+  const outputSegments = useMemo<OutputSegment[]>(() => {
+    let outputCursor = 0
+    return clips.map((clip) => {
+      const outputDuration = getClipOutputDuration(clip)
+      const segment = {
+        clipId: clip.id,
+        outputStart: outputCursor,
+        outputEnd: outputCursor + outputDuration,
+        outputDuration,
+      }
+      outputCursor += outputDuration
+      return segment
+    })
+  }, [clips])
 
+  const outputDuration = useMemo(
+    () => (outputSegments.length > 0 ? outputSegments[outputSegments.length - 1].outputEnd : videoDuration),
+    [outputSegments, videoDuration]
+  )
+
+  const safeTimelineDuration = Math.max(outputDuration, 0.2)
   const hasVideo = videoDuration > 0
   const hasTimeline = hasVideo && clips.length > 0
   const canSplitClip = Boolean(selectedClip)
@@ -51,7 +78,93 @@ export function TimelinePanel() {
   )
   const canMoveClipLeft = selectedClipIndex > 0
   const canMoveClipRight = selectedClipIndex >= 0 && selectedClipIndex < clips.length - 1
-  const selectedClipOutputDuration = selectedClip ? getClipOutputDuration(selectedClip) : 0
+
+  const sourceTimeFromOutputTime = useCallback(
+    (nextOutputTime: number) => {
+      if (outputSegments.length === 0) return clamp(nextOutputTime, 0, videoDuration)
+      const clampedOutputTime = clamp(nextOutputTime, 0, safeTimelineDuration)
+      const segment =
+        outputSegments.find((candidate) => clampedOutputTime >= candidate.outputStart && clampedOutputTime < candidate.outputEnd) ??
+        outputSegments[outputSegments.length - 1]
+      const clip = clips.find((candidate) => candidate.id === segment.clipId)
+      if (!clip) return 0
+      const offsetWithinSegment = clampedOutputTime - segment.outputStart
+      return clamp(clip.start + offsetWithinSegment * clip.speed, clip.start, clip.end)
+    },
+    [clips, outputSegments, safeTimelineDuration, videoDuration]
+  )
+
+  const outputTimeFromSourceTime = useCallback(
+    (sourceTime: number) => {
+      if (outputSegments.length === 0) return clamp(sourceTime, 0, safeTimelineDuration)
+
+      for (let i = 0; i < clips.length; i += 1) {
+        const clip = clips[i]
+        const segment = outputSegments[i]
+        if (!segment) continue
+        if (sourceTime >= clip.start && sourceTime <= clip.end) {
+          return clamp(
+            segment.outputStart + (sourceTime - clip.start) / Math.max(clip.speed, 0.25),
+            0,
+            safeTimelineDuration
+          )
+        }
+      }
+
+      if (sourceTime <= clips[0].start) return 0
+      return safeTimelineDuration
+    },
+    [clips, outputSegments, safeTimelineDuration]
+  )
+
+  const currentOutputTime = useMemo(
+    () => (hasTimeline ? outputTimeFromSourceTime(currentTime) : currentTime),
+    [currentTime, hasTimeline, outputTimeFromSourceTime]
+  )
+
+  const rulerStops = useMemo(() => {
+    const step = 5
+    const values: number[] = [0]
+    for (let time = step; time < safeTimelineDuration; time += step) {
+      values.push(time)
+    }
+    if (values[values.length - 1] !== safeTimelineDuration) {
+      values.push(safeTimelineDuration)
+    }
+    return values
+  }, [safeTimelineDuration])
+
+  const seekFromClientX = useCallback(
+    (clientX: number) => {
+      const timelineSurface = timelineSurfaceRef.current
+      if (!timelineSurface) return
+      const rect = timelineSurface.getBoundingClientRect()
+      const ratio = clamp((clientX - rect.left) / rect.width, 0, 1)
+      const nextOutputTime = safeTimelineDuration * ratio
+      const nextSourceTime = hasTimeline ? sourceTimeFromOutputTime(nextOutputTime) : nextOutputTime
+      store.getState().setCurrentTime(nextSourceTime)
+    },
+    [hasTimeline, safeTimelineDuration, sourceTimeFromOutputTime]
+  )
+
+  useEffect(() => {
+    if (!isScrubbing) return
+
+    const handleMove = (event: MouseEvent) => {
+      seekFromClientX(event.clientX)
+    }
+
+    const handleUp = () => {
+      setIsScrubbing(false)
+    }
+
+    window.addEventListener("mousemove", handleMove)
+    window.addEventListener("mouseup", handleUp)
+    return () => {
+      window.removeEventListener("mousemove", handleMove)
+      window.removeEventListener("mouseup", handleUp)
+    }
+  }, [isScrubbing, seekFromClientX])
 
   const addClipAtPlayhead = useCallback(() => {
     if (videoDuration <= 0) return
@@ -102,192 +215,233 @@ export function TimelinePanel() {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">Timeline</p>
-          <p className="text-[11px] text-muted-foreground">
-            Arrange, sequence, and refine clips before export.
-          </p>
+          <p className="text-[11px] text-muted-foreground">Directly manipulate sequence, timing, and order.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="font-mono text-[10px]">
-            Clips {clips.length}
-          </Badge>
-          <Badge variant="secondary" className="font-mono text-[11px]">
-            Final output {formatTime(outputDuration)}
-          </Badge>
+          <Badge variant="outline" className="font-mono text-[10px]">{clips.length} clips</Badge>
+          <Badge variant="secondary" className="font-mono text-[11px]">Final output {formatTime(outputDuration)}</Badge>
         </div>
       </div>
 
-      {hasVideo ? (
-        <div className="mb-3 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/35 p-1.5">
-              <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Build</span>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={addClipAtPlayhead}
-                title="Create a new clip at the playhead."
-              >
-                <Clapperboard className="h-3.5 w-3.5" />
-                Add Clip
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={splitSelectedClip}
-                disabled={!canSplitClip}
-                className="disabled:opacity-45"
-                title={!canSplitClip ? "Select a clip to split it." : "Split selected clip at playhead."}
-              >
-                <Scissors className="h-3.5 w-3.5" />
-                Split
-              </Button>
-            </div>
+      <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-md border border-border/60 bg-background/30 p-1.5">
+        <Button size="sm" variant="default" onClick={addClipAtPlayhead} title="Add clip at playhead">
+          <Clapperboard className="h-3.5 w-3.5" />
+          Add Clip
+        </Button>
+        <Button size="icon-sm" variant="outline" onClick={splitSelectedClip} disabled={!canSplitClip} title="Split selected clip">
+          <Scissors className="h-3.5 w-3.5" />
+          <span className="sr-only">Split</span>
+        </Button>
+        <Button size="icon-sm" variant="outline" onClick={applyPresetToSelectedClip} disabled={!selectedClip} title="Apply selected preset to selected clip">
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          <span className="sr-only">Apply Preset</span>
+        </Button>
+        <Button
+          size="sm"
+          variant={loopSelectedClip ? "default" : "outline"}
+          onClick={() => store.getState().setLoopSelectedClip(!loopSelectedClip)}
+          disabled={!selectedClip}
+          title="Toggle loop selected clip"
+        >
+          Loop
+        </Button>
+        <div className="mx-1 h-5 w-px bg-border/70" />
+        <Button size="icon-sm" variant="outline" onClick={() => moveSelectedClip("left")} disabled={!canMoveClipLeft} title="Move selected clip left">
+          <StepBack className="h-3.5 w-3.5" />
+          <span className="sr-only">Move Left</span>
+        </Button>
+        <Button size="icon-sm" variant="outline" onClick={() => moveSelectedClip("right")} disabled={!canMoveClipRight} title="Move selected clip right">
+          <StepForward className="h-3.5 w-3.5" />
+          <span className="sr-only">Move Right</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={deleteSelectedClip}
+          disabled={!selectedClip}
+          title="Delete selected clip"
+          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete
+        </Button>
+      </div>
 
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/35 p-1.5">
-              <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Refine</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={applyPresetToSelectedClip}
-                disabled={!selectedClip}
-                className="disabled:opacity-45"
-                title={!selectedClip ? "Select a clip to apply a preset." : "Apply the currently selected preset."}
-              >
-                Apply Preset
-              </Button>
-              <Button
-                size="sm"
-                variant={loopSelectedClip ? "default" : "outline"}
-                onClick={() => store.getState().setLoopSelectedClip(!loopSelectedClip)}
-                disabled={!selectedClip}
-                className="disabled:opacity-45"
-                title={!selectedClip ? "Select a clip to toggle loop preview." : "Loop the selected clip during preview."}
-              >
-                Loop Clip
-              </Button>
-            </div>
+      <div className="mb-2 flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        {clips.map((clip, index) => {
+          const isActive = clip.id === selectedClipId
+          return (
+            <button
+              key={clip.id}
+              onClick={() => {
+                store.getState().selectClip(clip.id)
+                store.getState().setCurrentTime(clip.start)
+              }}
+              className={cn(
+                "shrink-0 rounded-full border px-2 py-1 text-[11px] transition",
+                isActive
+                  ? "border-primary/70 bg-primary/15 text-foreground"
+                  : "border-border/60 bg-background/20 text-muted-foreground hover:border-border"
+              )}
+              title={`Select ${clip.name}`}
+            >
+              {index + 1}. {clip.name}
+            </button>
+          )
+        })}
+      </div>
 
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background/35 p-1.5">
-              <span className="px-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Arrange</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => moveSelectedClip("left")}
-                disabled={!canMoveClipLeft}
-                className="disabled:opacity-45"
-                title={!selectedClip ? "Select a clip to reorder it." : "Move selected clip earlier in output order."}
-              >
-                <StepBack className="h-3.5 w-3.5" />
-                Move Left
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => moveSelectedClip("right")}
-                disabled={!canMoveClipRight}
-                className="disabled:opacity-45"
-                title={!selectedClip ? "Select a clip to reorder it." : "Move selected clip later in output order."}
-              >
-                <StepForward className="h-3.5 w-3.5" />
-                Move Right
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={deleteSelectedClip}
-                disabled={!selectedClip}
-                className="disabled:opacity-45"
-                title={!selectedClip ? "Select a clip to delete it." : "Delete selected clip."}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete Clip
-              </Button>
-            </div>
+      <div ref={timelineSurfaceRef} className="space-y-2" onMouseDown={(event) => seekFromClientX(event.clientX)}>
+        <div
+          className="relative rounded-md border border-border/60 bg-background/20 px-1.5 py-1"
+          role="button"
+          aria-label="Seek timeline"
+          title="Click to move playhead"
+        >
+          <div className="flex items-end justify-between gap-2 overflow-hidden">
+            {rulerStops.map((stop) => (
+              <div key={stop} className="flex flex-col items-center gap-0.5">
+                <span className="font-mono text-[10px] text-muted-foreground">{formatTime(stop)}</span>
+                <span className="h-2 w-px bg-border/80" />
+              </div>
+            ))}
           </div>
 
-          {selectedClip ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/8 px-2.5 py-2 text-[11px]">
-              <Badge variant="outline" className="font-mono text-[10px]">
-                Selected {selectedClipIndex + 1}/{clips.length}
-              </Badge>
-              <span className="font-medium text-foreground">{selectedClip.name}</span>
-              <span className="text-muted-foreground">
-                Source {formatTime(selectedClip.start)} to {formatTime(selectedClip.end)}
-              </span>
-              <span className="text-muted-foreground">Output {formatTime(selectedClipOutputDuration)}</span>
-            </div>
-          ) : (
-            <div className="rounded-md border border-dashed border-border/60 bg-background/20 px-2.5 py-2 text-[11px] text-muted-foreground">
-              Select a clip to refine, reorder, or delete it.
+          {hasTimeline && (
+            <div
+              className="absolute -top-0.5 z-20 cursor-ew-resize"
+              style={{ left: `${(currentOutputTime / safeTimelineDuration) * 100}%` }}
+              onMouseDown={(event) => {
+                event.stopPropagation()
+                setIsScrubbing(true)
+                seekFromClientX(event.clientX)
+              }}
+            >
+              <div className="-translate-x-1/2">
+                <div className="mx-auto h-0 w-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-[#FF4444]" />
+                <div className="mx-auto h-8 w-[2px] bg-[#FF4444] shadow-[0_0_8px_rgba(255,68,68,0.65)]" />
+              </div>
             </div>
           )}
         </div>
-      ) : null}
 
-      <div className="mb-1 flex items-end justify-between px-1">
-        {RULER_STOPS.map((stop) => (
-          <div key={stop} className="flex flex-col items-center gap-0.5">
-            <span className="font-mono text-[10px] text-muted-foreground">{formatTime(videoDuration * stop)}</span>
-            <span className="h-1.5 w-px bg-border/70" />
-          </div>
-        ))}
-      </div>
-
-      <div className="relative h-16 overflow-hidden rounded-lg border border-border/50 bg-muted/25">
-        {hasTimeline && (
-          <>
+        <div className="relative h-[240px] overflow-hidden rounded-lg border border-border/50 bg-gradient-to-b from-muted/40 to-muted/20">
+          {hasTimeline ? (
             <div
-              className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-white/85"
-              style={{ left: `${(currentTime / videoDuration) * 100}%` }}
+              className="pointer-events-none absolute top-0 bottom-0 z-20 w-[2px] bg-[#FF4444] shadow-[0_0_8px_rgba(255,68,68,0.65)]"
+              style={{ left: `${(currentOutputTime / safeTimelineDuration) * 100}%` }}
             />
-            <div
-              className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] text-foreground"
-              style={{ left: `${(currentTime / videoDuration) * 100}%` }}
-            >
-              {formatTime(currentTime)}
-            </div>
-          </>
-        )}
+          ) : null}
+          {hasTimeline ? (
+            outputSegments.map((segment, index) => {
+              const clip = clips[index]
+              if (!clip) return null
 
-        {hasTimeline ? (
-          clips.map((clip, index) => {
-            const widthPct = Math.max(((clip.end - clip.start) / videoDuration) * 100, 1.2)
-            const left = `${(clip.start / videoDuration) * 100}%`
-            const width = `${widthPct}%`
-            const isActive = clip.id === selectedClipId
-            const showMeta = widthPct > 11
+              const widthPct = Math.max((segment.outputDuration / safeTimelineDuration) * 100, 3)
+              const left = `${(segment.outputStart / safeTimelineDuration) * 100}%`
+              const width = `${widthPct}%`
+              const isActive = clip.id === selectedClipId
+              const isDropTarget = dropClipId === clip.id && dragClipId !== clip.id
+              const showExtendedMeta = widthPct >= 13
+              const showThumbnail = widthPct >= 18 && Boolean(previewThumbnail)
 
-            return (
-              <button
-                key={clip.id}
-                onClick={() => store.getState().selectClip(clip.id)}
-                className={cn(
-                  "absolute top-6 h-8 overflow-hidden rounded-md border text-left text-[11px] font-medium text-white shadow-sm transition",
-                  isActive
-                    ? "border-white/95 ring-2 ring-primary/60"
-                    : "border-white/20 hover:border-white/40"
-                )}
-                style={{ left, width, backgroundColor: clip.color }}
-                title={`${clip.name} · #${index + 1} · ${formatTime(clip.end - clip.start)} source`}
-              >
-                <span className="flex items-center gap-1 truncate px-1.5 py-1">
-                  <ArrowLeftRight className="h-3 w-3 shrink-0 text-white/85" />
-                  <span className="shrink-0 font-mono text-[10px] text-white/90">{index + 1}.</span>
-                  <span className="truncate">{clip.name}</span>
-                  {showMeta ? (
-                    <span className="ml-auto shrink-0 rounded bg-black/25 px-1 py-0.5 font-mono text-[10px]">
-                      {formatTime(getClipOutputDuration(clip))}
+              return (
+                <button
+                  key={clip.id}
+                  draggable
+                  onDragStart={(event) => {
+                    setDragClipId(clip.id)
+                    setDropClipId(null)
+                    event.dataTransfer.effectAllowed = "move"
+                    event.dataTransfer.setData("text/plain", clip.id)
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    setDropClipId(clip.id)
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    const draggedId = dragClipId ?? event.dataTransfer.getData("text/plain")
+                    if (!draggedId || draggedId === clip.id) {
+                      setDropClipId(null)
+                      setDragClipId(null)
+                      return
+                    }
+                    const fromIndex = clips.findIndex((candidate) => candidate.id === draggedId)
+                    const toIndex = clips.findIndex((candidate) => candidate.id === clip.id)
+                    if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+                      store.getState().reorderClips(fromIndex, toIndex)
+                    }
+                    setDropClipId(null)
+                    setDragClipId(null)
+                  }}
+                  onDragEnd={() => {
+                    setDropClipId(null)
+                    setDragClipId(null)
+                  }}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    store.getState().selectClip(clip.id)
+                    store.getState().setCurrentTime(clip.start)
+                  }}
+                  className={cn(
+                    "absolute top-5 h-[140px] overflow-hidden rounded-md border text-left text-[11px] text-white shadow-sm transition",
+                    isActive
+                      ? "border-[#ffaa00] ring-2 ring-[#ffaa00]/50"
+                      : "border-white/20 hover:border-white/50",
+                    isDropTarget && "ring-2 ring-sky-300/70"
+                  )}
+                  style={{
+                    left,
+                    width,
+                    backgroundColor: clip.color,
+                    backgroundImage: previewThumbnail
+                      ? `linear-gradient(to bottom, rgba(15,23,42,0.18), rgba(15,23,42,0.74)), url(${previewThumbnail})`
+                      : undefined,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }}
+                  title={`${clip.name} · Output ${formatTime(segment.outputDuration)} · Drag to reorder`}
+                >
+                  <span className="flex items-center gap-1.5 px-2 pt-1.5">
+                    <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-white/85" />
+                    <span className="shrink-0 font-mono text-[10px] text-white/90">{index + 1}</span>
+                    <span className="truncate text-xs font-semibold">{clip.name}</span>
+                    <span className="ml-auto shrink-0 rounded bg-black/30 px-1 py-0.5 font-mono text-[10px]">
+                      {formatTime(segment.outputDuration)}
+                    </span>
+                  </span>
+
+                  {showThumbnail ? (
+                    <div className="mt-2 flex items-start gap-2 px-2">
+                      <img
+                        src={previewThumbnail ?? undefined}
+                        alt={clip.name}
+                        className="h-[90px] w-[90px] rounded border border-white/25 object-cover"
+                        draggable={false}
+                      />
+                      {showExtendedMeta ? (
+                        <div className="min-w-0 text-[10px] leading-4 text-white/90">
+                          <p className="truncate font-mono">Source {formatTime(clip.start)} - {formatTime(clip.end)}</p>
+                          <p className="truncate font-mono">Speed {clip.speed.toFixed(2)}x</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : showExtendedMeta ? (
+                    <span className="mt-2 block truncate px-2 font-mono text-[10px] text-white/85">
+                      Source {formatTime(clip.start)} to {formatTime(clip.end)}
                     </span>
                   ) : null}
-                </span>
-              </button>
-            )
-          })
-        ) : (
-          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-            {hasVideo ? "No clips yet. Use Add Clip to start editing." : "Record or import a video to begin."}
-          </div>
-        )}
+                </button>
+              )
+            })
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+              {hasVideo ? "No clips yet. Use Add Clip to start editing." : "Record or import a video to begin."}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

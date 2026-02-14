@@ -22,6 +22,7 @@ interface VideoPreviewCanvasProps {
 
 export function VideoPreviewCanvas({ brandName, videoRef, onStartRecording }: VideoPreviewCanvasProps) {
   const recordingUrl = useVideoEditorStore((s) => s.recordingUrl)
+  const mediaSources = useVideoEditorStore((s) => s.mediaSources)
   const exportedUrl = useVideoEditorStore((s) => s.exportedUrl)
   const livePreviewStream = useVideoEditorStore((s) => s.livePreviewStream)
   const isRecording = useVideoEditorStore((s) => s.isRecording)
@@ -38,11 +39,13 @@ export function VideoPreviewCanvas({ brandName, videoRef, onStartRecording }: Vi
   const editedTimeRef = useRef(0)
   const previousSourceTimeRef = useRef<number | null>(null)
 
-  const canPreviewOriginal = Boolean(recordingUrl)
-  const canPreviewEdited = Boolean(recordingUrl || exportedUrl)
+  const latestMediaSourceUrl = useMemo(() => mediaSources[mediaSources.length - 1]?.url ?? null, [mediaSources])
+  const sourceVideoUrl = recordingUrl ?? latestMediaSourceUrl
+  const canPreviewOriginal = Boolean(sourceVideoUrl)
+  const canPreviewEdited = Boolean(sourceVideoUrl || exportedUrl)
   const isShowingExport = previewMode === "edited" ? Boolean(exportedUrl) : false
   const shouldApplyLiveEdits = previewMode === "edited" && !isShowingExport
-  const activeVideoUrl = isShowingExport ? exportedUrl : recordingUrl
+  const activeVideoUrl = isShowingExport ? exportedUrl : sourceVideoUrl
 
   const selectedClip = useMemo(
     () => clips.find((c) => c.id === selectedClipId) ?? null,
@@ -175,7 +178,7 @@ export function VideoPreviewCanvas({ brandName, videoRef, onStartRecording }: Vi
       return
     }
 
-    const mappedEditedTime = editedTimeFromSourceTime(store.getState().currentTime)
+    const mappedEditedTime = editedTimeFromSourceTime(currentTime)
     const mappedSourceTime = sourceTimeFromEditedTime(mappedEditedTime)
 
     editedTimeRef.current = mappedEditedTime
@@ -190,7 +193,15 @@ export function VideoPreviewCanvas({ brandName, videoRef, onStartRecording }: Vi
       editedSegments.find((candidate) => mappedEditedTime >= candidate.outputStart && mappedEditedTime < candidate.outputEnd) ??
       editedSegments[editedSegments.length - 1]
     videoElement.playbackRate = segment?.speed ?? 1
-  }, [editedSegments, editedTimeFromSourceTime, shouldApplyLiveEdits, sourceTimeFromEditedTime, videoRef])
+  }, [currentTime, editedSegments, editedTimeFromSourceTime, shouldApplyLiveEdits, sourceTimeFromEditedTime, videoRef])
+
+  useEffect(() => {
+    const videoElement = videoRef.current
+    if (!videoElement || shouldApplyLiveEdits) return
+    if (Math.abs(videoElement.currentTime - currentTime) > 0.08) {
+      videoElement.currentTime = currentTime
+    }
+  }, [currentTime, shouldApplyLiveEdits, videoRef])
 
   // Live preview stream binding
   useEffect(() => {
@@ -334,7 +345,7 @@ export function VideoPreviewCanvas({ brandName, videoRef, onStartRecording }: Vi
   }, [editedDuration, shouldApplyLiveEdits, sourceTimeFromEditedTime, videoRef])
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-card/20 p-3">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/60 bg-card/20 p-3">
       {(canPreviewOriginal || canPreviewEdited) && (
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="inline-flex rounded-md border border-border/50 bg-background/60 p-0.5">
@@ -364,7 +375,7 @@ export function VideoPreviewCanvas({ brandName, videoRef, onStartRecording }: Vi
           </p>
         </div>
       )}
-      <div className="relative mx-auto aspect-video w-full overflow-hidden rounded-lg bg-black">
+      <div className="relative mx-auto min-h-[220px] w-full flex-1 overflow-hidden rounded-lg bg-black">
         {isShowingExport ? (
           <Badge variant="secondary" className="absolute right-3 top-3 z-10 text-[11px] backdrop-blur">
             Exported Preview

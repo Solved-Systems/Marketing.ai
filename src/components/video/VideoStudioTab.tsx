@@ -169,8 +169,8 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
   const workspaceGridClass = useMemo(() => {
     if (isAnimationsCollapsed && isAssistantCollapsed) return "xl:grid-cols-[74px_minmax(0,1fr)_74px]"
     if (isAnimationsCollapsed) return "xl:grid-cols-[74px_minmax(0,1fr)_360px]"
-    if (isAssistantCollapsed) return "xl:grid-cols-[280px_minmax(0,1fr)_74px]"
-    return "xl:grid-cols-[280px_minmax(0,1fr)_360px]"
+    if (isAssistantCollapsed) return "xl:grid-cols-[150px_minmax(0,1fr)_74px]"
+    return "xl:grid-cols-[150px_minmax(0,1fr)_360px]"
   }, [isAnimationsCollapsed, isAssistantCollapsed])
 
   // ── Undo / Redo keyboard shortcuts ─────────────────
@@ -756,7 +756,7 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
 
   // ── Render ─────────────────────────────────────────
   return (
-    <div className={cn("grid h-full min-h-0 grid-cols-1 gap-2 p-2.5", workspaceGridClass)}>
+    <div className={cn("grid h-full min-h-0 flex-1 grid-cols-1 gap-2 p-2.5", workspaceGridClass)}>
       {/* Animations Panel */}
       <AnimationPanel />
 
@@ -771,17 +771,31 @@ export function VideoStudioTab({ brandId, brandName }: VideoStudioTabProps) {
           clearCountdownTimer={clearCountdownTimer}
         />
 
-        <div className="flex-1 overflow-y-auto p-3 md:p-4">
-          <div className="mx-auto max-w-5xl space-y-3">
-            <MediaDropZone onFilesAccepted={handleFilesAccepted} disabled={isRecording}>
-              <VideoPreviewCanvas
-                brandName={brandName}
-                videoRef={videoRef}
-                onStartRecording={startRecordingWithCountdown}
-              />
-            </MediaDropZone>
-            <TimelinePanel />
-            <ClipInspector />
+        <div className="flex-1 overflow-hidden p-3 md:p-4">
+          <div className="mx-auto flex h-full max-w-6xl min-h-0 flex-col gap-3 overflow-hidden">
+            <div className="min-h-[220px] max-h-[52vh] flex-[0_0_46%] overflow-hidden xl:flex-[0_0_50%]">
+              <MediaDropZone onFilesAccepted={handleFilesAccepted} disabled={isRecording} className="h-full">
+                <VideoPreviewCanvas
+                  brandName={brandName}
+                  videoRef={videoRef}
+                  onStartRecording={startRecordingWithCountdown}
+                />
+              </MediaDropZone>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+              <div className="min-h-[180px] flex-1 overflow-y-auto pr-1 xl:min-h-[240px]">
+                <TimelinePanel />
+              </div>
+              <details open className="shrink-0 rounded-xl border border-border/60 bg-card/20 p-3">
+                <summary className="cursor-pointer text-sm font-semibold">Clip Inspector</summary>
+                <p className="mb-3 mt-2 text-[11px] text-muted-foreground">
+                  Edit trim, crop, speed, and animation without losing the timeline context.
+                </p>
+                <div className="max-h-[180px] overflow-y-auto pr-1 xl:max-h-[220px]">
+                  <ClipInspector />
+                </div>
+              </details>
+            </div>
           </div>
         </div>
       </section>
